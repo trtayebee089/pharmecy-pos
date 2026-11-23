@@ -2,7 +2,16 @@
 
 Workspace for the audit and the rebuild of the Red Pharma POS: a Nuxt POS on a centralized Laravel API.
 
-**Current phase: audit complete. Implementation is waiting for approval.**
+**Current phase: audit complete; full-rebuild design drafted and waiting for approval of open decisions O1–O5.**
+
+## Rebuild design (`docs/rebuild/`)
+
+| Document | Contents |
+|---|---|
+| [rebuild-architecture.md](docs/rebuild/rebuild-architecture.md) | Decisions, system landscape, tech stack, legacy bridge, domain rules, delivery phases |
+| [database-design.md](docs/rebuild/database-design.md) | New schema: batch/FEFO stock ledger, unit ladder, ledgers, documents, all kept modules |
+| [data-migration-plan.md](docs/rebuild/data-migration-plan.md) | Legacy → new ETL mapping, opening balances, reconciliation, cutover runbook |
+| [phase0-hotfix/](phase0-hotfix/README.md) | Containment package for the legacy system (still serving website/app) |
 
 ## Audit documents (`docs/`)
 

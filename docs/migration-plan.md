@@ -1,5 +1,7 @@
 # Red Pharma: Migration Plan (Blade POS → Nuxt POS on a centralized Laravel API)
 
+> **SUPERSEDED (2026-11-23).** The business chose a **full rebuild with a new database schema**. See [`rebuild/rebuild-architecture.md`](rebuild/rebuild-architecture.md), [`rebuild/database-design.md`](rebuild/database-design.md) and [`rebuild/data-migration-plan.md`](rebuild/data-migration-plan.md). This plan is kept for reference. Phase 0 (legacy containment) still applies, because the website and app stay on the legacy system until they are rebuilt.
+
 Inputs: `legacy-system-audit.md`, `api-architecture.md`, `database-dependencies.md`, `known-issues.md`, `pos-feature-parity-matrix.md`. This plan builds on the earlier `UNIFIED_SYSTEM_MIGRATION_PLAN.md` and agrees with its direction. It differs where the audit found new facts: the code is a single codebase, the API is not live on the POS host, critical backdoors exist, and the production source is missing from the workspace.
 
 **Non-negotiables:**
