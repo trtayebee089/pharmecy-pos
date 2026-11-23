@@ -34,7 +34,7 @@ const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as con
       <template #cell-number="{ row }">
         <div class="flex items-center gap-2">
           <component :is="row.channel === 'website' ? Globe : Store" class="size-4" :class="row.channel === 'website' ? 'text-sky-500' : 'text-slate-400'" />
-          <span class="font-mono text-[12.5px] font-semibold" :class="row.status === 'void' ? 'text-slate-400 line-through' : 'text-ink'">{{ row.number }}</span>
+          <NuxtLink :to="`/sales/${row.id}`" class="font-mono text-[12.5px] font-semibold hover:text-brand-700 hover:underline" :class="row.status === 'void' ? 'text-slate-400 line-through' : 'text-ink'">{{ row.number }}</NuxtLink>
         </div>
       </template>
       <template #cell-date="{ row }"><span class="text-slate-600">{{ dateTime(row.date) }}</span></template>
@@ -46,9 +46,9 @@ const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as con
         <UiBadge v-if="row.status === 'void'" tone="neutral">Void</UiBadge>
         <UiBadge v-else :tone="payTone[row.paymentStatus as keyof typeof payTone]" dot class="capitalize">{{ row.paymentStatus }}</UiBadge>
       </template>
-      <template #cell-actions>
+      <template #cell-actions="{ row }">
         <div class="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-          <UiButton size="sm" variant="ghost" :icon="Eye" aria-label="View" />
+          <NuxtLink :to="`/sales/${row.id}`"><UiButton size="sm" variant="ghost" :icon="Eye" aria-label="View" /></NuxtLink>
           <UiButton size="sm" variant="ghost" :icon="Printer" aria-label="Reprint" />
         </div>
       </template>

@@ -137,3 +137,133 @@ export interface Column {
   width?: string
   class?: string
 }
+
+// ---- Catalog write model ----------------------------------------------------
+export interface ProductInput {
+  id?: number
+  sku: string
+  name: string
+  strength: string
+  genericId: number | null
+  manufacturerId: number | null
+  dosageFormId: number | null
+  categoryId: number | null
+  requiresPrescription: boolean
+  isActive: boolean
+  reorderLevelBase: number
+  description: string
+  units: { id?: number; code: UnitCode; factor: number; price: number; wholesalePrice: number | null; barcode: string; isSaleDefault: boolean; isPurchaseDefault: boolean }[]
+}
+
+export interface Lookup { id: number; name: string }
+
+export interface CatalogLookups {
+  generics: Lookup[]
+  manufacturers: Lookup[]
+  dosageForms: Lookup[]
+  categories: Lookup[]
+}
+
+// ---- Purchasing --------------------------------------------------------------
+export interface Supplier { id: number; name: string; phone: string; dueBalance: number }
+
+export interface PurchaseLineInput {
+  key: string
+  product: Product
+  unitId: number
+  qty: number
+  freeQty: number
+  batchNo: string
+  expiryDate: string
+  unitCost: number
+  discountPct: number
+  updateRetailPrice: number | null
+}
+
+// ---- Sales detail & returns ------------------------------------------------
+export interface SaleLineDetail {
+  id: number
+  productName: string
+  unitLabel: string
+  qty: number
+  qtyBase: number
+  unitPrice: number
+  discount: number
+  lineTotal: number
+  batches: { saleItemBatchId: number; batchNo: string; expiryDate: string; qtyBase: number; returnedQtyBase: number }[]
+}
+
+export interface SaleDetail extends SaleSummary {
+  warehouse: string
+  customerPhone: string | null
+  subtotal: number
+  discountTotal: number
+  lines: SaleLineDetail[]
+  payments: { method: string; amount: number; reference?: string; paidAt: string }[]
+  returns: { number: string; date: string; total: number }[]
+}
+
+// ---- Cash register ------------------------------------------------------------
+export interface RegisterSession {
+  id: number
+  register: string
+  status: 'open' | 'closed'
+  openedBy: string
+  openedAt: string
+  openingFloat: number
+  cashSales: number
+  cashRefunds: number
+  cashIn: number
+  cashOut: number
+  expectedCash: number
+  countedCash: number | null
+  difference: number | null
+  closedAt: string | null
+  nonCash: { method: string; amount: number }[]
+}
+
+// ---- Inventory adjustments -------------------------------------------------
+export interface AdjustmentSummary {
+  id: number
+  number: string
+  date: string
+  reason: 'damage' | 'expiry' | 'correction' | 'lost' | 'found'
+  lines: number
+  qtyIn: number
+  qtyOut: number
+  value: number
+  status: 'draft' | 'posted' | 'void'
+  createdBy: string
+}
+
+// ---- Administration --------------------------------------------------------
+export interface StaffUser {
+  id: number
+  name: string
+  username: string
+  email: string
+  role: string
+  warehouses: string[]
+  isActive: boolean
+  lastLoginAt: string | null
+  mustChangePassword: boolean
+}
+
+export interface Role { id: number; name: string; description: string; users: number; permissions: string[]; maxDiscountPct: number; system?: boolean }
+
+export interface PermissionGroup { module: string; permissions: { key: string; label: string }[] }
+
+export interface PosSettings {
+  nearExpiryDays: number
+  criticalExpiryDays: number
+  allowNegativeStock: boolean
+  blockExpiredSale: boolean
+  roundTo: 0 | 0.5 | 1
+  receiptWidth: '58mm' | '80mm' | 'A4'
+  receiptFooter: string
+  printOnComplete: boolean
+  rxReminder: boolean
+  defaultCustomerId: number
+  pointsPerTaka: number
+  pointValue: number
+}

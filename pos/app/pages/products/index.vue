@@ -35,7 +35,7 @@ const nextExpiry = (p: Product) => p.batches.find(b => daysUntil(b.expiryDate) >
         <div class="flex items-center gap-3">
           <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-50 to-brand-100 text-xs font-bold text-brand-700">{{ initials(row.name) }}</span>
           <div>
-            <p class="flex items-center gap-1.5 font-semibold text-ink">{{ row.name }} <span class="font-medium text-slate-500">{{ row.strength }}</span>
+            <p class="flex items-center gap-1.5 font-semibold text-ink"><NuxtLink :to="`/products/${row.id}`" class="hover:text-brand-700 hover:underline">{{ row.name }}</NuxtLink> <span class="font-medium text-slate-500">{{ row.strength }}</span>
               <FileWarning v-if="row.requiresPrescription" class="size-3.5 text-violet-600" />
             </p>
             <p class="text-xs text-slate-500">SKU {{ row.sku }} · {{ row.dosageForm }}</p>

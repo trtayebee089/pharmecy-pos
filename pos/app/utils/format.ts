@@ -4,7 +4,7 @@ const int = new Intl.NumberFormat('en-IN')
 /** ৳ 1,23,456.00 (Bangladeshi digit grouping) */
 export function money(value: number | null | undefined, symbol = true): string {
   const v = Number(value ?? 0)
-  return `${symbol ? '৳ ' : ''}${bdt.format(v)}`
+  return `${v < 0 ? '−' : ''}${symbol ? '৳ ' : ''}${bdt.format(Math.abs(v))}`
 }
 
 export function num(value: number | null | undefined): string {

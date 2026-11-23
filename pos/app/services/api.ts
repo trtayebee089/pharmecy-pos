@@ -6,7 +6,7 @@ import type {
   BatchRow, Customer, DashboardSummary, ListQuery, Paginated, PaymentLine, Product, PurchaseSummary, SaleSummary,
 } from '~/types/domain'
 
-function paginate<T>(rows: T[], q: ListQuery, match: (row: T, s: string) => boolean): Paginated<T> {
+export function paginate<T>(rows: T[], q: ListQuery, match: (row: T, s: string) => boolean): Paginated<T> {
   const s = (q.search ?? '').trim().toLowerCase()
   const filtered = s ? rows.filter(r => match(r, s)) : rows
   const perPage = q.perPage ?? 15

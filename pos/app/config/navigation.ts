@@ -48,7 +48,7 @@ export const navigation: NavGroup[] = [
     label: 'Products', icon: Pill,
     children: [
       { label: 'Product list', to: '/products', permission: 'products.view', ready: true, legacy: 'Product › Product List' },
-      { label: 'Add product', to: '/products/new', permission: 'products.create', phase: 'B', legacy: 'Product › Add Product' },
+      { label: 'Add product', to: '/products/new', permission: 'products.create', ready: true, legacy: 'Product › Add Product' },
       { label: 'Generics', to: '/catalog/generics', permission: 'catalog.manage', phase: 'B' },
       { label: 'Manufacturers', to: '/catalog/manufacturers', permission: 'catalog.manage', phase: 'B', legacy: 'Settings › Brand' },
       { label: 'Dosage forms', to: '/catalog/dosage-forms', permission: 'catalog.manage', phase: 'B', legacy: 'Product › Category' },
@@ -61,7 +61,7 @@ export const navigation: NavGroup[] = [
     children: [
       { label: 'Batches & expiry', to: '/inventory/batches', permission: 'inventory.view', ready: true, badge: 'nearExpiry' },
       { label: 'Stock overview', to: '/inventory/stock', permission: 'inventory.view', phase: 'B', badge: 'lowStock', legacy: 'Reports › Warehouse Stock' },
-      { label: 'Adjustments', to: '/inventory/adjustments', permission: 'inventory.adjust', phase: 'B', legacy: 'Product › Adjustment List' },
+      { label: 'Adjustments', to: '/inventory/adjustments', permission: 'inventory.adjust', ready: true, legacy: 'Product › Adjustment List' },
       { label: 'Stock counts', to: '/inventory/counts', permission: 'inventory.count', phase: 'B', legacy: 'Product › Stock Count' },
       { label: 'Transfers', to: '/inventory/transfers', permission: 'inventory.transfer', phase: 'B', legacy: 'Transfer' },
     ],
@@ -70,7 +70,7 @@ export const navigation: NavGroup[] = [
     label: 'Purchases', icon: Truck,
     children: [
       { label: 'All purchases', to: '/purchases', permission: 'purchases.view', ready: true, legacy: 'Purchase › Purchase List' },
-      { label: 'Receive purchase', to: '/purchases/new', permission: 'purchases.create', phase: 'C', legacy: 'Purchase › Add Purchase' },
+      { label: 'Receive purchase', to: '/purchases/new', permission: 'purchases.create', ready: true, legacy: 'Purchase › Add Purchase' },
       { label: 'Purchase returns', to: '/purchases/returns', permission: 'purchase_returns.view', phase: 'C', legacy: 'Return › Purchase' },
       { label: 'Reorder drafts (AI)', to: '/purchases/reorder', permission: 'reorder.manage', phase: 'C', legacy: 'Reports › Order Qty Alert' },
     ],
@@ -102,7 +102,7 @@ export const navigation: NavGroup[] = [
   {
     label: 'Finance', icon: Landmark,
     children: [
-      { label: 'Cash registers', to: '/finance/registers', permission: 'registers.view', phase: 'D', legacy: 'Cash Register' },
+      { label: 'Cash registers', to: '/finance/registers', permission: 'registers.view', ready: true, legacy: 'Cash Register' },
       { label: 'Accounts', to: '/finance/accounts', permission: 'accounts.view', phase: 'F', legacy: 'Accounting › Account List' },
       { label: 'Money transfers', to: '/finance/transfers', permission: 'accounts.transfer', phase: 'F', legacy: 'Accounting › Money Transfer' },
       { label: 'Expenses', to: '/finance/expenses', permission: 'expenses.view', phase: 'F', legacy: 'Expense' },
@@ -136,10 +136,10 @@ export const navigation: NavGroup[] = [
   {
     label: 'Administration', icon: Settings2,
     children: [
-      { label: 'Users', to: '/admin/users', permission: 'users.view', phase: 'A', legacy: 'People › User List' },
-      { label: 'Roles & permissions', to: '/admin/roles', permission: 'roles.manage', phase: 'A', legacy: 'Settings › Role Permission' },
+      { label: 'Users', to: '/admin/users', permission: 'users.view', ready: true, legacy: 'People › User List' },
+      { label: 'Roles & permissions', to: '/admin/roles', permission: 'roles.manage', ready: true, legacy: 'Settings › Role Permission' },
       { label: 'Warehouses', to: '/admin/warehouses', permission: 'warehouses.manage', phase: 'A', legacy: 'Settings › Warehouse' },
-      { label: 'Settings', to: '/admin/settings', permission: 'settings.manage', phase: 'A', legacy: 'Settings › General / POS' },
+      { label: 'Settings', to: '/admin/settings', permission: 'settings.manage', ready: true, legacy: 'Settings › General / POS' },
     ],
   },
 ]
