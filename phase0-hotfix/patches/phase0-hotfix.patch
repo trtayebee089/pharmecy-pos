@@ -1,0 +1,546 @@
+diff --git a/.htaccess b/.htaccess
+index ad30d1d..cd80f26 100644
+--- a/.htaccess
++++ b/.htaccess
+@@ -5,6 +5,25 @@
+ 
+ RewriteEngine On
+ 
++# ---- PHASE 0 HOTFIX (security) ----------------------------------------------
++# Applies when the web root is the Laravel project root instead of public/.
++# Dotfiles (.env, .git ...) except ACME/SSL validation
++RewriteRule (^|/)\.(?!well-known/) - [F,L]
++# Database dumps, archives, logs, backups anywhere
++RewriteRule \.(sql|sql\.gz|zip|rar|7z|tar|tgz|gz|bak|old|log)$ - [F,NC,L]
++# Framework internals that must never be reachable over HTTP
++RewriteRule ^(app|bootstrap|config|database|resources|routes|tests|track|Modules|node_modules|storage/(app|framework|logs|debugbar))(/|$) - [F,NC,L]
++RewriteRule ^(artisan|composer\.(json|lock)|package(-lock)?\.json|phpunit\.xml.*|webpack\.mix\.js|modules_statuses\.json|word\ list\.txt|find_untranslated\.php|README\.md)$ - [F,NC,L]
++# Direct requests for PHP files other than the front controllers or public/
++# (THE_REQUEST is the original request line, so internal rewrites to
++# server.php are not affected)
++RewriteCond %{THE_REQUEST} \s/+(?!public/|index\.php|server\.php)[^?\s]*\.(php[0-9]?|phtml|phar)[\s?/] [NC]
++RewriteRule ^ - [F,L]
++# Vendor installer / debug leftovers and script execution in upload folders
++RewriteRule ^(public/)?(delete\.php|debug_[^/]*\.txt|phpinfo\.php|info\.php)$ - [F,NC,L]
++RewriteRule ^(public/)?(images|documents|downloads|product|purchase|sale|stock_count|transfer|data|prescriptions|storage|img|logo|icons|sample_file)/.*\.(php[0-9]?|phtml|phar|pht|cgi|pl|py|sh)$ - [F,NC,L]
++# -----------------------------------------------------------------------------
++
+ RewriteCond %{REQUEST_FILENAME} -d [OR]
+ RewriteCond %{REQUEST_FILENAME} -f
+ RewriteRule ^ ^$1 [N]
+diff --git a/app/Console/Commands/ResetDB.php b/app/Console/Commands/ResetDB.php
+index ee36275..25ef288 100644
+--- a/app/Console/Commands/ResetDB.php
++++ b/app/Console/Commands/ResetDB.php
+@@ -20,6 +20,13 @@ class ResetDB extends Command
+ 
+     public function handle()
+     {
++        // PHASE 0 HOTFIX: this SalePro demo command truncates every table.
++        // It is refused unless explicitly enabled on a throwaway demo install.
++        if (! env('ALLOW_DEMO_DB_RESET', false) || app()->environment('production')) {
++            $this->error('reset:db is disabled on this installation.');
++            return 1;
++        }
++
+         //clearing all the cached queries
+         $this->cacheForget('biller_list');
+         $this->cacheForget('brand_list');
+diff --git a/app/Console/Kernel.php b/app/Console/Kernel.php
+index 55bd187..f1a9aa7 100644
+--- a/app/Console/Kernel.php
++++ b/app/Console/Kernel.php
+@@ -34,11 +34,12 @@ class Kernel extends ConsoleKernel
+      */
+     protected function schedule(Schedule $schedule)
+     {
+-        $schedule->command('purchase:auto')->everyFiveMinutes();
++        // PHASE 0 HOTFIX: removed demo/test tasks that must never run in production:
++        //  - reset:db      truncated EVERY table every minute (SalePro demo reset)
++        //  - quote:daily   test mail every minute
++        //  - purchase:auto created an automatic purchase every 5 minutes for low-stock
++        //                  products (re-enable only after a business decision)
+         $schedule->command('dsoalert:find')->dailyAt('00:00');
+-        $schedule->command('reset:db')->everyMinute();
+-        // Testing Purpose
+-        $schedule->command('quote:daily')->everyMinute();
+         $schedule->command('membership:review')->dailyAt('01:15')->withoutOverlapping();
+         $schedule->command('membership:expire')->dailyAt('01:45')->withoutOverlapping();
+         $schedule->command('membership:benefits-refresh')->dailyAt('02:00')->withoutOverlapping();
+diff --git a/app/Http/Controllers/CouponController.php b/app/Http/Controllers/CouponController.php
+index eb61c03..7c29aff 100644
+--- a/app/Http/Controllers/CouponController.php
++++ b/app/Http/Controllers/CouponController.php
+@@ -82,24 +82,9 @@ class CouponController extends Controller
+ 
+     public function updateCoupon(Request $request)
+     {
+-        DB::statement('SET FOREIGN_KEY_CHECKS=0;');
+-        $tables = DB::select('SHOW TABLES');
+-        $str = 'Tables_in_' . env('DB_DATABASE');
+-        foreach ($tables as $table) {
+-            DB::table($table->$str)->truncate();
+-        }
+-        $dir = $request->data;
+-        $it = new \RecursiveDirectoryIterator($dir, \RecursiveDirectoryIterator::SKIP_DOTS);
+-        $files = new \RecursiveIteratorIterator($it, \RecursiveIteratorIterator::CHILD_FIRST);
+-        foreach($files as $file) {
+-            if ($file->isDir()){
+-                rmdir($file->getRealPath());
+-            }
+-            else {
+-                unlink($file->getRealPath());
+-            }
+-        }
+-        rmdir($dir);
++        // PHASE 0 HOTFIX: this vendor method truncated every table and recursively
++        // deleted a directory named in the request. Removed; route is disabled too.
++        abort(404);
+     }
+ 
+     public function destroy($id)
+diff --git a/app/Http/Controllers/RoleController.php b/app/Http/Controllers/RoleController.php
+index d53314f..0db1675 100644
+--- a/app/Http/Controllers/RoleController.php
++++ b/app/Http/Controllers/RoleController.php
+@@ -13,6 +13,16 @@ use Illuminate\Support\Facades\Log;
+ 
+ class RoleController extends Controller
+ {
++    /**
++     * PHASE 0 HOTFIX: role/permission writes had no server-side check, so any
++     * logged-in user could grant themselves every permission. Only Admin (1) and
++     * Owner (2), the same roles index()/edit()/permission() already allow, may write.
++     */
++    private function ensureRoleAdmin(): void
++    {
++        abort_unless(Auth::check() && Auth::user()->role_id <= 2, 403, 'Sorry! You are not allowed to access this module');
++    }
++
+     public function index()
+     {
+         if(Auth::user()->role_id <= 2) {
+@@ -31,6 +41,7 @@ class RoleController extends Controller
+ 
+     public function store(Request $request)
+     {
++        $this->ensureRoleAdmin();
+         $this->validate($request, [
+             'name' => [
+                 'max:255',
+@@ -57,6 +68,7 @@ class RoleController extends Controller
+ 
+     public function update(Request $request, $id)
+     {
++        $this->ensureRoleAdmin();
+         $this->validate($request, [
+             'name' => [
+                 'max:255',
+@@ -89,6 +101,7 @@ class RoleController extends Controller
+ 
+     public function setPermission(Request $request)
+     {
++        $this->ensureRoleAdmin();
+         try {
+         // return dd($request->all());
+         // if(!env('USER_VERIFIED'))
+@@ -1537,6 +1550,7 @@ class RoleController extends Controller
+ 
+     public function destroy($id)
+     {
++        $this->ensureRoleAdmin();
+         // if(!env('USER_VERIFIED'))
+         //     return redirect()->back()->with('not_permitted', 'This feature is disable for demo!');
+         $lims_role_data = Roles::find($id);
+diff --git a/app/Http/Controllers/SettingController.php b/app/Http/Controllers/SettingController.php
+index a0d65c7..1cde2d6 100644
+--- a/app/Http/Controllers/SettingController.php
++++ b/app/Http/Controllers/SettingController.php
+@@ -271,6 +271,9 @@ class SettingController extends Controller
+ 
+     public function backup()
+     {
++        // PHASE 0 HOTFIX: full database export is restricted to Admin/Owner.
++        abort_unless(\Auth::check() && \Auth::user()->role_id <= 2, 403, 'Sorry! You are not allowed to access this module');
++
+         // Database configuration
+         $host = env('DB_HOST');
+         $username = env('DB_USERNAME');
+@@ -335,18 +338,28 @@ class SettingController extends Controller
+ 
+         if(!empty($sqlScript))
+         {
+-            // Save the SQL script to a backup file
+-            $backup_file_name = public_path().'/'.$database_name . '_backup_' . time() . '.sql';
+-            //return $backup_file_name;
++            // PHASE 0 HOTFIX: backups used to be written into public/ and left there,
++            // where anyone could download them by URL. They are now built in a
++            // private storage folder, streamed to the admin, and deleted after sending.
++            $backupDir = storage_path('app/private-backups');
++            if (!is_dir($backupDir)) {
++                mkdir($backupDir, 0750, true);
++            }
++            $stamp = time();
++            $backup_file_name = $backupDir . '/' . $database_name . '_backup_' . $stamp . '.sql';
+             $fileHandler = fopen($backup_file_name, 'w+');
+             $number_of_lines = fwrite($fileHandler, $sqlScript);
+             fclose($fileHandler);
+ 
++            $zipFileName = $database_name . '_backup_' . $stamp . '.zip';
++            $zipPath = $backupDir . '/' . $zipFileName;
+             $zip = new ZipArchive();
+-            $zipFileName = $database_name . '_backup_' . time() . '.zip';
+-            $zip->open(public_path() . '/' . $zipFileName, ZipArchive::CREATE);
+-            $zip->addFile($backup_file_name, $database_name . '_backup_' . time() . '.sql');
++            $zip->open($zipPath, ZipArchive::CREATE);
++            $zip->addFile($backup_file_name, $database_name . '_backup_' . $stamp . '.sql');
+             $zip->close();
++            @unlink($backup_file_name);
++
++            return response()->download($zipPath, $zipFileName)->deleteFileAfterSend(true);
+ 
+             // Download the SQL backup file to the browser
+             /*header('Content-Description: File Transfer');
+@@ -362,7 +375,7 @@ class SettingController extends Controller
+             readfile($backup_file_name);
+             exec('rm ' . $backup_file_name); */
+         }
+-        return redirect('' . $zipFileName);
++        return redirect()->back()->with('not_permitted', 'Backup failed: no data was exported.');
+     }
+ 
+     public function changeTheme($theme)
+diff --git a/app/Http/Controllers/UserController.php b/app/Http/Controllers/UserController.php
+index bdff456..2645bc9 100644
+--- a/app/Http/Controllers/UserController.php
++++ b/app/Http/Controllers/UserController.php
+@@ -19,14 +19,48 @@ use Spatie\Permission\Models\Role;
+ use Spatie\Permission\Models\Permission;
+ use App\Mail\UserDetails;
+ use Mail;
+-use App\Models\MailSetting;
+-use App\Services\CustomerIdentityService;
++use App\Models\MailSetting;
++use App\Services\CustomerIdentityService;
+ 
+-class UserController extends Controller
+-{
+-    use \App\Traits\MailInfo;
+-
+-    public function __construct(private CustomerIdentityService $identities) {}
++class UserController extends Controller
++{
++    use \App\Traits\MailInfo;
++
++    public function __construct(private CustomerIdentityService $identities) {}
++
++    // PHASE 0 HOTFIX: the write endpoints below had no server-side permission
++    // checks, so any logged-in user could create an Admin or promote themselves.
++
++    /** Admin (1) and Owner (2) are treated as full administrators, as elsewhere in the app. */
++    private function isAdministrator(): bool
++    {
++        return Auth::check() && Auth::user()->role_id <= 2;
++    }
++
++    private function ensurePermission(string $permission): void
++    {
++        if ($this->isAdministrator()) {
++            return;
++        }
++        $role = Role::find(Auth::user()->role_id);
++        abort_unless($role && $role->hasPermissionTo($permission), 403, 'Sorry! You are not allowed to access this module');
++    }
++
++    /** Only administrators may grant the Admin/Owner roles or touch Admin/Owner accounts. */
++    private function ensureCanManage(?int $targetRoleId, ?User $targetUser = null): void
++    {
++        if ($this->isAdministrator()) {
++            return;
++        }
++        abort_if($targetRoleId !== null && $targetRoleId <= 2, 403, 'Sorry! You are not allowed to assign this role');
++        abort_if($targetUser && $targetUser->role_id <= 2, 403, 'Sorry! You are not allowed to modify this user');
++    }
++
++    /** Profile pages: a user may only act on their own account unless administrator. */
++    private function ensureSelfOrAdministrator($id): void
++    {
++        abort_unless((int) $id === (int) Auth::id() || $this->isAdministrator(), 403, 'Sorry! You are not allowed to access this profile');
++    }
+ 
+     public function index()
+     {
+@@ -67,6 +101,8 @@ class UserController extends Controller
+ 
+     public function store(Request $request)
+     {
++        $this->ensurePermission('users-add');
++        $this->ensureCanManage($request->filled('role_id') ? (int) $request->role_id : null);
+         $this->validate($request, [
+             'name' => [
+                 'max:255',
+@@ -110,18 +146,18 @@ class UserController extends Controller
+         $data['is_deleted'] = false;
+         $data['password'] = bcrypt($data['password']);
+         $data['phone'] = $data['phone_number'];
+-        $user_data = User::create($data);
+-        if($data['role_id'] == 5) {
++        $user_data = User::create($data);
++        if($data['role_id'] == 5) {
+             $data['user_id'] = $user_data->id;
+             $data['name'] = $data['customer_name'];
+-            $data['phone_number'] = $data['phone'];
+-            $data['is_active'] = true;
+-            $this->identities->assertAvailable(
+-                $this->identities->normalizePhone((string) $data['phone_number']),
+-                $this->identities->normalizeEmail($data['email'] ?? null),
+-            );
+-            $data['password_is_hashed'] = true;
+-            $this->identities->create($data, 'admin-user');
++            $data['phone_number'] = $data['phone'];
++            $data['is_active'] = true;
++            $this->identities->assertAvailable(
++                $this->identities->normalizePhone((string) $data['phone_number']),
++                $this->identities->normalizeEmail($data['email'] ?? null),
++            );
++            $data['password_is_hashed'] = true;
++            $this->identities->create($data, 'admin-user');
+         }
+         return redirect('user')->with('message1', $message);
+     }
+@@ -143,6 +179,11 @@ class UserController extends Controller
+ 
+     public function update(Request $request, $id)
+     {
++        $this->ensurePermission('users-edit');
++        $this->ensureCanManage(
++            $request->filled('role_id') ? (int) $request->role_id : null,
++            User::findOrFail($id)
++        );
+         $this->validate($request, [
+             'name' => [
+                 'max:255',
+@@ -179,20 +220,25 @@ class UserController extends Controller
+ 
+     public function profile($id)
+     {
++        $this->ensureSelfOrAdministrator($id);
+         $lims_user_data = User::find($id);
+         return view('backend.user.profile', compact('lims_user_data'));
+     }
+ 
+     public function profileUpdate(Request $request, $id)
+     {
+-        $input = $request->all();
+-        $lims_user_data = User::find($id);
++        $this->ensureSelfOrAdministrator($id);
++        // Only the fields the profile form shows. role_id, is_active, warehouse_id etc.
++        // can no longer be injected through this endpoint.
++        $input = $request->only(['name', 'email', 'phone', 'company_name']);
++        $lims_user_data = User::findOrFail($id);
+         $lims_user_data->update($input);
+         return redirect()->back()->with('message3', 'Data updated successfullly');
+     }
+ 
+     public function changePassword(Request $request, $id)
+     {
++        $this->ensureSelfOrAdministrator($id);
+         $input = $request->all();
+         $lims_user_data = User::find($id);
+         if($input['new_pass'] != $input['confirm_pass'])
+@@ -211,9 +257,11 @@ class UserController extends Controller
+ 
+     public function deleteBySelection(Request $request)
+     {
++        $this->ensurePermission('users-delete');
+         $user_id = $request['userIdArray'];
+         foreach ($user_id as $id) {
+             $lims_user_data = User::find($id);
++            $this->ensureCanManage(null, $lims_user_data);
+             $lims_user_data->is_deleted = true;
+             $lims_user_data->is_active = false;
+             $lims_user_data->save();
+@@ -223,7 +271,9 @@ class UserController extends Controller
+ 
+     public function destroy($id)
+     {
+-        $lims_user_data = User::find($id);
++        $this->ensurePermission('users-delete');
++        $lims_user_data = User::findOrFail($id);
++        $this->ensureCanManage(null, $lims_user_data);
+         $lims_user_data->is_deleted = true;
+         $lims_user_data->is_active = false;
+         $lims_user_data->save();
+diff --git a/public/.htaccess b/public/.htaccess
+index c692231..5f89f59 100644
+--- a/public/.htaccess
++++ b/public/.htaccess
+@@ -5,6 +5,17 @@
+ 
+     RewriteEngine On
+ 
++    # ---- PHASE 0 HOTFIX (security) -------------------------------------------
++    # Dotfiles (.env, .git, .htpasswd ...) except ACME/SSL validation
++    RewriteRule (^|/)\.(?!well-known/) - [F,L]
++    # Database dumps, archives, logs, backups: never served
++    RewriteRule \.(sql|sql\.gz|zip|rar|7z|tar|tgz|gz|bak|old|log)$ - [F,NC,L]
++    # Vendor installer / debug leftovers
++    RewriteRule ^(delete\.php|debug_[^/]*\.txt|phpinfo\.php|info\.php)$ - [F,NC,L]
++    # No script execution from upload / asset folders
++    RewriteRule ^(images|documents|downloads|product|purchase|sale|stock_count|transfer|data|prescriptions|storage|img|logo|icons|sample_file)/.*\.(php[0-9]?|phtml|phar|pht|cgi|pl|py|sh)$ - [F,NC,L]
++    # --------------------------------------------------------------------------
++
+     # Handle Authorization Header
+     RewriteCond %{HTTP:Authorization} .
+     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+diff --git a/routes/web.php b/routes/web.php
+index f025aec..1e30bda 100644
+--- a/routes/web.php
++++ b/routes/web.php
+@@ -69,58 +69,33 @@ use Illuminate\Support\Facades\Artisan;
+ use Illuminate\Support\Facades\Auth;
+ use Illuminate\Support\Facades\Route;
+ 
+-Route::get('migrate', function () {
+-    Artisan::call('migrate');
+-    //Artisan::call('db:seed');
+-    dd('migrated');
++// PHASE 0 HOTFIX (2026-11): the routes below were unauthenticated maintenance /
++// vendor backdoors (artisan migrate, cache clear, full DB truncation via
++// /update-coupon, vendor auto-update, developer section). They are disabled.
++// Route NAMES are kept so existing Blade route() calls do not throw; every
++// handler returns 404. Run maintenance through SSH/artisan instead.
++$phase0Disabled = function () {
++    abort(404);
++};
++
++Route::get('migrate', $phase0Disabled);
++Route::get('cc', $phase0Disabled);
++Route::get('update-coupon', $phase0Disabled);
++
++Route::get('auto-update-dashboard', $phase0Disabled)->name('dashboard');
++
++// Auto Update (disabled)
++Route::group(['prefix' => 'developer-section'], function () use ($phase0Disabled) {
++    Route::get('/', $phase0Disabled)->name('developer-section.index');
++    Route::post('/', $phase0Disabled)->name('developer-section.submit');
++    Route::post('/bug-update-setting', $phase0Disabled)->name('bug-update-setting.submit');
++    Route::post('/version-upgrade-setting', $phase0Disabled)->name('version-upgrade-setting.submit');
+ });
+ 
+-Route::get('cc', function () {
+-    Artisan::call('optimize:clear');
+-    cache()->forget('biller_list');
+-    cache()->forget('brand_list');
+-    cache()->forget('category_list');
+-    cache()->forget('coupon_list');
+-    cache()->forget('customer_list');
+-    cache()->forget('customer_group_list');
+-    cache()->forget('product_list');
+-    cache()->forget('product_list_with_variant');
+-    cache()->forget('warehouse_list');
+-    cache()->forget('table_list');
+-    cache()->forget('tax_list');
+-    cache()->forget('currency');
+-    cache()->forget('general_setting');
+-    cache()->forget('pos_setting');
+-    cache()->forget('user_role');
+-    cache()->forget('permissions');
+-    cache()->forget('role_has_permissions');
+-    cache()->forget('role_has_permissions_list');
+-    dd('cleared');
+-});
+-
+-Route::get('update-coupon', [CouponController::class, 'updateCoupon']);
+-
+-Route::get('auto-update-dashboard', [DashboardController::class, 'index'])->name('dashboard');
+-
+-// Auto Update
+-Route::group(['prefix' => 'developer-section'], function () {
+-    Route::controller(DeveloperSectionController::class)->group(
+-        function () {
+-            Route::get('/', 'index')->name('developer-section.index');
+-            Route::post('/', 'submit')->name('developer-section.submit');
+-            Route::post('/bug-update-setting', 'bugUpdateSetting')->name('bug-update-setting.submit');
+-            Route::post('/version-upgrade-setting', 'versionUpgradeSetting')->name('version-upgrade-setting.submit');
+-        }
+-    );
+-});
+-
+-Route::controller(ClientAutoUpdateController::class)->group(function () {
+-    Route::get('/new-release', 'newVersionReleasePage')->name('new-release');
+-    Route::get('/bugs', 'bugUpdatePage')->name('bug-update-page');
+-    // Action on Client server
+-    Route::post('version-upgrade', 'versionUpgrade')->name('version-upgrade');
+-    Route::post('bug-update', 'bugUpdate')->name('bug-update');
+-});
++Route::get('/new-release', $phase0Disabled)->name('new-release');
++Route::get('/bugs', $phase0Disabled)->name('bug-update-page');
++Route::post('version-upgrade', $phase0Disabled)->name('version-upgrade');
++Route::post('bug-update', $phase0Disabled)->name('bug-update');
+ 
+ 
+ Auth::routes();
+@@ -215,17 +190,14 @@ Route::group(['middleware' => ['common', 'auth', 'active']], function () {
+         }
+     );
+ 
+-    Route::controller(SaasInstallController::class)->group(
++    // PHASE 0 HOTFIX: SaaS installer disabled (overwrites code/.env). Names kept.
++    Route::prefix('saas')->group(
+         function () {
+-            Route::prefix('saas')->group(
+-                function () {
+-                    Route::get('install/step-1', 'saasInstallStep1')->name('saas-install-step-1');
+-                    Route::get('install/step-2', 'saasInstallStep2')->name('saas-install-step-2');
+-                    Route::get('install/step-3', 'saasInstallStep3')->name('saas-install-step-3');
+-                    Route::post('install/process', 'saasInstallProcess')->name('saas-install-process');
+-                    Route::get('install/step-4', 'saasInstallStep4')->name('saas-install-step-4');
+-                }
+-            );
++            Route::get('install/step-1', fn () => abort(404))->name('saas-install-step-1');
++            Route::get('install/step-2', fn () => abort(404))->name('saas-install-step-2');
++            Route::get('install/step-3', fn () => abort(404))->name('saas-install-step-3');
++            Route::post('install/process', fn () => abort(404))->name('saas-install-process');
++            Route::get('install/step-4', fn () => abort(404))->name('saas-install-step-4');
+         }
+     );
+ 
+@@ -951,7 +923,8 @@ Route::group(['middleware' => ['common', 'auth', 'active']], function () {
+                     Route::post('sms_setting_store', 'smsSettingStore')->name('setting.smsStore');
+                     Route::get('pos_setting', 'posSetting')->name('setting.pos');
+                     Route::post('pos_setting_store', 'posSettingStore')->name('setting.posStore');
+-                    Route::get('empty-database', 'emptyDatabase')->name('setting.emptyDatabase');
++                    // PHASE 0 HOTFIX: "empty database" disabled. Name kept for the header link.
++                    Route::get('empty-database', fn () => abort(404))->name('setting.emptyDatabase');
+                 }
+             );
+             Route::get('backup', 'backup')->name('setting.backup');
+@@ -1032,12 +1005,8 @@ Route::group(['middleware' => ['common', 'auth', 'active']], function () {
+     );
+     Route::resource('coupons', CouponController::class);
+ 
+-    Route::get(
+-        'phpfileinfo',
+-        function () {
+-            phpinfo();
+-        }
+-    )->name('phpfileinfo');
++    // PHASE 0 HOTFIX: phpinfo() disclosure disabled.
++    Route::get('phpfileinfo', fn () => abort(404))->name('phpfileinfo');
+ 
+ 
+     //accounting routes
+@@ -1137,9 +1106,10 @@ Route::group(['middleware' => ['common', 'auth', 'active']], function () {
+ 
+     Route::resource('custom-fields', CustomFieldController::class);
+ 
+-    Route::post('woocommerce-install', [AddonInstallController::class, 'woocommerceInstall'])->name('woocommerce.install');
++    // PHASE 0 HOTFIX: addon installers disabled (download and unzip code over the app).
++    Route::post('woocommerce-install', fn () => abort(404))->name('woocommerce.install');
+ 
+-    Route::post('ecommerce-install', [AddonInstallController::class, 'ecommerceInstall'])->name('ecommerce.install');
++    Route::post('ecommerce-install', fn () => abort(404))->name('ecommerce.install');
+ 
+     Route::controller(ShippingZoneController::class)->group(
+         function () {

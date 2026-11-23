@@ -1,0 +1,32 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+
+    RewriteEngine On
+
+    # ---- PHASE 0 HOTFIX (security) -------------------------------------------
+    # Dotfiles (.env, .git, .htpasswd ...) except ACME/SSL validation
+    RewriteRule (^|/)\.(?!well-known/) - [F,L]
+    # Database dumps, archives, logs, backups: never served
+    RewriteRule \.(sql|sql\.gz|zip|rar|7z|tar|tgz|gz|bak|old|log)$ - [F,NC,L]
+    # Vendor installer / debug leftovers
+    RewriteRule ^(delete\.php|debug_[^/]*\.txt|phpinfo\.php|info\.php)$ - [F,NC,L]
+    # No script execution from upload / asset folders
+    RewriteRule ^(images|documents|downloads|product|purchase|sale|stock_count|transfer|data|prescriptions|storage|img|logo|icons|sample_file)/.*\.(php[0-9]?|phtml|phar|pht|cgi|pl|py|sh)$ - [F,NC,L]
+    # --------------------------------------------------------------------------
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
