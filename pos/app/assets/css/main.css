@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Red Pharma design tokens. Restrained, clinical palette:
+   deep teal brand, cool slate neutrals, semantic colours only for state.
+   --------------------------------------------------------------------------- */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #effcf9;
+  --color-brand-100: #c9f5ec;
+  --color-brand-200: #94eadb;
+  --color-brand-300: #57d7c4;
+  --color-brand-400: #27bba9;
+  --color-brand-500: #0e9f8f;
+  --color-brand-600: #087f74;
+  --color-brand-700: #0b655e;
+  --color-brand-800: #0e514c;
+  --color-brand-900: #0f4440;
+  --color-brand-950: #022826;
+
+  --color-surface: #f5f7f8;
+  --color-ink: #0f1b2d;
+
+  --shadow-card: 0 1px 2px rgb(15 27 45 / 0.04), 0 4px 16px -4px rgb(15 27 45 / 0.06);
+  --shadow-lift: 0 2px 4px rgb(15 27 45 / 0.05), 0 16px 40px -12px rgb(15 27 45 / 0.18);
+  --shadow-glow: 0 0 0 1px rgb(14 159 143 / 0.25), 0 8px 30px -6px rgb(14 159 143 / 0.45);
+
+  --radius-xl2: 1.125rem;
+
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  @keyframes shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+}
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  body { @apply bg-surface text-ink font-sans; font-feature-settings: "cv11", "ss01"; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  ::selection { @apply bg-brand-200 text-brand-950; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-brand-500; }
+  * { scrollbar-width: thin; scrollbar-color: rgb(148 163 184 / .5) transparent; }
+}
+
+@layer components {
+  .card { @apply bg-white rounded-2xl border border-slate-200/70 shadow-[var(--shadow-card)]; }
+  .glass { @apply bg-white/70 backdrop-blur-xl border border-white/60; }
+  .label { @apply text-[11px] font-semibold uppercase tracking-[.08em] text-slate-500; }
+  .skeleton {
+    @apply rounded-md bg-slate-200/70;
+    background-image: linear-gradient(90deg, transparent 0, rgb(255 255 255 / .6) 50%, transparent 100%);
+    background-size: 400px 100%; background-repeat: no-repeat;
+    animation: var(--animate-shimmer);
+  }
+  /* Spotlight effect that follows the pointer (driven by --mx/--my from useSpotlight) */
+  .spotlight { position: relative; isolation: isolate; }
+  .spotlight::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; z-index: -1; opacity: 0;
+    background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), rgb(14 159 143 / .09), transparent 45%);
+    transition: opacity .3s;
+  }
+  .spotlight:hover::before { opacity: 1; }
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.05'/%3E%3C/svg%3E");
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
