@@ -97,6 +97,7 @@ class Present
         return $customers->map(fn (Customer $c) => [
             'id' => $c->id, 'code' => $c->code, 'name' => $c->name, 'phone' => $c->phone,
             'group' => $c->group?->name,
+            'groupDiscountPct' => $c->is_walk_in ? 0 : (float) ($c->group?->discount_pct ?? 0),
             'dueBalance' => max(0, round((float) ($ledger[$c->id] ?? 0), 2)),
             'points' => 0, // reward ledger arrives with the loyalty module
             'membership' => null,

@@ -51,7 +51,9 @@ class SaleService
         }
 
         $limit = $this->limits->for($user);
-        $lines = $this->priceLines($user, $data['lines'], $limit);
+        // Customer group discount: applied to every catalogue line; a manual line discount only counts when it is larger.
+        $groupPct = $customer->is_walk_in ? 0.0 : (float) ($customer->group?->discount_pct ?? 0);
+        $lines = $this->priceLines($user, $data['lines'], $limit, $groupPct);
 
         $subtotal = array_sum(array_column($lines, 'gross'));
         $lineDiscounts = array_sum(array_column($lines, 'discount'));
@@ -77,7 +79,7 @@ class SaleService
             }
         }
 
-        return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due) {
+        return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due, $groupPct) {
             $session = $this->registers->current($user, $warehouse->id);
             $sale = Sale::create([
                 'ulid' => (string) Str::ulid(),
@@ -92,6 +94,7 @@ class SaleService
                 'subtotal' => self::money($subtotal),
                 'line_discount_total' => self::money($lineDiscounts),
                 'order_discount_total' => self::money($orderDiscount),
+                'group_discount_pct' => $groupPct,
                 'grand_total' => self::money($grand),
                 'paid_total' => self::money($applied),
                 'change_total' => self::money($change),
@@ -160,8 +163,15 @@ class SaleService
         });
     }
 
-    /** Re-prices lines from the price list and checks per-line rules. */
-    private function priceLines(User $user, array $input, array $limit): array
+    /**
+     * Re-prices lines from the price list and checks per-line rules.
+     *
+     * Line discount = the larger of the customer's group discount and the
+     * cashier's manual discount. Only a manual discount above the group
+     * discount is checked against the role limit: the group discount is set by
+     * a manager and applies in full. Custom items take the manual discount only.
+     */
+    private function priceLines(User $user, array $input, array $limit, float $groupPct = 0.0): array
     {
         $unitIds = array_values(array_filter(array_map(fn ($l) => (int) ($l['unitId'] ?? 0), $input)));
         $units = ProductUnit::with('product')->whereIn('id', $unitIds)->get()->keyBy('id');
@@ -169,10 +179,12 @@ class SaleService
         $out = [];
 
         foreach ($input as $i => $l) {
-            $pct = (float) ($l['discount'] ?? 0);
-            if ($limit['line'] !== null && $pct > $limit['line']) {
+            $manual = (float) ($l['discount'] ?? 0);
+            $floor = ! empty($l['custom']) ? 0.0 : $groupPct;
+            if ($limit['line'] !== null && $manual > $floor && $manual > $limit['line']) {
                 throw ValidationException::withMessages(["lines.$i.discount" => "Line discount is above your limit of {$limit['line']}%."]);
             }
+            $pct = max($manual, $floor);
             $qty = (float) $l['qty'];
 
             if (! empty($l['custom'])) {
