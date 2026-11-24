@@ -2,7 +2,7 @@
 import { CalendarClock, Printer, ScanBarcode, HeartHandshake, Save, Lock } from 'lucide-vue-next'
 import type { PosSettings } from '~/types/domain'
 
-definePageMeta({ title: 'Settings' })
+definePageMeta({ title: 'General settings' })
 const api = useAdminApi()
 const toast = useToast()
 const s = ref<PosSettings | null>(null)
@@ -27,7 +27,7 @@ async function save() {
 
 <template>
   <div ref="root">
-    <UiPageHeader title="Settings" description="Counter, stock and receipt behaviour for this warehouse.">
+    <UiPageHeader title="General settings" description="Stock, expiry and counter rules for this warehouse.">
       <UiButton variant="primary" :icon="Save" :loading="saving" :disabled="!s" @click="save">Save settings</UiButton>
     </UiPageHeader>
 
@@ -47,45 +47,24 @@ async function save() {
         </div>
       </UiSection>
 
-      <UiSection title="Counter" :icon="ScanBarcode">
+      <UiSection title="Counter rules" :icon="ScanBarcode">
         <div class="space-y-5">
           <div>
             <p class="mb-2 text-[13px] font-medium text-slate-700">Round invoice total to</p>
             <UiSegmented v-model="s.roundTo" :options="[{ value: 0, label: 'No rounding' }, { value: 0.5, label: '৳0.50' }, { value: 1, label: '৳1' }]" />
           </div>
           <UiSwitch v-model="s.rxReminder" label="Prescription reminder" description="Show a reminder when an Rx medicine is added (does not block)" />
-          <UiSwitch v-model="s.printOnComplete" label="Print receipt automatically" description="Opens the print dialog after each completed sale" />
         </div>
       </UiSection>
 
-      <UiSection title="Receipt" :icon="Printer">
-        <div class="grid gap-5 md:grid-cols-[1fr_200px]">
-          <div class="space-y-4">
-            <div>
-              <p class="mb-2 text-[13px] font-medium text-slate-700">Paper</p>
-              <UiSegmented v-model="s.receiptWidth" :options="[{ value: '58mm', label: '58 mm' }, { value: '80mm', label: '80 mm' }, { value: 'A4', label: 'A4' }]" />
-            </div>
-            <UiTextarea v-model="s.receiptFooter" label="Footer text" :rows="3" />
-          </div>
-          <div class="rounded-xl border border-dashed border-slate-300 bg-white p-3 font-mono text-[10px] leading-snug text-slate-700 shadow-inner" :style="{ maxWidth: s.receiptWidth === '58mm' ? '150px' : '200px' }">
-            <p class="text-center font-bold">Red Pharma</p>
-            <p class="text-center">Dhanmondi</p>
-            <p class="my-1 border-t border-dashed border-slate-400" />
-            <p class="flex justify-between"><span>Napa 500 mg ×2</span><span>24.00</span></p>
-            <p class="flex justify-between"><span>Seclo 20 mg ×1</span><span>60.00</span></p>
-            <p class="my-1 border-t border-dashed border-slate-400" />
-            <p class="flex justify-between font-bold"><span>TOTAL</span><span>84.00</span></p>
-            <p class="mt-1 text-center text-[9px]">{{ s.receiptFooter }}</p>
-          </div>
-        </div>
-      </UiSection>
-
-      <UiSection title="Loyalty points" :icon="HeartHandshake">
-        <div class="grid grid-cols-2 gap-4">
-          <UiInput v-model.number="s.pointsPerTaka" type="number" label="Points per ৳ spent" :hint="`৳1,000 earns ${Math.floor(1000 * s.pointsPerTaka)} points`" />
-          <UiInput v-model.number="s.pointValue" type="number" label="Value of 1 point (৳)" :hint="`100 points = ${money(100 * s.pointValue)}`" />
-        </div>
-      </UiSection>
+      <NuxtLink to="/admin/pos-settings" class="card group flex items-center gap-4 p-5 transition hover:border-brand-300 hover:shadow-[var(--shadow-lift)]" data-reveal>
+        <span class="grid size-11 place-items-center rounded-xl bg-brand-50 text-brand-700"><Printer class="size-5" /></span>
+        <span class="flex-1"><span class="block font-display font-bold">POS settings & printers</span><span class="text-sm text-slate-500">Receipt format, payment methods, counter defaults, printer setup</span></span>
+      </NuxtLink>
+      <NuxtLink to="/admin/reward-points" class="card group flex items-center gap-4 p-5 transition hover:border-brand-300 hover:shadow-[var(--shadow-lift)]" data-reveal>
+        <span class="grid size-11 place-items-center rounded-xl bg-brand-50 text-brand-700"><HeartHandshake class="size-5" /></span>
+        <span class="flex-1"><span class="block font-display font-bold">Reward points</span><span class="text-sm text-slate-500">Earning, expiry and redemption rules</span></span>
+      </NuxtLink>
     </div>
   </div>
 </template>

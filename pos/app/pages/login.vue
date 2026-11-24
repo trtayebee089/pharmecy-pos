@@ -19,7 +19,8 @@ async function submit() {
   loading.value = true
   try {
     await auth.login(username.value.trim(), password.value)
-    if (!prefersReducedMotion()) await gsap.to(form.value, { opacity: 0, y: -10, duration: 0.25 })
+    // Fade out, but never let the animation block sign-in (rAF is paused in hidden tabs).
+    if (!prefersReducedMotion()) await Promise.race([gsap.to(form.value, { opacity: 0, y: -10, duration: 0.25 }).then(() => undefined), new Promise(r => setTimeout(r, 300))])
     await navigateTo(String(route.query.redirect ?? '/dashboard'))
   }
   catch (e: any) {

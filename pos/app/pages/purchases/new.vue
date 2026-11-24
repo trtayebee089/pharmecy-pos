@@ -3,7 +3,7 @@ import { gsap } from 'gsap'
 import { ArrowLeft, Truck, PackagePlus, Trash2, CalendarX, AlertTriangle, CheckCircle2, Receipt } from 'lucide-vue-next'
 import type { Product, PurchaseLineInput, Supplier } from '~/types/domain'
 
-definePageMeta({ title: 'Receive purchase' })
+definePageMeta({ title: 'New purchase' })
 
 const auth = useAuthStore()
 const suppliersApi = useSuppliersApi()
@@ -19,10 +19,35 @@ const done = ref<string | null>(null)
 const root = ref<HTMLElement | null>(null)
 const tbody = ref<HTMLElement | null>(null)
 let idemKey = crypto.randomUUID()
+const route = useRoute()
+/** received = goods are here now (batch + expiry required, stock added); ordered = purchase order, receive later. */
+const mode = ref<'received' | 'ordered'>(route.query.status === 'ordered' ? 'ordered' : 'received')
+const fromDraft = ref<string | null>(null)
 
 onMounted(async () => {
   revealStagger(root.value?.querySelectorAll('[data-reveal]') ?? [], { stagger: 0.07 })
   suppliers.value = await suppliersApi.lookup()
+  if (route.query.supplier) header.supplierId = Number(route.query.supplier)
+  // Pre-fill from a draft purchase order (/purchases/new?draft=ID)
+  if (route.query.draft) {
+    const draft = await usePurchaseOrdersApi().draft(Number(route.query.draft))
+    if (draft) {
+      fromDraft.value = draft.number
+      const catalog = useCatalogApi()
+      for (const r of draft.rows.filter(x => x.orderQty > 0)) {
+        const p = await catalog.product(r.productId)
+        if (!p) continue
+        addLine(p)
+        const l = lines.value[lines.value.length - 1]!
+        const box = p.units.find(u => u.code === 'box')
+        const strip = p.units.find(u => u.code === 'strip')
+        if (box && Number.isInteger(r.boxQty) && r.boxQty > 0) { l.unitId = box.id; l.qty = r.boxQty }
+        else if (strip) { l.unitId = strip.id; l.qty = Math.ceil(r.orderQty / strip.factor) }
+        else { l.unitId = p.units[0]!.id; l.qty = r.orderQty }
+      }
+      header.note = `From draft order ${draft.number}`
+    }
+  }
 })
 const supplier = computed(() => suppliers.value.find(s => s.id === header.supplierId))
 
@@ -64,13 +89,15 @@ function useBatch(l: PurchaseLineInput, batchNo: string, expiry: string) { l.bat
 function validate(): boolean {
   errors.value = {}
   if (!header.supplierId) errors.value.supplier = 'Choose the supplier'
-  if (!header.supplierInvoiceNo.trim()) errors.value.invoice = 'Supplier invoice number is required'
+  if (mode.value === 'received' && !header.supplierInvoiceNo.trim()) errors.value.invoice = 'Supplier invoice number is required'
   if (!lines.value.length) errors.value.lines = 'Add at least one product'
   for (const l of lines.value) {
-    if (!l.batchNo.trim()) errors.value[`${l.key}.batch`] = 'Batch no required'
     const ei = expiryIssue(l)
-    if (ei === 'missing') errors.value[`${l.key}.expiry`] = 'Expiry required'
-    if (ei === 'expired') errors.value[`${l.key}.expiry`] = 'Already expired: cannot be received'
+    if (mode.value === 'received') {
+      if (!l.batchNo.trim()) errors.value[`${l.key}.batch`] = 'Batch no required'
+      if (ei === 'missing') errors.value[`${l.key}.expiry`] = 'Expiry required'
+    }
+    if (ei === 'expired' && l.expiryDate) errors.value[`${l.key}.expiry`] = 'Already expired: cannot be received'
     if (l.qty <= 0) errors.value[`${l.key}.qty`] = 'Qty must be above 0'
     if (l.unitCost < 0) errors.value[`${l.key}.cost`] = 'Invalid cost'
   }
@@ -87,7 +114,7 @@ async function post() {
   saving.value = true
   try {
     const res = await receiving.receive({
-      warehouseId: auth.warehouseId, supplierId: header.supplierId!, supplierInvoiceNo: header.supplierInvoiceNo, invoiceDate: header.invoiceDate,
+      status: mode.value, warehouseId: auth.warehouseId, supplierId: header.supplierId!, supplierInvoiceNo: header.supplierInvoiceNo, invoiceDate: header.invoiceDate,
       otherCharges: Number(header.otherCharges) || 0, paidAmount: Number(header.paidAmount) || 0, paymentMethod: header.paymentMethod, note: header.note,
       lines: lines.value.map(l => ({ productId: l.product.id, unitId: l.unitId, qty: l.qty, freeQty: l.freeQty, batchNo: l.batchNo.trim(), expiryDate: l.expiryDate, unitCost: l.unitCost, discountPct: l.discountPct, updateRetailPrice: l.updateRetailPrice })),
     }, idemKey)
@@ -106,10 +133,15 @@ function another() { done.value = null; lines.value = []; header.supplierInvoice
       <div class="flex items-center gap-3">
         <NuxtLink to="/purchases"><UiButton variant="ghost" :icon="ArrowLeft" aria-label="Back" /></NuxtLink>
         <div>
-          <h1 class="font-display text-[26px] font-extrabold tracking-tight text-ink">Receive purchase</h1>
-          <p class="text-sm text-slate-500">Each line needs the batch number and expiry printed on the pack. Posting adds stock and the supplier due.</p>
+          <h1 class="font-display text-[26px] font-extrabold tracking-tight text-ink">New purchase</h1>
+          <p class="text-sm text-slate-500">
+            <template v-if="mode === 'received'">Goods are here: each line needs the batch number and expiry printed on the pack. Posting adds stock and the supplier due.</template>
+            <template v-else>Purchase order to the supplier: no stock is added until it is received with batch and expiry.</template>
+            <span v-if="fromDraft" class="ml-1 font-semibold text-brand-700">Pre-filled from {{ fromDraft }}.</span>
+          </p>
         </div>
       </div>
+      <UiSegmented v-model="mode" :options="[{ value: 'received', label: 'Goods received now' }, { value: 'ordered', label: 'Order only (receive later)' }]" />
     </div>
 
     <div class="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -122,7 +154,7 @@ function another() { done.value = null; lines.value = []; header.supplierInvoice
           </div>
         </UiSection>
 
-        <UiSection title="Items received" :description="`${lines.length} lines · ${num(totalPieces)} pieces into stock`" :icon="PackagePlus">
+        <UiSection :title="mode === 'received' ? 'Items received' : 'Items to order'" :description="mode === 'received' ? `${lines.length} lines · ${num(totalPieces)} pieces into stock` : `${lines.length} lines · ${num(totalPieces)} pieces ordered`" :icon="PackagePlus">
           <UiProductPicker placeholder="Scan the pack barcode or search a product…" @pick="addLine" />
           <p v-if="errors.lines" class="mt-3 text-sm font-medium text-rose-600">{{ errors.lines }}</p>
 
@@ -199,8 +231,8 @@ function another() { done.value = null; lines.value = []; header.supplierInvoice
             </div>
             <div class="flex justify-between rounded-xl bg-amber-50 px-3 py-2.5 font-semibold" :class="due ? 'text-amber-700' : 'text-slate-400'"><span>Supplier due</span><span class="tabular">{{ money(due) }}</span></div>
             <UiTextarea v-model="header.note" placeholder="Note (optional)" :rows="2" />
-            <UiButton data-post variant="primary" size="lg" block :icon="Receipt" :loading="saving" magnetic @click="post">Post purchase</UiButton>
-            <p class="text-center text-[11px] text-slate-400">Posting is final. Corrections are made with a purchase return.</p>
+            <UiButton data-post variant="primary" size="lg" block :icon="Receipt" :loading="saving" magnetic @click="post">{{ mode === 'received' ? 'Post purchase' : 'Save purchase order' }}</UiButton>
+            <p class="text-center text-[11px] text-slate-400">{{ mode === 'received' ? 'Posting is final. Corrections are made with a purchase return.' : 'The order can be edited until it is received.' }}</p>
           </div>
         </div>
       </div>
@@ -209,9 +241,9 @@ function another() { done.value = null; lines.value = []; header.supplierInvoice
     <UiModal :model-value="!!done" size="sm" :dismissible="false">
       <div class="py-4 text-center">
         <div class="mx-auto grid size-16 place-items-center rounded-full bg-gradient-to-br from-brand-400 to-brand-700 text-white shadow-[var(--shadow-glow)]"><CheckCircle2 class="size-8" /></div>
-        <h3 class="mt-4 font-display text-xl font-extrabold">Purchase posted</h3>
+        <h3 class="mt-4 font-display text-xl font-extrabold">{{ mode === 'received' ? 'Purchase posted' : 'Purchase order saved' }}</h3>
         <p class="mt-1 font-mono text-sm text-slate-500">{{ done }}</p>
-        <p class="mt-3 text-sm text-slate-600">{{ num(totalPieces) }} pieces added to stock across {{ lines.length }} batches.</p>
+        <p class="mt-3 text-sm text-slate-600">{{ num(totalPieces) }} {{ mode === 'received' ? `pieces added to stock across ${lines.length} batches.` : `pieces ordered on ${lines.length} lines. Receive it when the goods arrive.` }}</p>
         <div class="mt-6 flex justify-center gap-2">
           <NuxtLink to="/purchases"><UiButton>All purchases</UiButton></NuxtLink>
           <UiButton variant="primary" @click="another">Receive another</UiButton>

@@ -50,6 +50,8 @@ export function useSuppliersApi() {
 }
 
 export interface ReceivePayload {
+  /** received: post stock now; ordered: create a purchase order to receive later */
+  status: 'received' | 'ordered'
   warehouseId: number
   supplierId: number
   supplierInvoiceNo: string

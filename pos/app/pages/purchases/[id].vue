@@ -36,6 +36,7 @@ async function submitPay() {
   catch (e: any) { toast.error('Payment not recorded', e?.message) }
   finally { paying.value = false }
 }
+function printDoc() { window.print() }
 const pieces = computed(() => p.value?.lines.reduce((s, l) => s + l.pieces, 0) ?? 0)
 </script>
 
@@ -50,14 +51,15 @@ const pieces = computed(() => p.value?.lines.reduce((s, l) => s + l.pieces, 0) ?
           <div>
             <div class="flex items-center gap-2">
               <h1 class="font-mono text-xl font-bold text-ink">{{ p.number }}</h1>
-              <UiBadge :tone="p.status === 'received' ? 'success' : p.status === 'draft' ? 'info' : 'neutral'" dot class="capitalize">{{ p.status }}</UiBadge>
+              <UiBadge :tone="p.status === 'received' ? 'success' : p.status === 'draft' ? 'info' : 'neutral'" dot>{{ p.status === 'draft' ? 'Ordered' : p.status === 'received' ? 'Received' : 'Void' }}</UiBadge>
               <UiBadge :tone="p.dueTotal ? 'warning' : 'success'">{{ p.dueTotal ? 'Due' : 'Paid' }}</UiBadge>
             </div>
             <p class="text-sm text-slate-500">Received {{ date(p.receivedAt) }} by {{ p.receivedBy }} · supplier invoice {{ p.supplierInvoiceNo }}</p>
           </div>
         </div>
         <div class="flex gap-2">
-          <UiButton :icon="Printer">Print GRN</UiButton>
+          <NuxtLink v-if="p.status === 'draft'" to="/purchases/new"><UiButton variant="primary" :icon="Truck">Receive goods</UiButton></NuxtLink>
+          <UiButton :icon="Printer" @click="printDoc">{{ p.status === 'draft' ? 'Print order' : 'Print GRN' }}</UiButton>
           <NuxtLink to="/purchases/returns"><UiButton :icon="Undo2">Return to supplier</UiButton></NuxtLink>
           <UiButton v-if="p.dueTotal > 0" variant="primary" :icon="Wallet" @click="startPay">Pay supplier</UiButton>
         </div>

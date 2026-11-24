@@ -9,11 +9,16 @@ export function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
+/** Skip animation when it could not run anyway (hidden tab pauses requestAnimationFrame). */
+function skipMotion(): boolean {
+  return prefersReducedMotion() || (typeof document !== 'undefined' && document.hidden)
+}
+
 type Targets = gsap.TweenTarget
 
 /** Staggered rise-in for lists, cards and table rows. */
 export function revealStagger(targets: Targets, opts: { y?: number; stagger?: number; delay?: number; duration?: number } = {}) {
-  if (prefersReducedMotion()) return gsap.set(targets, { opacity: 1, y: 0, clearProps: 'transform' })
+  if (skipMotion()) return gsap.set(targets, { opacity: 1, y: 0, filter: 'none', clearProps: 'transform,filter' })
   return gsap.fromTo(
     targets,
     { opacity: 0, y: opts.y ?? 14, filter: 'blur(4px)' },
@@ -30,7 +35,7 @@ export function revealStagger(targets: Targets, opts: { y?: number; stagger?: nu
 
 /** Animated count-up for KPI numbers. */
 export function countUp(el: HTMLElement, to: number, format: (n: number) => string, duration = 1.1) {
-  if (prefersReducedMotion()) {
+  if (skipMotion()) {
     el.textContent = format(to)
     return
   }
@@ -46,7 +51,7 @@ export function countUp(el: HTMLElement, to: number, format: (n: number) => stri
 /** Draws an SVG path from start to end (charts, check marks). */
 export function drawPath(path: SVGPathElement, duration = 1.2, delay = 0) {
   const len = path.getTotalLength()
-  if (prefersReducedMotion()) return gsap.set(path, { strokeDasharray: 'none', strokeDashoffset: 0 })
+  if (skipMotion()) return gsap.set(path, { strokeDasharray: 'none', strokeDashoffset: 0 })
   return gsap.fromTo(path, { strokeDasharray: len, strokeDashoffset: len }, { strokeDashoffset: 0, duration, delay, ease: 'power2.inOut' })
 }
 
@@ -124,17 +129,30 @@ export function useSpotlight(elRef: Ref<HTMLElement | null>) {
   onBeforeUnmount(() => elRef.value?.removeEventListener('pointermove', onMove))
 }
 
+/**
+ * Calls `done` once: when the tween completes, or after a timer fallback.
+ * GSAP runs on requestAnimationFrame, which browsers pause in hidden tabs;
+ * without the fallback a route change could wait until the tab is visible.
+ */
+function once(done: () => void, fallbackMs: number) {
+  let called = false
+  const finish = () => { if (!called) { called = true; done() } }
+  setTimeout(finish, fallbackMs)
+  return finish
+}
+
 /** Page transition hooks for <NuxtPage :transition>. */
 export const pageTransition = {
   name: 'page',
   mode: 'out-in' as const,
   css: false,
   onEnter(el: Element, done: () => void) {
-    if (prefersReducedMotion()) return done()
-    gsap.fromTo(el, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', onComplete: done, clearProps: 'transform' })
+    if (prefersReducedMotion() || document.hidden) { gsap.set(el, { opacity: 1, clearProps: 'transform' }); return done() }
+    const finish = once(() => { gsap.set(el, { opacity: 1, clearProps: 'transform' }); done() }, 600)
+    gsap.fromTo(el, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', onComplete: finish, clearProps: 'transform' })
   },
   onLeave(el: Element, done: () => void) {
-    if (prefersReducedMotion()) return done()
-    gsap.to(el, { opacity: 0, y: -6, duration: 0.18, ease: 'power1.in', onComplete: done })
+    if (prefersReducedMotion() || document.hidden) return done()
+    gsap.to(el, { opacity: 0, y: -6, duration: 0.18, ease: 'power1.in', onComplete: once(done, 350) })
   },
 }
