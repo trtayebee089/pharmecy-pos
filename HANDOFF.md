@@ -85,6 +85,8 @@ Engineering decisions taken during the build (change only on purpose):
   only covers debt that is not on an invoice. A sale with a later due collection cannot be voided (use a return).
   Customer groups carry discounts, so they need the new `customer_groups.manage` permission (Manager and Admin), not
   the cashier's `customers.manage`. Customers who owe money cannot be deactivated.
+- Held sales live on the server (with the sales domain live) and store lines, not prices: resuming re-prices from the
+  current price list and live batches. Any counter of the warehouse may resume one; the first resume wins.
 
 ## 4. What is done
 
@@ -98,7 +100,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (100 Pest tests passing)
+### Laravel API (`api/`) – live slices (105 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -114,10 +116,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Inventory: stock overview, batches, adjustments, stock counts, transfers | live |
 | Catalog writes: products (units, prices, barcodes), deactivate, duplicate, CSV import; generics, manufacturers, dosage forms, categories | live |
 | Customers: profile, edit, deactivate, groups, due list, open invoices, due collection | live |
+| Held sales: hold (F8), list, resume on any counter of the warehouse, discard | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (9 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 100 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (10 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 105 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -125,16 +128,15 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Held sales / drafts** on the server (currently browser-only).
-2. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
-3. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
-4. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-5. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-6. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-7. **HR & payroll**: employees, attendance, holidays, payroll.
-8. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-9. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-10. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
+2. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
+3. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
+4. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+5. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+6. **HR & payroll**: employees, attendance, holidays, payroll.
+7. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+8. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+9. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Customer group discount is stored but not yet applied at the counter (the groups page says it is automatic, capped by
@@ -162,8 +164,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 100 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 100 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 105 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 105 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

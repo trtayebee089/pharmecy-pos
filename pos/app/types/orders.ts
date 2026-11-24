@@ -4,6 +4,8 @@ export interface HeldSaleSummary {
   id: string
   heldAt: string
   heldBy: string
+  /** Live API only: who parked it (to split "yours" from other counters). */
+  heldById?: number
   register: string
   customer: string | null
   items: number

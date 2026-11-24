@@ -1,5 +1,15 @@
 import { defineStore } from 'pinia'
 import type { Customer, PaymentLine, Product } from '~/types/domain'
+import type { HeldSaleSummary } from '~/types/orders'
+
+/** POST /sales/held/{id}/resume */
+interface ResumedHeldSale {
+  id: string
+  customer: Customer | null
+  orderDiscount: number
+  lines: { product: Product | null; unitId: number; qty: number; discountPct: number; batchId?: number | null; custom?: { name: string; code: string; price: number } }[]
+  skipped: string[]
+}
 
 export interface CartLine {
   key: string
@@ -28,6 +38,37 @@ export interface ReceiptSnapshot {
 export interface Allocation { batchId: number; batchNo: string; expiryDate: string; qtyBase: number }
 
 /**
+ * A parked cart. With the sales domain live it is stored on the server (`server`)
+ * and only its summary is kept here until it is resumed; in mock mode the
+ * lines stay in this store (this browser only).
+ */
+export interface HeldCart {
+  id: string
+  at: string
+  lines: CartLine[]
+  customer: Customer | null
+  customerName?: string | null
+  orderDiscount: number
+  items: number
+  total: number
+  heldBy?: string
+  heldById?: number
+  register?: string
+  server?: boolean
+}
+
+/** A free-text line (legacy custom product): a synthetic product with one piece unit at the typed price. */
+function customLine(name: string, code: string, price: number, qty: number, discountPct = 0): CartLine {
+  const id = -Date.now() - Math.floor(Math.random() * 1000)
+  const product: Product = {
+    id, sku: code || 'CUSTOM', name, strength: null, generic: null, manufacturer: 'Custom item', dosageForm: 'Custom', category: 'Custom',
+    requiresPrescription: false, isActive: true, reorderLevelBase: 0,
+    units: [{ id, code: 'piece', label: 'Piece', factor: 1, price, isSaleDefault: true }], batches: [], stockBase: Number.MAX_SAFE_INTEGER,
+  }
+  return { key: `custom-${-id}`, product, unitId: id, qty, discountPct, custom: { name, code } }
+}
+
+/**
  * PREVIEW ONLY. Prices, FEFO allocation, discount limits and totals shown here
  * help the cashier; the API recomputes all of them authoritatively when the
  * sale is completed (docs/rebuild/rebuild-architecture.md §6).
@@ -37,7 +78,7 @@ export const useCartStore = defineStore('cart', {
     lines: [] as CartLine[],
     customer: null as Customer | null,
     orderDiscount: 0, // amount in BDT
-    held: [] as { id: string; at: string; lines: CartLine[]; customer: Customer | null; orderDiscount: number }[],
+    held: [] as HeldCart[],
     lastReceipt: null as ReceiptSnapshot | null,
   }),
   getters: {
@@ -86,13 +127,7 @@ export const useCartStore = defineStore('cart', {
     },
     /** Adds a free-text item at a typed price (no stock movement; needs the pos.custom_item permission). */
     addCustom(name: string, code: string, price: number, qty: number) {
-      const id = -Date.now()
-      const product: Product = {
-        id, sku: code || 'CUSTOM', name, strength: null, generic: null, manufacturer: 'Custom item', dosageForm: 'Custom', category: 'Custom',
-        requiresPrescription: false, isActive: true, reorderLevelBase: 0,
-        units: [{ id, code: 'piece', label: 'Piece', factor: 1, price, isSaleDefault: true }], batches: [], stockBase: Number.MAX_SAFE_INTEGER,
-      }
-      this.lines.unshift({ key: `custom-${-id}`, product, unitId: id, qty, discountPct: 0, custom: { name, code } })
+      this.lines.unshift(customLine(name, code, price, qty))
     },
     snapshot(number: string, payments: PaymentLine[], change: number): ReceiptSnapshot {
       return {
@@ -106,16 +141,62 @@ export const useCartStore = defineStore('cart', {
     },
     remove(key: string) { this.lines = this.lines.filter(l => l.key !== key) },
     clear() { this.lines = []; this.customer = null; this.orderDiscount = 0 },
-    hold() {
-      if (!this.lines.length) return
-      this.held.unshift({ id: `H${Date.now().toString().slice(-5)}`, at: new Date().toISOString(), lines: this.lines, customer: this.customer, orderDiscount: this.orderDiscount })
+    /** Parks the cart (on the server when the sales domain is live) and clears the counter. */
+    async hold(): Promise<HeldCart | null> {
+      if (!this.lines.length) return null
+      const api = useApi('sales')
+      let entry: HeldCart
+      if (!api.useMocks) {
+        const { payments: _p, ...cart } = this.payload(useAuthStore().warehouseId, [])
+        const s = await api.post<HeldSaleSummary>('/sales/held', { ...cart, customerId: this.customer?.id ?? null }, crypto.randomUUID())
+        entry = { id: s.id, at: s.heldAt, lines: [], customer: this.customer, customerName: s.customer, orderDiscount: this.orderDiscount, items: s.items, total: s.total, heldBy: s.heldBy, heldById: s.heldById, register: s.register, server: true }
+      }
+      else {
+        entry = { id: `H${Date.now().toString().slice(-5)}`, at: new Date().toISOString(), lines: this.lines, customer: this.customer, customerName: this.customer?.name ?? null, orderDiscount: this.orderDiscount, items: this.lines.length, total: this.total }
+      }
+      this.held.unshift(entry)
       this.lines = []; this.customer = null; this.orderDiscount = 0
+      return entry
     },
-    resume(id: string) {
+    /** Refreshes the server-held carts of the current warehouse (local ones are kept). */
+    async loadHeld() {
+      const api = useApi('sales')
+      if (api.useMocks) return
+      const rows = await api.get<HeldSaleSummary[]>('/sales/held', { warehouse_id: useAuthStore().warehouseId })
+      this.held = [
+        ...rows.map(s => ({ id: s.id, at: s.heldAt, lines: [], customer: null, customerName: s.customer, orderDiscount: 0, items: s.items, total: s.total, heldBy: s.heldBy, heldById: s.heldById, register: s.register, server: true })),
+        ...this.held.filter(h => !h.server),
+      ]
+    },
+    /**
+     * Puts a held cart back on the counter (parking the current one first).
+     * Server carts come back with live products and prices; returns the names
+     * of lines that could not be restored (product deactivated).
+     */
+    async resume(id: string): Promise<string[]> {
       const h = this.held.find(x => x.id === id)
-      if (!h) return
-      if (this.lines.length) this.hold()
-      this.lines = h.lines; this.customer = h.customer; this.orderDiscount = h.orderDiscount
+      if (!h) return []
+      let skipped: string[] = []
+      if (h.server) {
+        const r = await useApi('sales').post<ResumedHeldSale>(`/sales/held/${encodeURIComponent(id)}/resume`, {}, crypto.randomUUID())
+        if (this.lines.length) await this.hold()
+        this.lines = r.lines.map((l, i) => l.custom
+          ? customLine(l.custom.name, l.custom.code, l.custom.price, l.qty, l.discountPct)
+          : { key: `${l.product!.id}-${l.unitId}-${Date.now()}-${i}`, product: l.product!, unitId: l.unitId, qty: l.qty, discountPct: l.discountPct, batchId: l.batchId ?? undefined })
+        this.customer = r.customer; this.orderDiscount = r.orderDiscount
+        skipped = r.skipped
+      }
+      else {
+        if (this.lines.length) await this.hold()
+        this.lines = h.lines; this.customer = h.customer; this.orderDiscount = h.orderDiscount
+      }
+      this.held = this.held.filter(x => x.id !== id)
+      return skipped
+    },
+    /** Discards a held cart; nothing was sold or reserved, so nothing else changes. */
+    async discardHeld(id: string) {
+      const h = this.held.find(x => x.id === id)
+      if (h?.server) await useApi('sales').del(`/sales/held/${encodeURIComponent(id)}`)
       this.held = this.held.filter(x => x.id !== id)
     },
     payload(warehouseId: number, payments: PaymentLine[]) {

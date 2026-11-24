@@ -49,10 +49,23 @@ async function openRecent(tab: 'sales' | 'drafts' = 'sales') {
   recentTab.value = tab
   recentOpen.value = true
   recent.value = null
+  cart.loadHeld().catch((e: any) => toast.error('Could not load drafts', e?.message))
   recent.value = (await salesApi.list({ perPage: 12 })).data
 }
-function resume(id: string) { cart.resume(id); recentOpen.value = false; toast.success('Draft resumed') }
-function discard(id: string) { cart.held = cart.held.filter(h => h.id !== id); toast.info('Draft discarded') }
+async function resume(id: string) {
+  try {
+    const skipped = await cart.resume(id)
+    recentOpen.value = false
+    skipped.length ? toast.warning('Draft resumed without some items', skipped.join(', ')) : toast.success('Draft resumed', id)
+  }
+  catch (e: any) { toast.error('Could not resume', e?.message); cart.loadHeld().catch(() => {}) }
+}
+async function discard(id: string) {
+  try { await cart.discardHeld(id); toast.info('Draft discarded', id) }
+  catch (e: any) { toast.error('Could not discard', e?.message); cart.loadHeld().catch(() => {}) }
+}
+// Held carts of this warehouse (any counter), for the Drafts badge and list.
+onMounted(() => cart.loadHeld().catch(() => {}))
 
 // Last receipt
 const receiptOpen = ref(false)
@@ -150,7 +163,7 @@ const btn = 'flex h-9 items-center gap-2 rounded-xl px-2.5 text-[13px] font-medi
         <ul v-if="cart.held.length" class="divide-y divide-slate-100">
           <li v-for="h in cart.held" :key="h.id" class="flex items-center gap-3 py-2.5">
             <span class="grid size-9 place-items-center rounded-xl bg-amber-50 text-amber-600"><PauseCircle class="size-4" /></span>
-            <div class="flex-1"><p class="text-sm font-semibold">{{ h.id }} · {{ h.customer?.name ?? 'Walk-in' }}</p><p class="text-xs text-slate-500">{{ h.lines.length }} items · {{ dateTime(h.at) }}</p></div>
+            <div class="flex-1"><p class="text-sm font-semibold">{{ h.id }} · {{ h.customerName ?? 'Walk-in' }}</p><p class="text-xs text-slate-500">{{ h.items }} items · {{ money(h.total) }} · {{ dateTime(h.at) }}<template v-if="h.heldBy"> · {{ h.heldBy }}</template></p></div>
             <UiButton size="sm" variant="soft" :icon="Play" @click="resume(h.id)">Resume</UiButton>
             <UiButton size="sm" variant="ghost" :icon="Trash2" aria-label="Discard draft" @click="discard(h.id)" />
           </li>

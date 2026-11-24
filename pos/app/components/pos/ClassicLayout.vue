@@ -114,10 +114,13 @@ function openPay(method: PaymentLine['method']) {
   presetMethod.value = method
   payOpen.value = true
 }
-function hold() {
+async function hold() {
   if (!cart.lines.length) return
-  cart.hold()
-  toast.success('Saved as draft', 'Find it under Recent transaction → Drafts (F7).')
+  try {
+    const h = await cart.hold()
+    toast.success('Saved as draft', `${h?.id ?? ''} · find it under Recent transaction → Drafts (F7).`)
+  }
+  catch (e: any) { toast.error('Draft not saved', e?.message) }
 }
 async function cancelSale() {
   if (!cart.lines.length) return

@@ -86,10 +86,13 @@ function openPay() {
   if (cart.hasShortage) { toast.error('Not enough stock', 'Reduce the highlighted quantities before payment.'); return }
   payOpen.value = true
 }
-function hold() {
+async function hold() {
   if (!cart.lines.length) return
-  cart.hold()
-  toast.success('Saved as draft', 'Resume it from Drafts (F7).')
+  try {
+    const h = await cart.hold()
+    toast.success('Saved as draft', `${h?.id ?? ''} · resume it from Drafts (F7) on any counter here.`)
+  }
+  catch (e: any) { toast.error('Draft not saved', e?.message) }
   searchInput.value?.focus()
 }
 
