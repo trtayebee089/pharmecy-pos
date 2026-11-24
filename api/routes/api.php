@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\Pos\AuthController;
 use App\Http\Controllers\Pos\CatalogController;
+use App\Http\Controllers\Pos\CatalogMasterController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\InventoryController;
+use App\Http\Controllers\Pos\ProductController;
 use App\Http\Controllers\Pos\PurchaseController;
 use App\Http\Controllers\Pos\PurchaseReturnController;
 use App\Http\Controllers\Pos\RegisterController;
@@ -31,7 +33,22 @@ Route::prefix('pos/v1')->group(function () {
         Route::middleware('can:products.view')->group(function () {
             Route::get('catalog/products/search', [CatalogController::class, 'search']);
             Route::get('catalog/products', [CatalogController::class, 'index']);
-            Route::get('catalog/products/{product}', [CatalogController::class, 'show']);
+            Route::get('catalog/products/{product}', [CatalogController::class, 'show'])->whereNumber('product');
+            Route::get('catalog/products/{product}/form', [ProductController::class, 'form'])->whereNumber('product');
+            Route::get('catalog/lookups', [CatalogMasterController::class, 'lookups']);
+            Route::get('catalog/{type}', [CatalogMasterController::class, 'index'])->whereIn('type', ['generics', 'manufacturers', 'dosage-forms', 'categories']);
+            Route::get('catalog/{type}/{id}', [CatalogMasterController::class, 'show'])->whereIn('type', ['generics', 'manufacturers', 'dosage-forms', 'categories'])->whereNumber('id');
+        });
+        Route::post('catalog/products', [ProductController::class, 'store'])->middleware('can:products.create');
+        Route::post('catalog/products/import', [ProductController::class, 'import'])->middleware(['can:products.create', 'idempotent']);
+        Route::put('catalog/products/{product}', [ProductController::class, 'update'])->middleware('can:products.edit')->whereNumber('product');
+        Route::post('catalog/products/{product}/deactivate', [ProductController::class, 'deactivate'])->middleware(['can:products.edit', 'idempotent']);
+        Route::post('catalog/products/{product}/duplicate', [ProductController::class, 'duplicate'])->middleware(['can:products.create', 'idempotent']);
+        Route::middleware('can:catalog.manage')->group(function () {
+            $types = ['generics', 'manufacturers', 'dosage-forms', 'categories'];
+            Route::post('catalog/{type}', [CatalogMasterController::class, 'store'])->whereIn('type', $types);
+            Route::put('catalog/{type}/{id}', [CatalogMasterController::class, 'update'])->whereIn('type', $types)->whereNumber('id');
+            Route::delete('catalog/{type}/{id}', [CatalogMasterController::class, 'destroy'])->whereIn('type', $types)->whereNumber('id');
         });
 
         Route::get('customers', [CustomerController::class, 'index'])->middleware('can:customers.view');
