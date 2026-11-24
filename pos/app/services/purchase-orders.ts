@@ -3,12 +3,14 @@ import type { AiRun, Company, DraftDetail, DraftSummary, OrderForecast, OrderRow
 const mock = () => import('~/mocks/purchase-orders')
 
 /**
- * Purchase orders by company (/api/pos/v1/purchase-orders).
- * Sold quantity, stock and the AI forecast come from the server; the
+ * Purchase orders by company (/api/pos/v1/purchase-orders), for the current warehouse.
+ * Sold quantity, stock and the forecast come from the server (the forecast is
+ * statistical: 28-day rate with a 7-day trend, 21 days of cover); the
  * box/strip/piece maths shown in the UI is re-validated by the API on save.
  */
 export function usePurchaseOrdersApi() {
-  const api = useApi()
+  const api = useApi('purchases')
+  const wh = () => useAuthStore().warehouseId
   return {
     async companies(): Promise<Company[]> {
       if (api.useMocks) { await mockDelay(150); return (await mock()).companies() }
@@ -16,15 +18,15 @@ export function usePurchaseOrdersApi() {
     },
     async report(companyId: number, from: string, to: string): Promise<OrderRow[]> {
       if (api.useMocks) { await mockDelay(450); return (await mock()).orderRows(companyId, from, to) }
-      return api.get('/purchase-orders/report', { company_id: companyId, from, to })
+      return api.get('/purchase-orders/report', { company_id: companyId, from, to, warehouse_id: wh() })
     },
     async forecast(productIds: number[], refresh = false): Promise<Record<number, OrderForecast>> {
       if (api.useMocks) { await mockDelay(refresh ? 1400 : 900); return (await mock()).forecasts(productIds) }
-      return api.post('/purchase-orders/forecast', { product_ids: productIds, refresh })
+      return api.post('/purchase-orders/forecast', { product_ids: productIds, refresh, warehouse_id: wh() })
     },
     async saveDraft(companyId: number, date: string, rows: OrderRow[], source: 'manual' | 'ai', idempotencyKey: string): Promise<DraftDetail> {
       if (api.useMocks) { await mockDelay(500); return (await mock()).saveDraft(companyId, date, rows, source, useAuthStore().user?.name ?? 'You') }
-      return api.post('/purchase-orders/drafts', { company_id: companyId, date, source, rows }, idempotencyKey)
+      return api.post('/purchase-orders/drafts', { company_id: companyId, date, source, rows, warehouse_id: wh() }, idempotencyKey)
     },
     async drafts(f: { from?: string; to?: string; companyId?: number; status?: string }): Promise<DraftSummary[]> {
       if (api.useMocks) { await mockDelay(300); return (await mock()).listDrafts(f) }
@@ -49,7 +51,7 @@ export function usePurchaseOrdersApi() {
     },
     async startAiRun(): Promise<AiRun> {
       if (api.useMocks) { await mockDelay(300); return (await mock()).startRun() }
-      return api.post('/purchase-orders/ai-runs')
+      return api.post('/purchase-orders/ai-runs', { warehouse_id: wh() })
     },
     async processAiRun(id: number): Promise<AiRun> {
       if (api.useMocks) { await mockDelay(700); return (await mock()).processRun(id) }

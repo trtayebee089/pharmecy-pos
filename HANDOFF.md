@@ -87,6 +87,8 @@ Engineering decisions taken during the build (change only on purpose):
   the cashier's `customers.manage`. Customers who owe money cannot be deactivated.
 - Held sales live on the server (with the sales domain live) and store lines, not prices: resuming re-prices from the
   current price list and live batches. Any counter of the warehouse may resume one; the first resume wins.
+- Purchase order "AI" forecast is a transparent statistical model on the server (28-day rate, 7-day trend, 21 days of
+  cover); no data leaves the system. A real model can replace `PurchaseOrderPlanner::forecast` behind the same endpoint.
 
 ## 4. What is done
 
@@ -100,7 +102,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (105 Pest tests passing)
+### Laravel API (`api/`) – live slices (111 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -117,10 +119,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Catalog writes: products (units, prices, barcodes), deactivate, duplicate, CSV import; generics, manufacturers, dosage forms, categories | live |
 | Customers: profile, edit, deactivate, groups, due list, open invoices, due collection | live |
 | Held sales: hold (F8), list, resume on any counter of the warehouse, discard | live |
+| Purchase orders: company report, forecast, drafts, convert to ordered purchase, drafts for all companies | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (10 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 105 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (11 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 111 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -128,17 +131,20 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
-2. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
-3. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-4. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-5. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-6. **HR & payroll**: employees, attendance, holidays, payroll.
-7. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-8. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-9. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
+2. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
+3. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+4. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+5. **HR & payroll**: employees, attendance, holidays, payroll.
+6. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+7. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+8. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
+- Screens build date ranges from the browser clock; counter PCs must use Bangladesh time (Asia/Dhaka) or "today"
+  can differ from the API's day around midnight.
+- The inventory reorder suggestions screen (`useReorderApi`, `/reorder/*`) still runs on mocks; it overlaps with the
+  purchase orders forecast and could reuse `PurchaseOrderPlanner`.
 - Customer group discount is stored but not yet applied at the counter (the groups page says it is automatic, capped by
   the role limit). Needs a decision on how it combines with manual line and order discounts.
 - Due reminder SMS: the endpoint answers 503 until an SMS gateway is chosen and configured.
@@ -164,8 +170,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 105 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 105 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 111 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 111 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)
