@@ -7,6 +7,7 @@ use App\Http\Controllers\Pos\CustomerAccountController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\CustomerGroupController;
 use App\Http\Controllers\Pos\DashboardController;
+use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\ProductController;
 use App\Http\Controllers\Pos\PurchaseController;
@@ -76,6 +77,12 @@ Route::prefix('pos/v1')->group(function () {
 
         Route::get('sales', [SaleController::class, 'index'])->middleware('can:sales.view');
         Route::get('sales/returns', [SaleController::class, 'returns'])->middleware('can:returns.view');
+        Route::get('sales/held', [HeldSaleController::class, 'index'])->middleware('can:sales.view');
+        Route::middleware('can:pos.sell')->group(function () {
+            Route::post('sales/held', [HeldSaleController::class, 'store'])->middleware('idempotent');
+            Route::post('sales/held/{number}/resume', [HeldSaleController::class, 'resume'])->middleware('idempotent');
+            Route::delete('sales/held/{number}', [HeldSaleController::class, 'destroy']);
+        });
         Route::get('sales/{sale}', [SaleController::class, 'show'])->middleware('can:sales.view')->whereNumber('sale');
         Route::post('sales', [SaleController::class, 'store'])->middleware(['can:pos.sell', 'idempotent']);
         Route::post('sales/{sale}/void', [SaleController::class, 'void'])->middleware('can:sales.void');
