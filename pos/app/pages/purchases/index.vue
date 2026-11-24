@@ -26,9 +26,9 @@ async function duplicate(row: PurchaseSummary) {
   catch (e: any) { toast.error('Not duplicated', e?.message) }
 }
 const rowItems = (row: PurchaseSummary): RowAction[] => [
-  { label: 'Receive goods', icon: Truck, to: '/purchases/new', hidden: row.status !== 'draft' || !auth.can('purchases.create') },
+  { label: 'Receive goods', icon: Truck, to: `/purchases/new?order=${row.id}`, hidden: row.status !== 'draft' || !auth.can('purchases.create') },
   { label: 'Pay supplier', icon: Wallet, to: `/purchases/${row.id}`, hidden: !row.dueTotal || row.status === 'void' || !auth.can('payments.pay_supplier') },
-  { label: row.status === 'draft' ? 'Print order' : 'Print GRN', icon: Printer, to: `/purchases/${row.id}` },
+  { label: row.status === 'draft' || row.status === 'closed' ? 'Print order' : 'Print GRN', icon: Printer, to: `/purchases/${row.id}` },
   { label: 'Return to supplier', icon: Undo2, to: '/purchases/returns', hidden: row.status !== 'received' },
   { label: 'Duplicate', icon: Copy, onClick: () => duplicate(row), hidden: !auth.can('purchases.create') },
 ]
@@ -63,11 +63,11 @@ function exportCsv() { downloadCsv('purchases.csv', columns.filter(c => c.key !=
       <template #cell-items="{ row }"><span class="tabular">{{ row.items }}</span></template>
       <template #cell-grandTotal="{ row }"><span class="font-semibold tabular">{{ money(row.grandTotal) }}</span></template>
       <template #cell-dueTotal="{ row }"><span class="tabular" :class="row.dueTotal ? 'font-semibold text-amber-600' : 'text-slate-400'">{{ row.dueTotal ? money(row.dueTotal) : '—' }}</span></template>
-      <template #cell-status="{ row }"><UiBadge :tone="row.status === 'received' ? 'success' : row.status === 'draft' ? 'info' : 'neutral'" dot>{{ row.status === 'draft' ? 'Ordered' : row.status === 'received' ? 'Received' : 'Void' }}</UiBadge></template>
+      <template #cell-status="{ row }"><UiBadge :tone="row.status === 'received' ? 'success' : row.status === 'draft' ? 'info' : 'neutral'" dot>{{ row.status === 'draft' ? 'Ordered' : row.status === 'closed' ? 'Closed' : row.status === 'received' ? 'Received' : 'Void' }}</UiBadge></template>
       <template #cell-actions="{ row }">
         <UiRowActions
           :label="row.number" :view="`/purchases/${row.id}`" remove-kind="void"
-          :remove="row.status !== 'void' && auth.can('purchases.create') ? () => voidPurchase(row) : undefined"
+          :remove="row.status !== 'void' && row.status !== 'closed' && auth.can('purchases.create') ? () => voidPurchase(row) : undefined"
           :items="rowItems(row)"
         />
       </template>

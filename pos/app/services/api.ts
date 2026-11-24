@@ -118,7 +118,7 @@ export function useSalesApi() {
 }
 
 export function usePurchasesApi() {
-  const api = useApi()
+  const api = useApi('purchases')
   return {
     async list(q: ListQuery): Promise<Paginated<PurchaseSummary>> {
       if (api.useMocks) {

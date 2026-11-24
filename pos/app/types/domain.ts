@@ -80,7 +80,7 @@ export interface PurchaseSummary {
   grandTotal: number
   paidTotal: number
   dueTotal: number
-  status: 'draft' | 'received' | 'void'
+  status: 'draft' | 'closed' | 'received' | 'void'
 }
 
 export interface BatchRow {

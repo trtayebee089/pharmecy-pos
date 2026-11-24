@@ -1,7 +1,7 @@
 import type { PurchaseDetail } from '~/mocks/purchase-detail'
 
 export function usePurchaseDetailApi() {
-  const api = useApi()
+  const api = useApi('purchases')
   return {
     async get(id: number): Promise<PurchaseDetail | null> {
       if (api.useMocks) { await mockDelay(300); return (await import('~/mocks/purchase-detail')).purchaseDetail(id) }

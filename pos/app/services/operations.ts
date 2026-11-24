@@ -19,8 +19,9 @@ export function useCatalogApi() {
       return api.get('/catalog/lookups')
     },
     async product(id: number): Promise<Product | null> {
-      if (api.useMocks) { await mockDelay(250); return (await seed()).products.find(p => p.id === id) ?? null }
-      return api.get(`/catalog/products/${id}`)
+      const live = useApi('catalog') // product reads are served live; lookups and writes are not yet
+      if (live.useMocks) { await mockDelay(250); return (await seed()).products.find(p => p.id === id) ?? null }
+      return live.get(`/catalog/products/${id}`)
     },
     /** The API validates unique SKU and barcodes, exactly one base unit, factors > 0 and price rules. */
     async save(input: ProductInput): Promise<{ id: number }> {
@@ -36,7 +37,7 @@ export function useCatalogApi() {
 }
 
 export function useSuppliersApi() {
-  const api = useApi()
+  const api = useApi('purchases')
   return {
     async lookup(term = ''): Promise<Supplier[]> {
       if (api.useMocks) {
@@ -50,6 +51,8 @@ export function useSuppliersApi() {
 }
 
 export interface ReceivePayload {
+  /** Open purchase order this receipt fulfils (closed by the API). */
+  orderId?: number | null
   /** received: post stock now; ordered: create a purchase order to receive later */
   status: 'received' | 'ordered'
   warehouseId: number
@@ -174,6 +177,9 @@ export function useAdminApi() {
  */
 export function useRowActionsApi() {
   const api = useApi()
+  // Actions whose domain is already served live follow that domain's switch.
+  const salesApi = useApi('sales')
+  const purchasesApi = useApi('purchases')
   const key = () => crypto.randomUUID()
   async function mockWrite<T>(fn?: () => T | Promise<T>): Promise<T | undefined> {
     await mockDelay(450)
@@ -181,19 +187,19 @@ export function useRowActionsApi() {
   }
   return {
     async voidSale(id: number, reason: string) {
-      if (api.useMocks) { await mockWrite(async () => { const s = (await seed()).sales.find(x => x.id === id); if (s) { s.status = 'void'; s.paidTotal = 0; s.dueTotal = 0 } }); return }
-      return api.post(`/sales/${id}/void`, { reason }, key())
+      if (salesApi.useMocks) { await mockWrite(async () => { const s = (await seed()).sales.find(x => x.id === id); if (s) { s.status = 'void'; s.paidTotal = 0; s.dueTotal = 0 } }); return }
+      return salesApi.post(`/sales/${id}/void`, { reason }, key())
     },
     async smsReceipt(id: number) {
       if (api.useMocks) { await mockWrite(); return }
       return api.post(`/sales/${id}/sms-receipt`, {}, key())
     },
     async voidPurchase(id: number, reason: string) {
-      if (api.useMocks) { await mockWrite(async () => { const p = (await seed()).purchases.find(x => x.id === id); if (p) p.status = 'void' }); return }
-      return api.post(`/purchases/${id}/void`, { reason }, key())
+      if (purchasesApi.useMocks) { await mockWrite(async () => { const p = (await seed()).purchases.find(x => x.id === id); if (p) p.status = 'void' }); return }
+      return purchasesApi.post(`/purchases/${id}/void`, { reason }, key())
     },
     async duplicatePurchase(id: number): Promise<{ id: number; number: string }> {
-      if (api.useMocks) {
+      if (purchasesApi.useMocks) {
         return (await mockWrite(async () => {
           const { purchases } = await seed()
           const p = purchases.find(x => x.id === id)!
@@ -203,7 +209,7 @@ export function useRowActionsApi() {
           return { id: copy.id, number: copy.number }
         }))!
       }
-      return api.post(`/purchases/${id}/duplicate`, {}, key())
+      return purchasesApi.post(`/purchases/${id}/duplicate`, {}, key())
     },
     async voidDocument(kind: 'sale-returns' | 'purchase-returns' | 'adjustments' | 'transfers', id: number, reason: string) {
       if (api.useMocks) {

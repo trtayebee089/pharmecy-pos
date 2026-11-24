@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, HandCoins, Phone, Mail, MapPin, Truck, Undo2, PackagePlus } from 'lucide-vue-next'
+import { Ban, BookOpen, HandCoins, Phone, Mail, MapPin, Truck, Undo2, PackagePlus } from 'lucide-vue-next'
 import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
 import type { SupplierLedgerEntry, SupplierRow } from '~/types/inventory'
 
@@ -52,6 +52,7 @@ const typeMeta = {
   invoice: { label: 'Purchase', tone: 'info', icon: PackagePlus },
   payment: { label: 'Payment', tone: 'success', icon: HandCoins },
   return: { label: 'Return', tone: 'warning', icon: Undo2 },
+  void: { label: 'Voided purchase', tone: 'neutral', icon: Ban },
 } as const
 
 // ---- Pay supplier ----

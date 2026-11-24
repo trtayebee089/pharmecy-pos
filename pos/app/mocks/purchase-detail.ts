@@ -4,13 +4,15 @@ import { products, purchases } from './seed'
 export interface PurchaseDetail {
   id: number
   number: string
-  status: 'draft' | 'received' | 'void'
+  status: 'draft' | 'closed' | 'received' | 'void'
+  supplierId?: number
   supplier: string
+  orderNumber?: string | null
   supplierInvoiceNo: string
   receivedAt: string
   warehouse: string
   receivedBy: string
-  lines: { id: number; product: string; unitLabel: string; qty: number; freeQty: number; pieces: number; batchNo: string; expiryDate: string; unitCost: number; discountPct: number; lineTotal: number }[]
+  lines: { id: number; productId?: number; unitId?: number; product: string; unitLabel: string; qty: number; freeQty: number; pieces: number; batchNo: string; expiryDate: string; unitCost: number; discountPct: number; lineTotal: number }[]
   subtotal: number
   otherCharges: number
   grandTotal: number

@@ -181,9 +181,9 @@ export function useReorderApi() {
 }
 
 export function useSupplierLedgerApi() {
-  const api = useApi()
+  const api = useApi('purchases')
   return {
-    resource: useResource<SupplierRow>('suppliers', async () => (await inv()).supplierRows),
+    resource: useResource<SupplierRow>('suppliers', async () => (await inv()).supplierRows, 'purchases'),
     async ledger(supplier: SupplierRow): Promise<SupplierLedgerEntry[]> {
       if (!api.useMocks) return api.get(`/suppliers/${supplier.id}/ledger`)
       await mockDelay(350)

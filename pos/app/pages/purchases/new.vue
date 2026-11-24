@@ -23,11 +23,36 @@ const route = useRoute()
 /** received = goods are here now (batch + expiry required, stock added); ordered = purchase order, receive later. */
 const mode = ref<'received' | 'ordered'>(route.query.status === 'ordered' ? 'ordered' : 'received')
 const fromDraft = ref<string | null>(null)
+const orderId = ref<number | null>(null)
 
 onMounted(async () => {
   revealStagger(root.value?.querySelectorAll('[data-reveal]') ?? [], { stagger: 0.07 })
   suppliers.value = await suppliersApi.lookup()
   if (route.query.supplier) header.supplierId = Number(route.query.supplier)
+  // Receive an open purchase order (/purchases/new?order=ID): same supplier and lines; batch and expiry come from the packs.
+  if (route.query.order) {
+    const order = await usePurchaseDetailApi().get(Number(route.query.order))
+    if (order && order.status === 'draft') {
+      orderId.value = order.id
+      fromDraft.value = order.number
+      mode.value = 'received'
+      if (order.supplierId) header.supplierId = order.supplierId
+      const catalog = useCatalogApi()
+      for (const r of order.lines) {
+        if (!r.productId) continue
+        const p = await catalog.product(r.productId)
+        if (!p) continue
+        addLine(p)
+        const l = lines.value[lines.value.length - 1]!
+        if (r.unitId && p.units.some(u => u.id === r.unitId)) l.unitId = r.unitId
+        l.qty = r.qty
+        l.freeQty = r.freeQty
+        l.unitCost = r.unitCost
+        l.discountPct = r.discountPct
+      }
+      header.note = `Receiving order ${order.number}`
+    }
+  }
   // Pre-fill from a draft purchase order (/purchases/new?draft=ID)
   if (route.query.draft) {
     const draft = await usePurchaseOrdersApi().draft(Number(route.query.draft))
@@ -114,6 +139,7 @@ async function post() {
   saving.value = true
   try {
     const res = await receiving.receive({
+      orderId: mode.value === 'received' ? orderId.value : null,
       status: mode.value, warehouseId: auth.warehouseId, supplierId: header.supplierId!, supplierInvoiceNo: header.supplierInvoiceNo, invoiceDate: header.invoiceDate,
       otherCharges: Number(header.otherCharges) || 0, paidAmount: Number(header.paidAmount) || 0, paymentMethod: header.paymentMethod, note: header.note,
       lines: lines.value.map(l => ({ productId: l.product.id, unitId: l.unitId, qty: l.qty, freeQty: l.freeQty, batchNo: l.batchNo.trim(), expiryDate: l.expiryDate, unitCost: l.unitCost, discountPct: l.discountPct, updateRetailPrice: l.updateRetailPrice })),
@@ -124,7 +150,7 @@ async function post() {
   catch (e: any) { toast.error('Purchase not posted', e?.message) }
   finally { saving.value = false }
 }
-function another() { done.value = null; lines.value = []; header.supplierInvoiceNo = ''; header.paidAmount = 0; header.otherCharges = 0 }
+function another() { done.value = null; orderId.value = null; fromDraft.value = null; lines.value = []; header.supplierInvoiceNo = ''; header.paidAmount = 0; header.otherCharges = 0 }
 </script>
 
 <template>

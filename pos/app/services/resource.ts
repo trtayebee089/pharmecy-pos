@@ -1,3 +1,4 @@
+import type { ApiDomain } from '~/composables/useApi'
 import type { ListQuery, Paginated } from '~/types/domain'
 
 /**
@@ -15,8 +16,8 @@ export interface Resource<T extends { id: number }> {
   remove: (id: number) => Promise<void>
 }
 
-export function useResource<T extends { id: number }>(resource: string, seed: () => T[] | Promise<T[]>): Resource<T> {
-  const api = useApi()
+export function useResource<T extends { id: number }>(resource: string, seed: () => T[] | Promise<T[]>, domain?: ApiDomain): Resource<T> {
+  const api = useApi(domain)
   const store = useState<T[] | null>(`mock-resource:${resource}`, () => null)
 
   async function rows(): Promise<T[]> {

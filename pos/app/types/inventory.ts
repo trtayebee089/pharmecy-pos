@@ -116,7 +116,7 @@ export interface SupplierRow {
 export interface SupplierLedgerEntry {
   id: number
   date: string
-  type: 'opening' | 'invoice' | 'payment' | 'return'
+  type: 'opening' | 'invoice' | 'payment' | 'return' | 'void'
   ref: string
   increase: number // amount we owe more (invoice/opening)
   decrease: number // payment or return
