@@ -34,8 +34,11 @@ export function useDashboardApi() {
 export function useProductsApi() {
   const api = useApi('catalog')
   return {
-    /** POS search: name, strength, generic, SKU or exact barcode. */
-    async search(term: string, warehouseId: number, signal?: AbortSignal): Promise<Product[]> {
+    /**
+     * POS search: name, strength, generic, SKU or exact barcode. Batches are the
+     * sellable ones (FEFO); includeExpired lists every batch on hand, for returns.
+     */
+    async search(term: string, warehouseId: number, signal?: AbortSignal, opts: { includeExpired?: boolean } = {}): Promise<Product[]> {
       if (api.useMocks) {
         await mockDelay(120)
         const s = term.trim().toLowerCase()
@@ -45,7 +48,7 @@ export function useProductsApi() {
           p.sku === s || p.name.toLowerCase().includes(s) || (p.generic ?? '').toLowerCase().includes(s)
           || (p.strength ?? '').toLowerCase().includes(s) || p.manufacturer.toLowerCase().includes(s)).slice(0, 40)
       }
-      return api.get('/catalog/products/search', { q: term, warehouse_id: warehouseId }, signal)
+      return api.get('/catalog/products/search', { q: term, warehouse_id: warehouseId, ...(opts.includeExpired ? { includeExpired: 1 } : {}) }, signal)
     },
     async list(q: ListQuery): Promise<Paginated<Product>> {
       if (api.useMocks) {

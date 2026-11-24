@@ -18,6 +18,8 @@ export interface PurchaseDetail {
   grandTotal: number
   paidTotal: number
   dueTotal: number
+  /** Credit from purchase returns that reduced this invoice (due = total − paid − returned). */
+  returnedTotal?: number
   payments: { number: string; date: string; method: string; amount: number; reference?: string }[]
   returns: { number: string; date: string; total: number }[]
 }

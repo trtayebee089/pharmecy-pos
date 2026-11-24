@@ -89,6 +89,7 @@ const pieces = computed(() => p.value?.lines.reduce((s, l) => s + l.pieces, 0) ?
             <div class="flex justify-between text-slate-500"><dt>Other charges</dt><dd class="tabular">{{ money(p.otherCharges) }}</dd></div>
             <div class="flex justify-between border-t border-slate-100 pt-2 font-display text-lg font-extrabold"><dt>Total</dt><dd class="tabular">{{ money(p.grandTotal) }}</dd></div>
             <div class="flex justify-between text-slate-500"><dt>Paid</dt><dd class="tabular">{{ money(p.paidTotal) }}</dd></div>
+            <div v-if="p.returnedTotal" class="flex justify-between text-slate-500"><dt>Returned to supplier</dt><dd class="tabular">−{{ money(p.returnedTotal) }}</dd></div>
             <div v-if="p.dueTotal" class="flex justify-between font-semibold text-amber-600"><dt>Supplier due</dt><dd class="tabular">{{ money(p.dueTotal) }}</dd></div>
           </dl>
         </div>
@@ -104,6 +105,12 @@ const pieces = computed(() => p.value?.lines.reduce((s, l) => s + l.pieces, 0) ?
             <ul class="space-y-2 text-sm">
               <li v-for="pm in p.payments" :key="pm.number" class="flex justify-between gap-3"><span>{{ pm.method }} <span class="block text-xs text-slate-400">{{ date(pm.date) }} · {{ pm.reference || pm.number }}</span></span><span class="font-semibold tabular">{{ money(pm.amount) }}</span></li>
               <li v-if="!p.payments.length" class="text-slate-500">No payments yet</li>
+            </ul>
+          </div>
+          <div v-if="p.returns.length" class="card p-5" data-reveal>
+            <p class="label mb-3 flex items-center gap-1.5"><Undo2 class="size-3.5" />Returns</p>
+            <ul class="space-y-2 text-sm">
+              <li v-for="r in p.returns" :key="r.number" class="flex justify-between gap-3"><NuxtLink to="/purchases/returns" class="font-mono text-[12.5px] font-semibold hover:text-brand-600">{{ r.number }}<span class="block font-sans text-xs font-normal text-slate-400">{{ date(r.date) }}</span></NuxtLink><span class="font-semibold tabular">{{ money(r.total) }}</span></li>
             </ul>
           </div>
         </div>

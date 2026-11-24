@@ -7,7 +7,7 @@ const blocked = computed(() => !!state.value.requireReason && !state.value.reaso
 </script>
 
 <template>
-  <UiModal v-model="open" size="sm">
+  <UiModal v-model="open" size="sm" stacked>
     <div class="flex gap-4 pt-2">
       <span class="grid size-11 shrink-0 place-items-center rounded-2xl" :class="state.tone === 'primary' ? 'bg-brand-50 text-brand-600' : 'bg-rose-50 text-rose-600'"><AlertTriangle class="size-5" /></span>
       <div class="min-w-0 flex-1">

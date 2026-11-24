@@ -1,6 +1,6 @@
 # Red Pharma rebuild: handoff
 
-Status as of **24 Nov 2026**, last commit `688cef7` on `main`
+Status as of **24 Nov 2026** on `main` (run `git log` for the latest commits)
 (pushed to `origin` = github.com/trtayebee089/pharmecy-pos).
 
 Read this file first on a new device or in a new AI session. It carries the
@@ -70,6 +70,9 @@ Engineering decisions taken during the build (change only on purpose):
 - Purchase orders (`ordered`, shown as "draft") carry no stock or money; receiving with `orderId` sets the order to
   `fulfilled` (shown "Closed"). A received purchase can be voided only while its stock is unsold and unpaid.
 - Supplier account payments are allocated to the oldest open invoices; suppliers with purchases are deactivated, not deleted.
+- Purchase returns are per batch (expired allowed), priced at the batch cost, and refused for batches bought only from
+  other suppliers. `reduce_due` lowers the source invoice then the oldest (`due = total − paid − returned`), the rest stays
+  as supplier credit; `refund` records the supplier's cash. A purchase with returns cannot be voided.
 
 ## 4. What is done
 
@@ -83,7 +86,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (54 Pest tests passing)
+### Laravel API (`api/`) – live slices (66 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -95,10 +98,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Cash register: sessions, open, cash in/out, close & count | live |
 | Purchases: receive, order, list, detail, pay invoice, void, duplicate, receive an order | live |
 | Suppliers: CRUD, lookup, ledger, account payment | live |
+| Purchase returns: post (reduce due or refund), list, void | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (5 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 54 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (6 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 66 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases`
@@ -106,26 +110,24 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Purchase returns** (return to supplier from a batch; stock out, supplier credit). Page: `/purchases/returns`.
-2. **Inventory**: adjustments (damage/expiry/correction), stock counts, transfers between warehouses, stock overview and batch list endpoints.
-3. **Catalog writes**: products (units, barcodes, prices), generics, manufacturers, dosage forms, categories, `/catalog/lookups`, barcode labels.
-4. **Customers**: groups, due collection (`/customers/due`, open invoices, payments), customer detail.
-5. **Held sales / drafts** on the server (currently browser-only).
-6. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
-7. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
-8. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-9. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-10. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-11. **HR & payroll**: employees, attendance, holidays, payroll.
-12. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-13. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-14. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Inventory**: adjustments (damage/expiry/correction), stock counts, transfers between warehouses, stock overview and batch list endpoints.
+2. **Catalog writes**: products (units, barcodes, prices), generics, manufacturers, dosage forms, categories, `/catalog/lookups`, barcode labels.
+3. **Customers**: groups, due collection (`/customers/due`, open invoices, payments), customer detail.
+4. **Held sales / drafts** on the server (currently browser-only).
+5. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
+6. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
+7. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
+8. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+9. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+10. **HR & payroll**: employees, attendance, holidays, payroll.
+11. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+12. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+13. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Register page always opens register id 1 (`pos/app/pages/finance/registers.vue`); the API has `GET /cash-registers` for a picker.
 - Decide whether selling requires an open register.
 - Loyalty points in customer responses are `0` until the loyalty module exists.
-- Purchase detail `returns` is empty until purchase returns exist.
 
 ## 6. Set up on another device
 
@@ -143,8 +145,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 54 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 54 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 66 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 66 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

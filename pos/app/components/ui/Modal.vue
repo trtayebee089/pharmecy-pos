@@ -8,7 +8,9 @@ const props = withDefaults(defineProps<{
   description?: string
   size?: 'sm' | 'md' | 'lg' | 'xl'
   dismissible?: boolean
-}>(), { size: 'md', dismissible: true })
+  /** Sits above other open modals (confirm dialogs asked from inside a modal). */
+  stacked?: boolean
+}>(), { size: 'md', dismissible: true, stacked: false })
 
 const widths = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' }
 
@@ -35,7 +37,7 @@ function onLeave(el: Element, done: () => void) {
 <template>
   <Teleport to="body">
     <Transition :css="false" @enter="onEnter" @leave="onLeave">
-      <div v-if="open" class="fixed inset-0 z-[80] flex items-end justify-center p-0 sm:items-center sm:p-6" role="dialog" aria-modal="true" :aria-label="title">
+      <div v-if="open" class="fixed inset-0 flex items-end justify-center p-0 sm:items-center sm:p-6" :class="stacked ? 'z-[90]' : 'z-[80]'" role="dialog" aria-modal="true" :aria-label="title">
         <div data-backdrop class="absolute inset-0 bg-slate-950/40 backdrop-blur-[3px]" @click="close" />
         <div data-panel class="relative max-h-[92vh] w-full overflow-hidden rounded-t-3xl bg-white shadow-[var(--shadow-lift)] sm:rounded-3xl" :class="widths[size]">
           <div v-if="title" class="flex items-start justify-between gap-4 border-b border-slate-100 px-6 pt-5 pb-4">

@@ -122,15 +122,17 @@ export function useTransfersApi() {
 }
 
 export interface PurchaseReturnPayload {
+  warehouseId: number
   supplierId: number
   creditNote: string
   reason: string
   settlement: 'reduce_due' | 'refund'
+  /** Display only: the API prices each line at the batch's cost. */
   lines: { productId: number; batchId: number; qtyBase: number; unitCost: number }[]
 }
 
 export function usePurchaseReturnsApi() {
-  const api = useApi()
+  const api = useApi('purchases')
   return {
     async list(q: ListQuery): Promise<Paginated<PurchaseReturnSummary>> {
       if (!api.useMocks) return api.get('/purchase-returns', { ...q, ...q.filters })

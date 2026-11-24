@@ -77,7 +77,7 @@ async function post() {
   posting.value = true
   try {
     const r = await api.create({
-      supplierId: supplier.value.id, creditNote: form.creditNote, reason: form.reason, settlement: form.settlement,
+      warehouseId: auth.warehouseId, supplierId: supplier.value.id, creditNote: form.creditNote, reason: form.reason, settlement: form.settlement,
       lines: lines.value.map(l => ({ productId: l.product.id, batchId: l.batchId, qtyBase: Number(l.qty), unitCost: l.unitCost })),
     }, supplier.value.name, idemKey)
     toast.success('Purchase return posted', `${r.number} · credit ${money(r.total)}`)
@@ -92,7 +92,7 @@ async function post() {
 <template>
   <div>
     <UiPageHeader title="Purchase returns" description="Send expired, damaged or wrong stock back to the supplier. Posting removes the batch quantity and credits the supplier account.">
-      <UiButton variant="primary" :icon="Undo2" @click="startNew">New return</UiButton>
+      <UiButton v-if="auth.can('purchase_returns.create')" variant="primary" :icon="Undo2" @click="startNew">New return</UiButton>
     </UiPageHeader>
 
     <UiDataTable v-model:search="search" v-model:page="page" :columns="columns" :result="result" :loading="loading" row-key="id" search-placeholder="Return no, supplier, credit note…">
@@ -108,7 +108,7 @@ async function post() {
       <template #cell-actions="{ row }">
         <UiRowActions
           :label="row.number" :view="() => (viewing = row)" remove-kind="void"
-          :remove="row.status !== 'void' && auth.can('purchase_returns.view') ? () => voidReturn(row) : undefined"
+          :remove="row.status !== 'void' && auth.can('purchase_returns.create') ? () => voidReturn(row) : undefined"
           :items="rowItems(row)"
         />
       </template>
@@ -128,7 +128,7 @@ async function post() {
         <UiSelect v-model="form.reason" label="Reason" :options="reasons" />
         <UiInput v-model="form.creditNote" label="Supplier credit note no." placeholder="Optional" />
       </div>
-      <div class="mt-4"><UiProductPicker placeholder="Search the product being returned…" @pick="add" /></div>
+      <div class="mt-4"><UiProductPicker include-expired placeholder="Search the product being returned…" @pick="add" /></div>
 
       <div v-if="lines.length" class="mt-4 space-y-2">
         <div v-for="(l, i) in lines" :key="l.key" class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_100px_110px_36px]">
