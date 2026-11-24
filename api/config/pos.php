@@ -12,7 +12,7 @@ return [
         'products.view', 'products.create', 'products.edit', 'products.price', 'products.print_barcode', 'catalog.manage',
         'inventory.view', 'inventory.adjust', 'inventory.count', 'inventory.transfer', 'reorder.manage',
         'purchases.view', 'purchases.create', 'purchase_returns.view',
-        'customers.view', 'customers.manage', 'suppliers.view',
+        'customers.view', 'customers.manage', 'suppliers.view', 'suppliers.manage',
         'payments.collect', 'payments.pay_supplier',
         'orders.view', 'orders.fulfil', 'riders.manage', 'zones.manage',
         'loyalty.view', 'loyalty.manage',
@@ -33,7 +33,7 @@ return [
         'Inventory' => [
             'dashboard.view', 'products.view', 'products.create', 'products.edit', 'inventory.view', 'inventory.adjust',
             'inventory.count', 'inventory.transfer', 'reorder.manage', 'purchases.view', 'purchases.create',
-            'purchase_returns.view', 'suppliers.view', 'reports.stock', 'reports.purchases',
+            'purchase_returns.view', 'suppliers.view', 'suppliers.manage', 'reports.stock', 'reports.purchases',
         ],
     ],
 

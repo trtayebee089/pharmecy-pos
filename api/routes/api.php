@@ -7,6 +7,7 @@ use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\PurchaseController;
 use App\Http\Controllers\Pos\RegisterController;
 use App\Http\Controllers\Pos\SaleController;
+use App\Http\Controllers\Pos\SupplierController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -49,6 +50,20 @@ Route::prefix('pos/v1')->group(function () {
             Route::post('sessions/{session}/close', [RegisterController::class, 'close']);
         });
 
+        Route::get('purchases', [PurchaseController::class, 'index'])->middleware('can:purchases.view');
+        Route::get('purchases/{purchase}', [PurchaseController::class, 'show'])->middleware('can:purchases.view')->whereNumber('purchase');
         Route::post('purchases', [PurchaseController::class, 'store'])->middleware(['can:purchases.create', 'idempotent']);
+        Route::post('purchases/{purchase}/payments', [PurchaseController::class, 'pay'])->middleware(['can:payments.pay_supplier', 'idempotent']);
+        Route::post('purchases/{purchase}/void', [PurchaseController::class, 'void'])->middleware(['can:purchases.create', 'idempotent']);
+        Route::post('purchases/{purchase}/duplicate', [PurchaseController::class, 'duplicate'])->middleware(['can:purchases.create', 'idempotent']);
+
+        Route::get('suppliers', [SupplierController::class, 'index'])->middleware('can:suppliers.view');
+        Route::get('suppliers/lookup', [SupplierController::class, 'lookup'])->middleware('can:purchases.view');
+        Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->middleware('can:suppliers.view')->whereNumber('supplier');
+        Route::get('suppliers/{supplier}/ledger', [SupplierController::class, 'ledger'])->middleware('can:suppliers.view');
+        Route::post('suppliers', [SupplierController::class, 'store'])->middleware('can:suppliers.manage');
+        Route::put('suppliers/{supplier}', [SupplierController::class, 'update'])->middleware('can:suppliers.manage');
+        Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->middleware('can:suppliers.manage');
+        Route::post('suppliers/{supplier}/payments', [SupplierController::class, 'pay'])->middleware(['can:payments.pay_supplier', 'idempotent']);
     });
 });

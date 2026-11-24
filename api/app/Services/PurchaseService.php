@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AccountTransaction;
+use App\Models\AuditLog;
 use App\Models\Batch;
 use App\Models\PartyLedgerEntry;
 use App\Models\Payment;
@@ -11,6 +12,7 @@ use App\Models\PaymentMethod;
 use App\Models\ProductUnit;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
+use App\Models\StockBalance;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -72,7 +74,8 @@ class PurchaseService
 
         $subtotal = array_sum(array_column($lines, 'total'));
         $grand = $subtotal + SaleService::paisa($data['otherCharges'] ?? 0);
-        $paid = min($grand, SaleService::paisa($data['paidAmount'] ?? 0));
+        // Advance payments on orders are not supported: money is only posted with a received purchase.
+        $paid = $receiving ? min($grand, SaleService::paisa($data['paidAmount'] ?? 0)) : 0;
         $method = null;
         if ($paid > 0) {
             $method = PaymentMethod::where('is_active', true)->where('code', $data['paymentMethod'] ?? 'cash')->first();
@@ -85,7 +88,15 @@ class PurchaseService
         }
 
         return DB::transaction(function () use ($user, $warehouse, $supplier, $data, $lines, $subtotal, $grand, $paid, $method, $receiving) {
+            $order = null;
+            if (! empty($data['orderId'])) {
+                $order = Purchase::whereKey($data['orderId'])->lockForUpdate()->first();
+                if (! $receiving || ! $order || $order->status !== 'ordered' || $order->supplier_id !== $supplier->id || $order->warehouse_id !== $warehouse->id) {
+                    throw ValidationException::withMessages(['orderId' => 'This purchase order is not open for this supplier and warehouse.']);
+                }
+            }
             $purchase = Purchase::create([
+                'order_id' => $order?->id,
                 'ulid' => (string) Str::ulid(),
                 'number' => $this->numbers->next($receiving ? 'purchase' : 'purchase_order', $warehouse),
                 'warehouse_id' => $warehouse->id, 'supplier_id' => $supplier->id,
@@ -156,7 +167,73 @@ class PurchaseService
                 }
             }
 
+            // The order is closed by this receipt: the GRN carries the stock, cost and supplier due.
+            $order?->update(['status' => 'fulfilled', 'received_at' => now(), 'due_total' => 0]);
+
             return $purchase;
         });
+    }
+
+    /**
+     * Cancels an order, or voids a received purchase. A received purchase can
+     * only be voided while all its pieces are still in their batches and before
+     * any payment; otherwise a purchase return is the correct document.
+     */
+    public function void(User $user, Purchase $purchase, string $reason): Purchase
+    {
+        return DB::transaction(function () use ($user, $purchase, $reason) {
+            $purchase = Purchase::whereKey($purchase->id)->lockForUpdate()->firstOrFail();
+            if ($purchase->status === 'void') {
+                throw ValidationException::withMessages(['purchase' => 'This purchase is already void.']);
+            }
+            if ($purchase->status === 'fulfilled') {
+                throw ValidationException::withMessages(['purchase' => 'This order was received. Void its goods receipt instead.']);
+            }
+            if ($purchase->status === 'received') {
+                if ((float) $purchase->paid_total > 0) {
+                    throw ValidationException::withMessages(['purchase' => 'This purchase has supplier payments. Use a purchase return instead.']);
+                }
+                foreach ($purchase->items()->get() as $item) {
+                    $pieces = $item->qty_base + $item->free_qty_base;
+                    $inStock = (int) StockBalance::where(['warehouse_id' => $purchase->warehouse_id, 'batch_id' => $item->batch_id])->lockForUpdate()->value('qty_base');
+                    if ($inStock < $pieces) {
+                        throw ValidationException::withMessages(['purchase' => "Only {$inStock} of {$pieces} pieces of batch {$item->batch_no} are still in stock. Use a purchase return instead."]);
+                    }
+                    $this->stock->move([
+                        'warehouse_id' => $purchase->warehouse_id, 'product_id' => $item->product_id, 'batch_id' => $item->batch_id,
+                        'qty_base' => -$pieces, 'type' => 'purchase_void', 'source_type' => 'purchase', 'source_id' => $purchase->id,
+                        'source_line_id' => $item->id, 'reason' => $reason, 'created_by' => $user->id,
+                    ]);
+                }
+                PartyLedgerEntry::create([
+                    'party_type' => 'supplier', 'party_id' => $purchase->supplier_id, 'entry_date' => now()->toDateString(), 'type' => 'void',
+                    'debit' => $purchase->grand_total, 'credit' => 0, 'source_type' => 'purchase', 'source_id' => $purchase->id,
+                    'note' => 'Void '.$purchase->number, 'created_by' => $user->id,
+                ]);
+                // The order this GRN fulfilled becomes open again.
+                if ($purchase->order_id) {
+                    $order = Purchase::find($purchase->order_id);
+                    $order?->update(['status' => 'ordered', 'received_at' => null, 'due_total' => $order->grand_total]);
+                }
+            }
+            $purchase->update(['status' => 'void', 'due_total' => 0, 'voided_by' => $user->id, 'voided_at' => now(), 'void_reason' => $reason]);
+            AuditLog::record($user->id, 'purchase.voided', 'purchase', $purchase->id, ['reason' => $reason]);
+
+            return $purchase;
+        });
+    }
+
+    /** Copies a purchase as a new open order (no batches, expiry or payments). */
+    public function duplicate(User $user, Purchase $source): Purchase
+    {
+        $lines = $source->items()->get()->map(fn ($i) => [
+            'productId' => $i->product_id, 'unitId' => $i->product_unit_id, 'qty' => (float) $i->qty,
+            'freeQty' => $i->factor > 0 ? $i->free_qty_base / $i->factor : 0, 'unitCost' => (float) $i->unit_cost, 'discountPct' => (float) $i->discount_pct,
+        ])->all();
+
+        return $this->create($user, [
+            'status' => 'ordered', 'warehouseId' => $source->warehouse_id, 'supplierId' => $source->supplier_id,
+            'otherCharges' => 0, 'note' => 'Copy of '.$source->number, 'lines' => $lines,
+        ]);
     }
 }

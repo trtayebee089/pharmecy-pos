@@ -15,11 +15,12 @@ talks to `/api/pos/v1` with Sanctum SPA cookie auth. The design is in
 | Voids | `POST sales/{id}/void` | Whole sale, reason required, only while its register session is open (or same day without a session) and before any return; stock, payments and ledger reversed, invoice kept as void |
 | Returns | `POST sales/{id}/returns` (Idempotency-Key), `GET sales/returns` | Per sold batch, never more than sold minus returned; refund includes the order-discount share; restock to the same batch or write off; refund as cash, bKash or customer credit |
 | Cash register | `GET cash-registers`, `GET/POST cash-registers/sessions`, `POST sessions/{id}/movements` (Idempotency-Key), `POST sessions/{id}/close` | One open session per register and per cashier; sales, payments and refunds attach to the cashier's open session; expected cash = float + cash sales − cash refunds + cash in − cash out |
-| Purchases | `POST purchases` (Idempotency-Key) | `received`: batches + stock movements at landed cost, supplier ledger, optional payment and retail price update; `ordered`: purchase order only |
+| Purchases | `GET purchases`, `GET purchases/{id}`, `POST purchases`, `POST purchases/{id}/payments`, `/void`, `/duplicate` (POSTs take an Idempotency-Key) | `received`: batches + stock movements at landed cost, supplier ledger, optional payment and retail price update; `ordered`: purchase order (shown as draft), no stock or money; receiving with `orderId` closes the order; void only while the received stock is unsold and unpaid (otherwise a purchase return); duplicate copies as a new order |
+| Suppliers | `GET/POST suppliers`, `GET/PUT/DELETE suppliers/{id}`, `GET suppliers/lookup`, `GET suppliers/{id}/ledger`, `POST suppliers/{id}/payments` (Idempotency-Key) | Balance from the supplier ledger; account payments are allocated to the oldest open invoices; suppliers with purchases are deactivated instead of deleted |
 | Dashboard | `GET dashboard/summary` | Live figures from sales, ledgers and stock |
 
 Not yet built (the POS still uses its mock layer for these):
-adjustments/transfers/counts, suppliers and the other admin
+adjustments/transfers/counts, purchase returns, the reorder/AI purchase-order drafts, the other admin
 modules, reports, online orders, loyalty, accounting and HR.
 
 ## Local development (Windows)
@@ -41,7 +42,7 @@ The API dev server runs from the launch config `redpharma-api`
 `DatabaseSeeder` only creates reference data (roles, permissions, payment
 methods, price lists, the walk-in customer).
 
-In the POS `.env`, `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers`
+In the POS `.env`, `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases`
 sends those domains to this API while the rest of the UI stays on mocks.
 
 ## Rules the code relies on
