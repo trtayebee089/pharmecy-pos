@@ -37,6 +37,20 @@ class StockLedger
             ->select('stock_balances.*', 'batches.batch_no', 'batches.expiry_date');
     }
 
+    /** Every batch with pieces on hand (expired and inactive included), earliest expiry first. For returns and counts, never for sales. */
+    public static function onHandQuery(int $warehouseId, int $productId)
+    {
+        return StockBalance::query()
+            ->join('batches', 'batches.id', '=', 'stock_balances.batch_id')
+            ->where('stock_balances.warehouse_id', $warehouseId)
+            ->where('stock_balances.product_id', $productId)
+            ->where('stock_balances.qty_base', '>', 0)
+            ->orderByRaw('CASE WHEN batches.expiry_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('batches.expiry_date')
+            ->orderBy('batches.id')
+            ->select('stock_balances.*', 'batches.batch_no', 'batches.expiry_date');
+    }
+
     /**
      * Locks and allocates $qtyBase pieces FEFO. With $batchId (override) only
      * that batch is used. Returns [[balance, qty]] or throws 422.

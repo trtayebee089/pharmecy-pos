@@ -43,7 +43,7 @@ class Present
     }
 
     /** @param  Collection<int, Product>  $products */
-    public static function products(Collection $products, int $warehouseId): array
+    public static function products(Collection $products, int $warehouseId, bool $onHand = false): array
     {
         $products = new EloquentCollection($products->all());
         $products->loadMissing('units', 'generic', 'manufacturer', 'dosageForm', 'category');
@@ -52,7 +52,7 @@ class Present
 
         $batches = collect();
         foreach ($products as $p) {
-            $batches[$p->id] = StockLedger::sellableQuery($warehouseId, $p->id)->get();
+            $batches[$p->id] = ($onHand ? StockLedger::onHandQuery($warehouseId, $p->id) : StockLedger::sellableQuery($warehouseId, $p->id))->get();
         }
 
         return $products->map(function (Product $p) use ($prices, $batches) {

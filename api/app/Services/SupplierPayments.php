@@ -102,7 +102,8 @@ class SupplierPayments
         foreach ($allocations as [$purchase, $take]) {
             PaymentAllocation::create(['payment_id' => $payment->id, 'allocatable_type' => 'purchase', 'allocatable_id' => $purchase->id, 'amount' => SaleService::money($take)]);
             $paid = SaleService::paisa($purchase->paid_total) + $take;
-            $purchase->update(['paid_total' => SaleService::money($paid), 'due_total' => SaleService::money(SaleService::paisa($purchase->grand_total) - $paid)]);
+            $due = SaleService::paisa($purchase->grand_total) - $paid - SaleService::paisa($purchase->returned_total);
+            $purchase->update(['paid_total' => SaleService::money($paid), 'due_total' => SaleService::money($due)]);
         }
         if ($method->account_id) {
             AccountTransaction::create([

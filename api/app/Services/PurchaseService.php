@@ -193,6 +193,9 @@ class PurchaseService
                 if ((float) $purchase->paid_total > 0) {
                     throw ValidationException::withMessages(['purchase' => 'This purchase has supplier payments. Use a purchase return instead.']);
                 }
+                if (PurchaseReturnService::hasPostedReturns($purchase->id)) {
+                    throw ValidationException::withMessages(['purchase' => 'Stock from this purchase was returned to the supplier. Void those returns first or return the rest.']);
+                }
                 foreach ($purchase->items()->get() as $item) {
                     $pieces = $item->qty_base + $item->free_qty_base;
                     $inStock = (int) StockBalance::where(['warehouse_id' => $purchase->warehouse_id, 'batch_id' => $item->batch_id])->lockForUpdate()->value('qty_base');

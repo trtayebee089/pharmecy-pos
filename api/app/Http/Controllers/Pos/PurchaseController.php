@@ -45,7 +45,7 @@ class PurchaseController extends Controller
     {
         abort_unless($request->user()->canAccessWarehouse($purchase->warehouse_id), 404);
         $data = $request->validate(['amount' => ['required', 'numeric', 'gt:0'], 'method' => ['required', 'string', 'max:30'], 'reference' => ['nullable', 'string', 'max:100']]);
-        $payment = $payments->payInvoice($request->user(), $purchase, (float) $data['amount'], $data['method'], $data['reference'] ?: null);
+        $payment = $payments->payInvoice($request->user(), $purchase, (float) $data['amount'], $data['method'], ($data['reference'] ?? null) ?: null);
 
         return response()->json(['number' => $payment->number, 'dueTotal' => (float) $purchase->fresh()->due_total], 201);
     }

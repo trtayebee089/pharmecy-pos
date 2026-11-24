@@ -15,6 +15,7 @@ class Purchase extends Model
         'invoice_date' => 'date',
         'grand_total' => 'decimal:2',
         'paid_total' => 'decimal:2',
+        'returned_total' => 'decimal:2',
         'due_total' => 'decimal:2',
     ];
 

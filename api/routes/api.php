@@ -5,6 +5,7 @@ use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\PurchaseController;
+use App\Http\Controllers\Pos\PurchaseReturnController;
 use App\Http\Controllers\Pos\RegisterController;
 use App\Http\Controllers\Pos\SaleController;
 use App\Http\Controllers\Pos\SupplierController;
@@ -56,6 +57,10 @@ Route::prefix('pos/v1')->group(function () {
         Route::post('purchases/{purchase}/payments', [PurchaseController::class, 'pay'])->middleware(['can:payments.pay_supplier', 'idempotent']);
         Route::post('purchases/{purchase}/void', [PurchaseController::class, 'void'])->middleware(['can:purchases.create', 'idempotent']);
         Route::post('purchases/{purchase}/duplicate', [PurchaseController::class, 'duplicate'])->middleware(['can:purchases.create', 'idempotent']);
+
+        Route::get('purchase-returns', [PurchaseReturnController::class, 'index'])->middleware('can:purchase_returns.view');
+        Route::post('purchase-returns', [PurchaseReturnController::class, 'store'])->middleware(['can:purchase_returns.create', 'idempotent']);
+        Route::post('purchase-returns/{purchaseReturn}/void', [PurchaseReturnController::class, 'void'])->middleware(['can:purchase_returns.create', 'idempotent']);
 
         Route::get('suppliers', [SupplierController::class, 'index'])->middleware('can:suppliers.view');
         Route::get('suppliers/lookup', [SupplierController::class, 'lookup'])->middleware('can:purchases.view');

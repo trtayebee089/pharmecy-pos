@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Purchase;
+use App\Models\PurchaseReturn;
 use App\Models\Supplier;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -102,7 +103,32 @@ class PresentPurchasing
                 'number' => $x->number, 'date' => Carbon::parse($x->paid_at)->toIso8601String(), 'method' => $x->name,
                 'amount' => (float) $x->amount, 'reference' => $x->reference,
             ])->all(),
-            'returns' => [], // purchase returns arrive with that module
+            'returnedTotal' => (float) $p->returned_total,
+            'returns' => self::returnsFor($p->id),
+        ];
+    }
+
+    /** Posted returns that took stock from this purchase or reduced its due. */
+    private static function returnsFor(int $purchaseId): array
+    {
+        $viaItems = DB::table('purchase_return_items')->join('purchase_items', 'purchase_items.id', '=', 'purchase_return_items.purchase_item_id')
+            ->where('purchase_items.purchase_id', $purchaseId)->pluck('purchase_return_items.purchase_return_id');
+        $viaAlloc = DB::table('purchase_return_allocations')->where('purchase_id', $purchaseId)->pluck('purchase_return_id');
+
+        return PurchaseReturn::whereIn('id', $viaItems->merge($viaAlloc)->unique())->where('status', 'posted')->orderBy('id')->get()
+            ->map(fn ($r) => ['number' => $r->number, 'date' => $r->created_at->toIso8601String(), 'total' => (float) $r->total])->all();
+    }
+
+    /** PurchaseReturnSummary in pos/app/types/inventory.ts. */
+    public static function purchaseReturn(PurchaseReturn $r): array
+    {
+        $r->loadMissing('supplier');
+
+        return [
+            'id' => $r->id, 'number' => $r->number, 'date' => $r->created_at->toIso8601String(),
+            'supplier' => $r->supplier?->name ?? '', 'creditNote' => (string) $r->credit_note_no,
+            'lines' => (int) ($r->items_count ?? $r->items()->count()), 'qty' => (int) $r->qty_base,
+            'total' => (float) $r->total, 'reason' => $r->reason, 'settlement' => $r->settlement, 'status' => $r->status,
         ];
     }
 }

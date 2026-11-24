@@ -9,18 +9,19 @@ talks to `/api/pos/v1` with Sanctum SPA cookie auth. The design is in
 | Area | Endpoints | Notes |
 |---|---|---|
 | Auth | `POST auth/login`, `POST auth/logout`, `GET me`, `PUT me/password` | Username login, 5 attempts/min lockout, audit log, session cookie only (no tokens in the browser) |
-| Catalog | `GET catalog/products/search`, `GET catalog/products`, `GET catalog/products/{id}` | Units with current retail price, sellable batches in FEFO order, sellable stock |
+| Catalog | `GET catalog/products/search`, `GET catalog/products`, `GET catalog/products/{id}` | Units with current retail price, sellable batches in FEFO order, sellable stock; `includeExpired=1` on search lists every batch on hand (expired too) for users who can post purchase returns |
 | Customers | `GET customers`, `GET customers/lookup`, `POST customers` | Unique normalised BD mobile number, due balance from the ledger |
 | Sales | `POST sales` (Idempotency-Key), `GET sales`, `GET sales/{id}` | Server pricing, role discount limits, FEFO allocation under lock, expired stock never sold, payments, account and customer ledgers |
 | Voids | `POST sales/{id}/void` | Whole sale, reason required, only while its register session is open (or same day without a session) and before any return; stock, payments and ledger reversed, invoice kept as void |
 | Returns | `POST sales/{id}/returns` (Idempotency-Key), `GET sales/returns` | Per sold batch, never more than sold minus returned; refund includes the order-discount share; restock to the same batch or write off; refund as cash, bKash or customer credit |
 | Cash register | `GET cash-registers`, `GET/POST cash-registers/sessions`, `POST sessions/{id}/movements` (Idempotency-Key), `POST sessions/{id}/close` | One open session per register and per cashier; sales, payments and refunds attach to the cashier's open session; expected cash = float + cash sales − cash refunds + cash in − cash out |
-| Purchases | `GET purchases`, `GET purchases/{id}`, `POST purchases`, `POST purchases/{id}/payments`, `/void`, `/duplicate` (POSTs take an Idempotency-Key) | `received`: batches + stock movements at landed cost, supplier ledger, optional payment and retail price update; `ordered`: purchase order (shown as draft), no stock or money; receiving with `orderId` closes the order; void only while the received stock is unsold and unpaid (otherwise a purchase return); duplicate copies as a new order |
+| Purchases | `GET purchases`, `GET purchases/{id}`, `POST purchases`, `POST purchases/{id}/payments`, `/void`, `/duplicate` (POSTs take an Idempotency-Key) | `received`: batches + stock movements at landed cost, supplier ledger, optional payment and retail price update; `ordered`: purchase order (shown as draft), no stock or money; receiving with `orderId` closes the order; void only while the received stock is unsold, unpaid and not returned (otherwise a purchase return); duplicate copies as a new order; `due = total − paid − returned` |
+| Purchase returns | `GET purchase-returns`, `POST purchase-returns`, `POST purchase-returns/{id}/void` (POSTs take an Idempotency-Key) | Per batch, expired stock included, never more than the batch holds in the warehouse; priced at the batch cost (client cost ignored); a batch bought from other suppliers only is refused (opening stock may go to any supplier); supplier ledger debited; settlement `reduce_due` lowers the source invoice, then the oldest open invoices, the rest stays as supplier credit; `refund` records an incoming payment so the balance is unchanged; void restocks the batches and reverses the ledger, invoice reductions or refund. Number `PR-DHK1-2026-00001`; permission `purchase_returns.create` |
 | Suppliers | `GET/POST suppliers`, `GET/PUT/DELETE suppliers/{id}`, `GET suppliers/lookup`, `GET suppliers/{id}/ledger`, `POST suppliers/{id}/payments` (Idempotency-Key) | Balance from the supplier ledger; account payments are allocated to the oldest open invoices; suppliers with purchases are deactivated instead of deleted |
 | Dashboard | `GET dashboard/summary` | Live figures from sales, ledgers and stock |
 
 Not yet built (the POS still uses its mock layer for these):
-adjustments/transfers/counts, purchase returns, the reorder/AI purchase-order drafts, the other admin
+adjustments/transfers/counts, the reorder/AI purchase-order drafts, the other admin
 modules, reports, online orders, loyalty, accounting and HR.
 
 ## Local development (Windows)

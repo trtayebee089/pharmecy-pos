@@ -15,9 +15,11 @@ class CatalogController extends Controller
     /** POS search: exact barcode/SKU first, then name, generic, strength or manufacturer. */
     public function search(Request $request): JsonResponse
     {
-        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'warehouse_id' => ['required', 'integer']]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'warehouse_id' => ['required', 'integer'], 'includeExpired' => ['nullable', 'boolean']]);
         $warehouseId = $this->warehouse($request, (int) $data['warehouse_id']);
         $term = trim($data['q'] ?? '');
+        // All on-hand batches (expired too) are only for returning stock, never for selling.
+        $onHand = (bool) ($data['includeExpired'] ?? false) && $request->user()->can('purchase_returns.create');
 
         $query = Product::query()->where('is_active', true);
         if ($term !== '') {
@@ -25,12 +27,12 @@ class CatalogController extends Controller
                 ->where(fn ($q) => $q->where('sku', $term)->orWhereHas('barcodes', fn ($b) => $b->where('barcode', $term)))
                 ->limit(1)->get();
             if ($exact->isNotEmpty()) {
-                return response()->json(Present::products($exact, $warehouseId));
+                return response()->json(Present::products($exact, $warehouseId, $onHand));
             }
             $this->applySearch($query, $term);
         }
 
-        return response()->json(Present::products($query->orderBy('name')->limit($term === '' ? 24 : 40)->get(), $warehouseId));
+        return response()->json(Present::products($query->orderBy('name')->limit($term === '' ? 24 : 40)->get(), $warehouseId, $onHand));
     }
 
     public function index(Request $request): JsonResponse
