@@ -6,7 +6,7 @@ import type { Generic } from '~/mocks/catalog'
 // Reference implementation of the CRUD template (UiCrudPage + useResource).
 definePageMeta({ title: 'Generics' })
 
-const resource = useResource<Generic>('catalog/generics', async () => (await import('~/mocks/catalog')).generics())
+const resource = useResource<Generic>('catalog/generics', async () => (await import('~/mocks/catalog')).generics(), 'catalog')
 const auth = useAuthStore()
 const toast = useToast()
 const crud = ref<{ reload: () => void } | null>(null)

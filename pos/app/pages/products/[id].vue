@@ -8,7 +8,11 @@ const initial = ref<ProductInput | null>(null)
 const missing = ref(false)
 
 onMounted(async () => {
-  const [p, l] = await Promise.all([catalog.product(Number(route.params.id)), catalog.lookups()]) as [Awaited<ReturnType<typeof catalog.product>>, CatalogLookups]
+  const id = Number(route.params.id)
+  // Live: the API returns the exact edit form (barcodes, wholesale prices, description).
+  const form = await catalog.productForm(id).catch(() => null)
+  if (form) { initial.value = form; return }
+  const [p, l] = await Promise.all([catalog.product(id), catalog.lookups()]) as [Awaited<ReturnType<typeof catalog.product>>, CatalogLookups]
   if (!p) { missing.value = true; return }
   const idOf = (xs: { id: number; name: string }[], name: string | null) => xs.find(x => x.name === name)?.id ?? null
   initial.value = {

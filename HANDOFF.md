@@ -78,6 +78,9 @@ Engineering decisions taken during the build (change only on purpose):
   between the counted and the system quantity at posting time, uncounted batches stay as they are. Stock value on the
   overview is sellable stock at batch cost. There is no warehouse list endpoint yet, so transfers go only to
   warehouses the user is assigned to (the API accepts any active one).
+- Catalog: products are never deleted (deactivate); a unit used on a sale or purchase keeps its factor and cannot be
+  removed; prices are versioned per price list (retail, wholesale) and changing one needs `products.price`; catalog
+  masters used by products are deactivated, not deleted. Duplicated products start inactive.
 
 ## 4. What is done
 
@@ -91,12 +94,12 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (80 Pest tests passing)
+### Laravel API (`api/`) – live slices (89 Pest tests passing)
 
 | Slice | Status |
 |---|---|
 | Auth: login/logout, `/me`, change password | live |
-| Catalog: product search (FEFO batches, sellable stock), list, show | live (read only) |
+| Catalog: product search (FEFO batches, sellable stock), list, show | live |
 | Customers: list, lookup, create | live |
 | Sales: complete sale, list, detail | live |
 | Voids, sale returns, returns list | live |
@@ -105,10 +108,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Suppliers: CRUD, lookup, ledger, account payment | live |
 | Purchase returns: post (reduce due or refund), list, void | live |
 | Inventory: stock overview, batches, adjustments, stock counts, transfers | live |
+| Catalog writes: products (units, prices, barcodes), deactivate, duplicate, CSV import; generics, manufacturers, dosage forms, categories | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (7 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 80 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (8 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 89 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -116,18 +120,17 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Catalog writes**: products (units, barcodes, prices), generics, manufacturers, dosage forms, categories, `/catalog/lookups`, barcode labels.
-2. **Customers**: groups, due collection (`/customers/due`, open invoices, payments), customer detail.
-3. **Held sales / drafts** on the server (currently browser-only).
-4. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
-5. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
-6. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-7. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-8. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-9. **HR & payroll**: employees, attendance, holidays, payroll.
-10. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-11. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-12. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Customers**: groups, due collection (`/customers/due`, open invoices, payments), customer detail.
+2. **Held sales / drafts** on the server (currently browser-only).
+3. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
+4. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
+5. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
+6. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+7. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+8. **HR & payroll**: employees, attendance, holidays, payroll.
+9. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+10. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+11. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Transfers can only target warehouses the user is assigned to until a warehouse list endpoint exists (Admin module).
@@ -152,8 +155,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 80 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 80 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 89 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 89 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

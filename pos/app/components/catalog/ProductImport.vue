@@ -9,7 +9,7 @@ import { FileSpreadsheet, Download, Upload, CheckCircle2, AlertTriangle } from '
 const open = defineModel<boolean>({ default: false })
 const emit = defineEmits<{ imported: [count: number] }>()
 const toast = useToast()
-const api = useApi()
+const api = useApi('catalog')
 
 const HEADERS = ['sku', 'name', 'strength', 'generic', 'manufacturer', 'dosage_form', 'piece_price', 'pieces_per_strip', 'strips_per_box', 'reorder_level', 'requires_prescription']
 interface Row { line: number; values: Record<string, string>; errors: string[] }

@@ -12,7 +12,7 @@ const seed = () => import('~/mocks/seed')
 const extra = () => import('~/mocks/extra')
 
 export function useCatalogApi() {
-  const api = useApi()
+  const api = useApi('catalog')
   return {
     async lookups(): Promise<CatalogLookups> {
       if (api.useMocks) { await mockDelay(150); return (await extra()).lookups }
@@ -20,9 +20,14 @@ export function useCatalogApi() {
     },
     /** includeExpired lists every batch on hand (for write-offs, returns and counts), not only sellable ones. */
     async product(id: number, opts: { warehouseId?: number; includeExpired?: boolean } = {}): Promise<Product | null> {
-      const live = useApi('catalog') // product reads are served live; lookups and writes are not yet
+      const live = api
       if (live.useMocks) { await mockDelay(250); return (await seed()).products.find(p => p.id === id) ?? null }
       return live.get(`/catalog/products/${id}`, { ...(opts.warehouseId ? { warehouse_id: opts.warehouseId } : {}), ...(opts.includeExpired ? { includeExpired: 1 } : {}) })
+    },
+    /** The edit form's shape (all units with retail and wholesale prices and barcodes); null in mock mode. */
+    async productForm(id: number): Promise<ProductInput | null> {
+      if (api.useMocks) return null
+      return api.get(`/catalog/products/${id}/form`)
     },
     /** The API validates unique SKU and barcodes, exactly one base unit, factors > 0 and price rules. */
     async save(input: ProductInput): Promise<{ id: number }> {
@@ -182,6 +187,7 @@ export function useRowActionsApi() {
   const salesApi = useApi('sales')
   const purchasesApi = useApi('purchases')
   const inventoryApi = useApi('inventory')
+  const catalogApi = useApi('catalog')
   const key = () => crypto.randomUUID()
   async function mockWrite<T>(fn?: () => T | Promise<T>): Promise<T | undefined> {
     await mockDelay(450)
@@ -230,11 +236,11 @@ export function useRowActionsApi() {
     },
     /** Products and customers are deactivated, never hard-deleted (history keeps referencing them). */
     async deactivateProduct(id: number) {
-      if (api.useMocks) { await mockWrite(async () => { const p = (await seed()).products.find(x => x.id === id); if (p) p.isActive = false }); return }
-      return api.post(`/catalog/products/${id}/deactivate`, {}, key())
+      if (catalogApi.useMocks) { await mockWrite(async () => { const p = (await seed()).products.find(x => x.id === id); if (p) p.isActive = false }); return }
+      return catalogApi.post(`/catalog/products/${id}/deactivate`, {}, key())
     },
     async duplicateProduct(id: number): Promise<{ id: number }> {
-      if (api.useMocks) {
+      if (catalogApi.useMocks) {
         return (await mockWrite(async () => {
           const { products } = await seed()
           const p = products.find(x => x.id === id)!
@@ -243,7 +249,7 @@ export function useRowActionsApi() {
           return { id: copy.id }
         }))!
       }
-      return api.post(`/catalog/products/${id}/duplicate`, {}, key())
+      return catalogApi.post(`/catalog/products/${id}/duplicate`, {}, key())
     },
     /** Profile fields only; balances, points and membership come from ledgers and cannot be edited here. */
     async updateCustomer(id: number, input: { name: string; phone: string | null; group: string | null }) {

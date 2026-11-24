@@ -5,7 +5,7 @@ import type { Manufacturer } from '~/types/inventory'
 
 definePageMeta({ title: 'Manufacturers' })
 
-const resource = useResource<Manufacturer>('catalog/manufacturers', async () => (await import('~/mocks/inventory')).manufacturers)
+const resource = useResource<Manufacturer>('catalog/manufacturers', async () => (await import('~/mocks/inventory')).manufacturers, 'catalog')
 const auth = useAuthStore()
 const toast = useToast()
 const crud = ref<{ reload: () => void } | null>(null)

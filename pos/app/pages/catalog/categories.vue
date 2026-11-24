@@ -5,7 +5,7 @@ import type { CategoryRow } from '~/types/inventory'
 
 definePageMeta({ title: 'Categories' })
 
-const resource = useResource<CategoryRow>('catalog/categories', async () => (await import('~/mocks/inventory')).categories)
+const resource = useResource<CategoryRow>('catalog/categories', async () => (await import('~/mocks/inventory')).categories, 'catalog')
 const auth = useAuthStore()
 const toast = useToast()
 const crud = ref<{ reload: () => void } | null>(null)

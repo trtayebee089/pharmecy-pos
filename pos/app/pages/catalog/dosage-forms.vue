@@ -5,7 +5,7 @@ import type { DosageForm } from '~/types/inventory'
 
 definePageMeta({ title: 'Dosage forms' })
 
-const resource = useResource<DosageForm>('catalog/dosage-forms', async () => (await import('~/mocks/inventory')).dosageForms)
+const resource = useResource<DosageForm>('catalog/dosage-forms', async () => (await import('~/mocks/inventory')).dosageForms, 'catalog')
 const auth = useAuthStore()
 const toast = useToast()
 const crud = ref<{ reload: () => void } | null>(null)
