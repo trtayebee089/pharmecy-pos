@@ -2,7 +2,7 @@
 
 Workspace for the audit and the rebuild of the Red Pharma POS: a Nuxt POS on a centralized Laravel API.
 
-**Current phase: audit complete; full-rebuild design drafted and waiting for approval of open decisions O1–O5.**
+**Current phase: rebuild in progress. Nuxt POS UI complete; Laravel API live for auth, catalog, customers, sales, returns, voids, cash registers, purchases, suppliers and dashboard. Start with [HANDOFF.md](HANDOFF.md).**
 
 ## Rebuild design (`docs/rebuild/`)
 
