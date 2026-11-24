@@ -29,11 +29,12 @@ talks to `/api/pos/v1` with Sanctum SPA cookie auth. The design is in
 | Adjustments | `GET/POST inventory/adjustments`, `POST inventory/adjustments/{id}/void` (POSTs take an Idempotency-Key) | Per batch with a reason and note: damage/lost out, found in, correction either way, expiry write-off only from expired batches; out never exceeds the batch; in at batch cost; void reverses (refused if added stock was since used). Number `ADJ-` |
 | Stock counts | `GET/POST inventory/counts`, `GET inventory/counts/{id}`, `PUT counts/{id}/lines`, `POST counts/{id}/post` (Idempotency-Key), `POST counts/{id}/cancel` | Scope all / dosage form / manufacturer / category (by name); lists batches on hand; posting compares each counted line with the system quantity at posting time and posts `count` movements; uncounted lines unchanged. Number `SC-` |
 | Transfers | `GET/POST inventory/transfers`, `POST transfers/{id}/receive`, `/void` (POSTs take an Idempotency-Key) | Sellable batches only; send = `transfer_out` (in transit), receive at the destination at the same cost (destination staff only), void only in transit (back to source). Number `TR-` |
+| Finance | `GET/POST finance/accounts`, `PUT accounts/{id}`, `POST accounts/{id}/activate|deactivate|default`, `GET accounts/{id}/statement`, `GET/POST finance/money-transfers`, `POST money-transfers/{id}/void`, `GET/POST finance/expenses|incomes`, `POST {id}/void`, `POST/GET {id}/attachment`, `finance/expense-categories|income-categories` (CRUD), `GET finance/balance-sheet` | Balances are derived (opening + Σ in − Σ out of account transactions). Opening balance locked once used; deactivate only at zero balance, not the default, no active payment method on it. Transfers and expenses never overdraw the source (checked against the current balance); voids reverse and never pull money an account no longer holds. Attachments are private files (PDF/image ≤ 5 MB) served by a 5-minute signed link. Balance sheet: account balances by type, inventory at cost from the stock history (expired excluded), customer receivables/credit, supplier payables/advances, opening capital + balancing retained earnings; P&L month to date (sales, returns, COGS net of restocked returns, expenses, income). Numbers `MT-`, `EXP-`, `INC-` |
 | Dashboard | `GET dashboard/summary` | Live figures from sales, ledgers and stock |
 
 Not yet built (the POS still uses its mock layer for these):
-the inventory reorder suggestions screen (`/reorder/*`), the other admin
-modules, reports, online orders, loyalty, accounting and HR.
+the inventory reorder suggestions screen (`/reorder/*`), reports, online orders, loyalty,
+HR and the admin modules (users, roles, warehouses, settings).
 
 ## Local development (Windows)
 

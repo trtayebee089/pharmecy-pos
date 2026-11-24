@@ -7,6 +7,7 @@ use App\Http\Controllers\Pos\CustomerAccountController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\CustomerGroupController;
 use App\Http\Controllers\Pos\DashboardController;
+use App\Http\Controllers\Pos\FinanceController;
 use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\ProductController;
@@ -145,6 +146,38 @@ Route::prefix('pos/v1')->group(function () {
             Route::post('ai-runs/{run}/process', [PurchaseOrderController::class, 'processRun'])->whereNumber('run');
         });
 
+        Route::prefix('finance')->group(function () {
+            Route::middleware('can:accounts.view')->group(function () {
+                Route::get('accounts', [FinanceController::class, 'accounts']);
+                Route::post('accounts', [FinanceController::class, 'storeAccount']);
+                Route::put('accounts/{account}', [FinanceController::class, 'updateAccount']);
+                Route::post('accounts/{account}/activate', [FinanceController::class, 'activate']);
+                Route::post('accounts/{account}/deactivate', [FinanceController::class, 'deactivate']);
+                Route::post('accounts/{account}/default', [FinanceController::class, 'makeDefault']);
+                Route::get('accounts/{account}/statement', [FinanceController::class, 'statement']);
+            });
+            Route::middleware('can:accounts.transfer')->group(function () {
+                Route::get('money-transfers', [FinanceController::class, 'transfers']);
+                Route::post('money-transfers', [FinanceController::class, 'storeTransfer'])->middleware('idempotent');
+                Route::post('money-transfers/{transfer}/void', [FinanceController::class, 'voidTransfer'])->middleware('idempotent');
+            });
+            foreach (['expenses' => ['expenses.view', 'expense-categories'], 'incomes' => ['income.view', 'income-categories']] as $kinds => [$permission, $categories]) {
+                Route::middleware("can:$permission")->group(function () use ($kinds, $categories) {
+                    Route::get($categories, [FinanceController::class, 'categories'])->defaults('kind', $categories);
+                    Route::post($categories, [FinanceController::class, 'storeCategory'])->defaults('kind', $categories);
+                    Route::get("$categories/{id}", [FinanceController::class, 'showCategory'])->defaults('kind', $categories)->whereNumber('id');
+                    Route::put("$categories/{id}", [FinanceController::class, 'updateCategory'])->defaults('kind', $categories)->whereNumber('id');
+                    Route::delete("$categories/{id}", [FinanceController::class, 'destroyCategory'])->defaults('kind', $categories)->whereNumber('id');
+                    Route::get($kinds, [FinanceController::class, 'entries'])->defaults('kinds', $kinds);
+                    Route::post($kinds, [FinanceController::class, 'storeEntry'])->defaults('kinds', $kinds)->middleware('idempotent');
+                    Route::post("$kinds/{entry}/void", [FinanceController::class, 'voidEntry'])->defaults('kinds', $kinds);
+                    Route::post("$kinds/{entry}/attachment", [FinanceController::class, 'attach'])->defaults('kinds', $kinds);
+                    Route::get("$kinds/{entry}/attachment", [FinanceController::class, 'attachmentUrl'])->defaults('kinds', $kinds);
+                });
+            }
+            Route::get('balance-sheet', [FinanceController::class, 'balanceSheet'])->middleware('can:accounts.reports');
+        });
+
         Route::get('purchase-returns', [PurchaseReturnController::class, 'index'])->middleware('can:purchase_returns.view');
         Route::post('purchase-returns', [PurchaseReturnController::class, 'store'])->middleware(['can:purchase_returns.create', 'idempotent']);
         Route::post('purchase-returns/{purchaseReturn}/void', [PurchaseReturnController::class, 'void'])->middleware(['can:purchase_returns.create', 'idempotent']);
@@ -158,4 +191,7 @@ Route::prefix('pos/v1')->group(function () {
         Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy'])->middleware('can:suppliers.manage');
         Route::post('suppliers/{supplier}/payments', [SupplierController::class, 'pay'])->middleware(['can:payments.pay_supplier', 'idempotent']);
     });
+
+    // Opened directly in the browser: protected by a 5-minute signature instead of the session.
+    Route::get('finance/attachments/{entry}', [FinanceController::class, 'downloadAttachment'])->middleware('signed')->name('finance.attachment');
 });
