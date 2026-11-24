@@ -33,8 +33,32 @@ Composer and artisan.
 export PATH="/d/01 REDPHARMA/00 CODEBASE/.php84:$PATH"   # php + composer wrappers
 cp .env.example .env && php artisan key:generate           # first time only
 php artisan migrate:fresh --seed --seeder=DemoSeeder       # demo catalogue, stock and users
-php vendor/bin/pest                                        # test suite
+php vendor/bin/pest                                        # test suite (in-memory SQLite, fast)
+php vendor/bin/pest -c phpunit.mysql.xml                   # same suite on MySQL/MariaDB
 ```
+
+### Database (MySQL / MariaDB)
+
+The app database is MySQL 8 or MariaDB 10.11+ (utf8mb4, `utf8mb4_unicode_ci`).
+Create the app and test databases and a local user once, then put the password
+in `.env` (`DB_PASSWORD`):
+
+```sql
+CREATE DATABASE redpharma_pos      CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE redpharma_pos_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'redpharma'@'localhost' IDENTIFIED BY '<password>';
+CREATE USER 'redpharma'@'127.0.0.1' IDENTIFIED BY '<password>';
+GRANT ALL PRIVILEGES ON redpharma_pos.*      TO 'redpharma'@'localhost', 'redpharma'@'127.0.0.1';
+GRANT ALL PRIVILEGES ON redpharma_pos_test.* TO 'redpharma'@'localhost', 'redpharma'@'127.0.0.1';
+```
+
+`phpunit.mysql.xml` always targets `redpharma_pos_test` (tests wipe it), never the
+app database. MySQL notes for new code:
+
+- Identifiers are limited to 64 characters: give composite indexes an explicit
+  name when `table_col1_col2_..._index` would be longer.
+- `SUM()` of an integer column comes back as a DECIMAL string: cast aggregates
+  (`(int)`, `(float)`, `SaleService::paisa()`) before using or returning them.
 
 The API dev server runs from the launch config `redpharma-api`
 (`../../.php84/serve-api.cmd`, http://localhost:8000). Demo logins are listed in

@@ -116,7 +116,8 @@ return new class extends Migration
             $t->timestamp('effective_to')->nullable();
             $t->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
             $t->timestamps();
-            $t->index(['product_unit_id', 'price_list_id', 'effective_from']);
+            // Explicit name: the generated one exceeds MySQL's 64-character identifier limit.
+            $t->index(['product_unit_id', 'price_list_id', 'effective_from'], 'product_prices_unit_list_from_index');
         });
 
         Schema::create('batches', function (Blueprint $t) {

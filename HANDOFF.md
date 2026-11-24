@@ -97,7 +97,8 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Suppliers: CRUD, lookup, ledger, account payment | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (5 migrations).
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (5 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 54 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases`
@@ -118,7 +119,7 @@ In `pos/.env` the live domains are:
 11. **HR & payroll**: employees, attendance, holidays, payroll.
 12. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
 13. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-14. **Production readiness**: MariaDB/MySQL run of the test suite, deployment, backups, monitoring, then cutover (needs owner approval).
+14. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Register page always opens register id 1 (`pos/app/pages/finance/registers.vue`); the API has `GET /cash-registers` for a picker.
@@ -128,8 +129,8 @@ Small open items:
 
 ## 6. Set up on another device
 
-Requirements: Git, **PHP 8.3+** (8.4 used) with `pdo_sqlite`, `mbstring`, `intl`, `bcmath`, `fileinfo`, `zip`;
-Composer 2; Node 20+ with npm.
+Requirements: Git, **PHP 8.3+** (8.4 and 8.5 used) with `pdo_mysql`, `pdo_sqlite`, `mbstring`, `intl`, `bcmath`,
+`fileinfo`, `zip`; Composer 2; Node 20+ with npm; **MySQL 8 or MariaDB 10.11+** (XAMPP's MariaDB works).
 
 ```bash
 git clone https://github.com/trtayebee089/pharmecy-pos.git
@@ -138,11 +139,12 @@ cd pharmecy-pos
 # API
 cd api
 composer install
-cp .env.example .env           # SQLite by default; set APP_TIMEZONE=Asia/Dhaka (already in the example)
+# create databases redpharma_pos + redpharma_pos_test and user redpharma (SQL in api/README.md)
+cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
-touch database/database.sqlite
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 54 passing
+php vendor/bin/pest                              # expect 54 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 54 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)
@@ -158,7 +160,7 @@ npm run dev                                      # http://localhost:3100
 - Demo logins are listed in `api/database/seeders/DemoSeeder.php` (admin / cashier / store keeper).
 - Keep the POS on `localhost:3100` and the API on `localhost:8000`: Sanctum (`SANCTUM_STATEFUL_DOMAINS`)
   and CORS (`CORS_ALLOWED_ORIGINS`) in `api/.env` must list the POS origin.
-- Checks before committing: `php vendor/bin/pest`, `php vendor/bin/pint` (in `api/`), `npx nuxi typecheck` (in `pos/`).
+- Checks before committing: `php vendor/bin/pest`, `php vendor/bin/pest -c phpunit.mysql.xml`, `php vendor/bin/pint` (in `api/`), `npx nuxi typecheck` (in `pos/`).
 
 **Windows with Laravel Herd (original machine):** Herd's php.ini auto-prepends a missing `dump-loader.php`,
 which silently breaks Composer and artisan. The original machine uses a cleaned copy plus `php`/`composer`

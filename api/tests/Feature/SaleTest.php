@@ -42,7 +42,8 @@ it('allocates FEFO across batches and records cost', function () {
         ->and($res->json('lines.0.batches.0.batchNo'))->toBe('SOON');
     // 15 × 1.2 + 5 × 1.0
     expect((float) Sale::first()->cost_total)->toBe(23.0);
-    expect(StockMovement::where('type', 'sale')->sum('qty_base'))->toBe(-20);
+    // MySQL returns SUM() of an INT column as DECIMAL (a string), SQLite as an int.
+    expect((int) StockMovement::where('type', 'sale')->sum('qty_base'))->toBe(-20);
 });
 
 it('never sells expired stock', function () {
