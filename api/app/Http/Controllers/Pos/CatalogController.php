@@ -18,8 +18,7 @@ class CatalogController extends Controller
         $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'warehouse_id' => ['required', 'integer'], 'includeExpired' => ['nullable', 'boolean']]);
         $warehouseId = $this->warehouse($request, (int) $data['warehouse_id']);
         $term = trim($data['q'] ?? '');
-        // All on-hand batches (expired too) are only for returning stock, never for selling.
-        $onHand = (bool) ($data['includeExpired'] ?? false) && $request->user()->can('purchase_returns.create');
+        $onHand = $this->onHand($request, $data['includeExpired'] ?? false);
 
         $query = Product::query()->where('is_active', true);
         if ($term !== '') {
@@ -58,7 +57,17 @@ class CatalogController extends Controller
     {
         $warehouseId = $this->warehouse($request, (int) ($request->query('warehouse_id') ?? $request->user()->default_warehouse_id ?? 1));
 
-        return response()->json(Present::products(collect([$product]), $warehouseId)[0]);
+        return response()->json(Present::products(collect([$product]), $warehouseId, $this->onHand($request, $request->query('includeExpired')))[0]);
+    }
+
+    /**
+     * Every batch on hand (expired too) instead of the sellable ones: only for
+     * staff who return, write off, count or move stock, never for selling.
+     */
+    private function onHand(Request $request, mixed $asked): bool
+    {
+        return filter_var($asked, FILTER_VALIDATE_BOOLEAN)
+            && collect(['purchase_returns.create', 'inventory.adjust', 'inventory.count', 'inventory.transfer'])->contains(fn ($p) => $request->user()->can($p));
     }
 
     private function applySearch(Builder $query, string $term): void

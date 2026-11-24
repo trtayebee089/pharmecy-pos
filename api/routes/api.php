@@ -4,10 +4,12 @@ use App\Http\Controllers\Pos\AuthController;
 use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\DashboardController;
+use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\PurchaseController;
 use App\Http\Controllers\Pos\PurchaseReturnController;
 use App\Http\Controllers\Pos\RegisterController;
 use App\Http\Controllers\Pos\SaleController;
+use App\Http\Controllers\Pos\StockDocumentController;
 use App\Http\Controllers\Pos\SupplierController;
 use Illuminate\Support\Facades\Route;
 
@@ -57,6 +59,33 @@ Route::prefix('pos/v1')->group(function () {
         Route::post('purchases/{purchase}/payments', [PurchaseController::class, 'pay'])->middleware(['can:payments.pay_supplier', 'idempotent']);
         Route::post('purchases/{purchase}/void', [PurchaseController::class, 'void'])->middleware(['can:purchases.create', 'idempotent']);
         Route::post('purchases/{purchase}/duplicate', [PurchaseController::class, 'duplicate'])->middleware(['can:purchases.create', 'idempotent']);
+
+        Route::prefix('inventory')->group(function () {
+            Route::middleware('can:inventory.view')->group(function () {
+                Route::get('stock', [InventoryController::class, 'stock']);
+                Route::get('stock/summary', [InventoryController::class, 'summary']);
+                Route::get('batches', [InventoryController::class, 'batches']);
+            });
+            Route::middleware('can:inventory.adjust')->group(function () {
+                Route::get('adjustments', [StockDocumentController::class, 'adjustments']);
+                Route::post('adjustments', [StockDocumentController::class, 'storeAdjustment'])->middleware('idempotent');
+                Route::post('adjustments/{adjustment}/void', [StockDocumentController::class, 'voidAdjustment'])->middleware('idempotent');
+            });
+            Route::middleware('can:inventory.count')->group(function () {
+                Route::get('counts', [StockDocumentController::class, 'counts']);
+                Route::get('counts/{count}', [StockDocumentController::class, 'showCount'])->whereNumber('count');
+                Route::post('counts', [StockDocumentController::class, 'startCount'])->middleware('idempotent');
+                Route::put('counts/{count}/lines', [StockDocumentController::class, 'saveCounts']);
+                Route::post('counts/{count}/post', [StockDocumentController::class, 'postCount'])->middleware('idempotent');
+                Route::post('counts/{count}/cancel', [StockDocumentController::class, 'cancelCount']);
+            });
+            Route::middleware('can:inventory.transfer')->group(function () {
+                Route::get('transfers', [StockDocumentController::class, 'transfers']);
+                Route::post('transfers', [StockDocumentController::class, 'sendTransfer'])->middleware('idempotent');
+                Route::post('transfers/{transfer}/receive', [StockDocumentController::class, 'receiveTransfer'])->middleware('idempotent');
+                Route::post('transfers/{transfer}/void', [StockDocumentController::class, 'voidTransfer'])->middleware('idempotent');
+            });
+        });
 
         Route::get('purchase-returns', [PurchaseReturnController::class, 'index'])->middleware('can:purchase_returns.view');
         Route::post('purchase-returns', [PurchaseReturnController::class, 'store'])->middleware(['can:purchase_returns.create', 'idempotent']);

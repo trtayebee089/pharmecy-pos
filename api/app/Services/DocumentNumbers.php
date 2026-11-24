@@ -12,7 +12,8 @@ use App\Models\Warehouse;
  */
 class DocumentNumbers
 {
-    private const PREFIX = ['sale' => 'S', 'purchase' => 'P', 'purchase_order' => 'PO', 'payment' => 'PAY', 'sale_return' => 'R', 'purchase_return' => 'PR'];
+    private const PREFIX = ['sale' => 'S', 'purchase' => 'P', 'purchase_order' => 'PO', 'payment' => 'PAY', 'sale_return' => 'R', 'purchase_return' => 'PR',
+        'stock_adjustment' => 'ADJ', 'stock_count' => 'SC', 'stock_transfer' => 'TR'];
 
     public function next(string $docType, Warehouse $warehouse): string
     {
