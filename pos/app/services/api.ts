@@ -22,7 +22,7 @@ async function mocks() {
 }
 
 export function useDashboardApi() {
-  const api = useApi()
+  const api = useApi('dashboard')
   return {
     async summary(warehouseId: number, days = 14): Promise<DashboardSummary> {
       if (api.useMocks) { await mockDelay(500); return (await mocks()).dashboard(days) }
@@ -32,7 +32,7 @@ export function useDashboardApi() {
 }
 
 export function useProductsApi() {
-  const api = useApi()
+  const api = useApi('catalog')
   return {
     /** POS search: name, strength, generic, SKU or exact barcode. */
     async search(term: string, warehouseId: number, signal?: AbortSignal): Promise<Product[]> {
@@ -82,7 +82,7 @@ export function useInventoryApi() {
 }
 
 export function useSalesApi() {
-  const api = useApi()
+  const api = useApi('sales')
   return {
     async list(q: ListQuery): Promise<Paginated<SaleSummary>> {
       if (api.useMocks) {
@@ -132,7 +132,7 @@ export function usePurchasesApi() {
 }
 
 export function useCustomersApi() {
-  const api = useApi()
+  const api = useApi('customers')
   return {
     async list(q: ListQuery): Promise<Paginated<Customer>> {
       if (api.useMocks) {

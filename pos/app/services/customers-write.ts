@@ -9,7 +9,7 @@ export function normalizeBdPhone(raw: string): string | null {
 }
 
 export function useCustomerWriteApi() {
-  const api = useApi()
+  const api = useApi('customers')
   return {
     /** The API enforces a unique normalised phone; duplicates return 422 on `phone`. */
     async create(input: NewCustomer): Promise<Customer> {

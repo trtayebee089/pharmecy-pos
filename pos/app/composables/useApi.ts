@@ -25,7 +25,15 @@ let csrfReady: Promise<void> | null = null
  * - 401 → back to login; 419 → refresh CSRF and retry once; 422 → field errors
  * No tokens are stored in localStorage.
  */
-export function useApi() {
+/**
+ * API domains already served by the Laravel API. While the mock layer is on,
+ * listing a domain in NUXT_PUBLIC_LIVE_DOMAINS (comma separated) sends just
+ * that domain to the real API, so finished endpoints can be used while the
+ * rest of the UI still runs on mocks. With mocks off, everything is live.
+ */
+export type ApiDomain = 'auth' | 'catalog' | 'customers' | 'sales' | 'dashboard' | 'purchases'
+
+export function useApi(domain?: ApiDomain) {
   const config = useRuntimeConfig()
   const base = config.public.apiBase as string
   const origin = new URL(base).origin
@@ -72,7 +80,7 @@ export function useApi() {
       request<T>(path, { method: 'POST', body, headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {} }),
     put: <T>(path: string, body?: any) => request<T>(path, { method: 'PUT', body }),
     del: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
-    useMocks: Boolean(config.public.useMocks),
+    useMocks: Boolean(config.public.useMocks) && !(domain && String(config.public.liveDomains ?? '').split(',').map(s => s.trim()).includes(domain)),
   }
 }
 

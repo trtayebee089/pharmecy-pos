@@ -1,58 +1,49 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Red Pharma API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Centralized Laravel 13 API for the rebuilt Red Pharma system. The Nuxt POS (`../pos`)
+talks to `/api/pos/v1` with Sanctum SPA cookie auth. The design is in
+`../docs/rebuild/` (architecture, database design, data migration plan).
 
-## About Laravel
+## What is implemented
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+| Area | Endpoints | Notes |
+|---|---|---|
+| Auth | `POST auth/login`, `POST auth/logout`, `GET me`, `PUT me/password` | Username login, 5 attempts/min lockout, audit log, session cookie only (no tokens in the browser) |
+| Catalog | `GET catalog/products/search`, `GET catalog/products`, `GET catalog/products/{id}` | Units with current retail price, sellable batches in FEFO order, sellable stock |
+| Customers | `GET customers`, `GET customers/lookup`, `POST customers` | Unique normalised BD mobile number, due balance from the ledger |
+| Sales | `POST sales` (Idempotency-Key), `GET sales`, `GET sales/{id}` | Server pricing, role discount limits, FEFO allocation under lock, expired stock never sold, payments, account and customer ledgers |
+| Purchases | `POST purchases` (Idempotency-Key) | `received`: batches + stock movements at landed cost, supplier ledger, optional payment and retail price update; `ordered`: purchase order only |
+| Dashboard | `GET dashboard/summary` | Live figures from sales, ledgers and stock |
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Not yet built (the POS still uses its mock layer for these): returns and voids,
+register sessions, adjustments/transfers/counts, suppliers and the other admin
+modules, reports, online orders, loyalty, accounting and HR.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Local development (Windows)
 
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Herd's PHP 8.4 is used with a cleaned php.ini kept outside the repo
+(`../../.php84/`): Herd's own ini loads a missing `dump-loader.php`, which breaks
+Composer and artisan.
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+export PATH="/d/01 REDPHARMA/00 CODEBASE/.php84:$PATH"   # php + composer wrappers
+cp .env.example .env && php artisan key:generate           # first time only
+php artisan migrate:fresh --seed --seeder=DemoSeeder       # demo catalogue, stock and users
+php vendor/bin/pest                                        # test suite
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The API dev server runs from the launch config `redpharma-api`
+(`../../.php84/serve-api.cmd`, http://localhost:8000). Demo logins are listed in
+`database/seeders/DemoSeeder.php`; `DemoSeeder` refuses to run in production.
+`DatabaseSeeder` only creates reference data (roles, permissions, payment
+methods, price lists, the walk-in customer).
 
-## Contributing
+In the POS `.env`, `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard`
+sends those domains to this API while the rest of the UI stays on mocks.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Rules the code relies on
 
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- Stock changes only through `App\Services\StockLedger` (append-only movements plus a locked balance per warehouse and batch).
+- Money is computed in integer paisa and stored as DECIMAL.
+- Documents are numbered per type, warehouse and year (`S-DHK1-2026-00001`) under a row lock.
+- Every POS route checks a permission from `config/pos.php`; Admin passes all checks.

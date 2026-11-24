@@ -16,6 +16,8 @@ export default defineNuxtConfig({
       apiBase: 'https://api.redpharmabd.com/api/pos/v1',
       // Development-only mock layer (app/mocks). Overridden by NUXT_PUBLIC_USE_MOCKS.
       useMocks: false,
+      // While mocks are on: API domains already served live (see useApi). Overridden by NUXT_PUBLIC_LIVE_DOMAINS.
+      liveDomains: '',
       appName: 'Red Pharma POS',
     },
   },

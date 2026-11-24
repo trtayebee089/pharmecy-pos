@@ -64,7 +64,7 @@ export interface ReceivePayload {
 }
 
 export function useReceivingApi() {
-  const api = useApi()
+  const api = useApi('purchases')
   return {
     /** Posts a received purchase: batches are found or created, stock movements and supplier ledger posted. */
     async receive(payload: ReceivePayload, idempotencyKey: string): Promise<{ number: string }> {

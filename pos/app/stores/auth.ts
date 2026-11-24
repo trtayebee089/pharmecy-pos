@@ -31,7 +31,7 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     async fetchMe() {
-      const api = useApi()
+      const api = useApi('auth')
       try {
         if (api.useMocks) {
           const raw = sessionStorage.getItem('rp-mock-session')
@@ -45,7 +45,7 @@ export const useAuthStore = defineStore('auth', {
       this.loaded = true
     },
     async login(username: string, password: string) {
-      const api = useApi()
+      const api = useApi('auth')
       if (api.useMocks) {
         await mockDelay(600)
         if (!username || password.length < 4) throw new ApiError('These credentials do not match our records.', 422, { username: ['Invalid username or password'] })
@@ -60,7 +60,7 @@ export const useAuthStore = defineStore('auth', {
       await this.fetchMe()
     },
     async logout() {
-      const api = useApi()
+      const api = useApi('auth')
       if (!api.useMocks) await api.post('/auth/logout').catch(() => {})
       this.clear()
       await navigateTo('/login')
