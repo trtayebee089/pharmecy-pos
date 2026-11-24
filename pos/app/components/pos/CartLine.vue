@@ -25,7 +25,8 @@ function step(d: number) {
     <div class="flex items-start gap-3">
       <div class="min-w-0 flex-1">
         <p class="truncate text-sm font-bold text-ink">{{ line.product.name }} <span class="font-medium text-slate-500">{{ line.product.strength }}</span></p>
-        <button class="mt-0.5 flex items-center gap-1 text-[11.5px] text-slate-500 hover:text-brand-700" @click="expanded = !expanded">
+        <p v-if="line.custom" class="mt-0.5 text-[11.5px] text-violet-600">Custom item{{ line.custom.code ? ` · ${line.custom.code}` : '' }} · no stock or batch</p>
+        <button v-else class="mt-0.5 flex items-center gap-1 text-[11.5px] text-slate-500 hover:text-brand-700" @click="expanded = !expanded">
           <Layers class="size-3" />
           <template v-for="(a, i) in alloc.parts" :key="a.batchId">
             <span v-if="i">+</span>

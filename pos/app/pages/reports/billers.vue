@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Printer } from 'lucide-vue-next'
 import type { DateRange, ReportResult } from '~/types/domain'
 
 definePageMeta({ title: 'Biller report' })
@@ -41,11 +42,16 @@ async function load({ range, filters }: { range: DateRange; filters: Record<stri
     totals: { items: rows.reduce((s, r) => s + r.items, 0), grandTotal: total, paidTotal: rows.reduce((s, r) => s + r.paidTotal, 0), dueTotal: rows.reduce((s, r) => s + r.dueTotal, 0) },
   }
 }
+function saleActions(r: Record<string, any>) {
+  const id = r.id
+  if (!id) return null
+  return { view: `/sales/${id}`, items: [{ label: 'Print invoice', icon: Printer, to: `/sales/${id}?print=1` }] }
+}
 </script>
 
 <template>
   <UiReportPage
     title="Biller report" description="Sales, collections and dues per biller (the billing identity printed on the invoice)."
-    :filters="[{ key: 'biller', label: 'Billers', options: billerOptions }]" :load="load"
+    :filters="[{ key: 'biller', label: 'Billers', options: billerOptions }]" :load="load" :row-actions="saleActions"
   />
 </template>

@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { Download, Eye, Printer, ScanBarcode, Globe, Store } from 'lucide-vue-next'
-import type { Column, SaleSummary } from '~/types/domain'
+import { Download, Printer, ScanBarcode, Globe, Store, Undo2, MessageSquare, HandCoins } from 'lucide-vue-next'
+import type { Column, RowAction, SaleSummary } from '~/types/domain'
 
 definePageMeta({ title: 'Sales' })
 const api = useSalesApi()
-const { search, page, filters, result, loading } = useList<SaleSummary>(q => api.list(q), { status: '' })
+const auth = useAuthStore()
+const toast = useToast()
+const { ask } = useConfirm()
+const actionsApi = useRowActionsApi()
+const { search, page, filters, result, loading, reload } = useList<SaleSummary>(q => api.list(q), { status: '' })
 const status = computed({ get: () => filters.value.status || 'all', set: v => (filters.value.status = v === 'all' ? '' : v) })
 
 const columns: Column[] = [
@@ -15,9 +19,25 @@ const columns: Column[] = [
   { key: 'grandTotal', label: 'Total', align: 'right' },
   { key: 'dueTotal', label: 'Due', align: 'right' },
   { key: 'paymentStatus', label: 'Payment' },
-  { key: 'actions', label: '', align: 'right' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
 ]
 const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as const
+async function voidSale(row: SaleSummary) {
+  const { ok, reason } = await ask({ title: `Void ${row.number}?`, description: 'Stock goes back to its batches and payments are reversed. The invoice stays on record as void. Use a return instead for part of a sale.', confirmLabel: 'Void sale', requireReason: true })
+  if (!ok) return
+  try { await actionsApi.voidSale(row.id, reason); toast.success('Sale voided', row.number); reload() }
+  catch (e: any) { toast.error('Could not void', e?.message) }
+}
+async function sms(row: SaleSummary) {
+  try { await actionsApi.smsReceipt(row.id); toast.success('Receipt SMS queued', `${row.number} · ${row.customer}`) }
+  catch (e: any) { toast.error('SMS not sent', e?.message) }
+}
+const rowItems = (row: SaleSummary): RowAction[] => [
+  { label: 'Print invoice', icon: Printer, to: `/sales/${row.id}?print=1` },
+  { label: 'Return items', icon: Undo2, to: `/sales/${row.id}`, hidden: row.status === 'void' || !auth.can('returns.create') },
+  { label: 'Collect due', icon: HandCoins, to: '/customers/due', hidden: !row.dueTotal || row.status === 'void' },
+  { label: 'Send SMS receipt', icon: MessageSquare, onClick: () => sms(row), hidden: row.status === 'void' || row.customer === 'Walk-in customer' },
+]
 function exportCsv() { downloadCsv('sales.csv', columns.filter(c => c.key !== 'actions'), result.value?.data ?? []) }
 </script>
 
@@ -48,10 +68,11 @@ function exportCsv() { downloadCsv('sales.csv', columns.filter(c => c.key !== 'a
         <UiBadge v-else :tone="payTone[row.paymentStatus as keyof typeof payTone]" dot class="capitalize">{{ row.paymentStatus }}</UiBadge>
       </template>
       <template #cell-actions="{ row }">
-        <div class="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-          <NuxtLink :to="`/sales/${row.id}`"><UiButton size="sm" variant="ghost" :icon="Eye" aria-label="View" /></NuxtLink>
-          <NuxtLink :to="`/sales/${row.id}?print=1`"><UiButton size="sm" variant="ghost" :icon="Printer" aria-label="Reprint" /></NuxtLink>
-        </div>
+        <UiRowActions
+          :label="row.number" :view="`/sales/${row.id}`" remove-kind="void"
+          :remove="row.status !== 'void' && auth.can('sales.void') ? () => voidSale(row) : undefined"
+          :items="rowItems(row)"
+        />
       </template>
     </UiDataTable>
   </div>

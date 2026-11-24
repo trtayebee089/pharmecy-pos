@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCheck, ChevronLeft, ChevronRight, Save, CalendarDays } from 'lucide-vue-next'
+import { CheckCheck, ChevronLeft, ChevronRight, Save, CalendarDays, Eraser, UserRound } from 'lucide-vue-next'
 import type { AttendanceRow, AttendanceStatus, Employee } from '~/types/hr'
 
 definePageMeta({ title: 'Attendance' })
@@ -118,8 +118,8 @@ function shiftMonth(d: number) { cursor.value = new Date(cursor.value.getFullYea
         <p v-if="future" class="border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-700">Attendance cannot be recorded for a future date.</p>
         <div ref="table" class="overflow-x-auto">
           <table class="w-full min-w-[720px] text-sm">
-            <thead><tr class="border-b border-slate-100 bg-slate-50/70"><th class="label h-10 px-4 text-left">Employee</th><th class="label px-3 text-left">Status</th><th class="label px-3 text-left">Check-in</th><th class="label px-3 text-left">Check-out</th></tr></thead>
-            <tbody v-if="loading"><tr v-for="i in 6" :key="i"><td colspan="4" class="px-4 py-3"><div class="skeleton h-8" /></td></tr></tbody>
+            <thead><tr class="border-b border-slate-100 bg-slate-50/70"><th class="label h-10 px-4 text-left">Employee</th><th class="label px-3 text-left">Status</th><th class="label px-3 text-left">Check-in</th><th class="label px-3 text-left">Check-out</th><th class="label px-4 text-right">Actions</th></tr></thead>
+            <tbody v-if="loading"><tr v-for="i in 6" :key="i"><td colspan="5" class="px-4 py-3"><div class="skeleton h-8" /></td></tr></tbody>
             <tbody v-else>
               <tr v-for="r in rows" :key="r.employeeId" class="border-b border-slate-50 hover:bg-brand-50/30">
                 <td class="px-4 py-2.5">
@@ -140,6 +140,12 @@ function shiftMonth(d: number) { cursor.value = new Date(cursor.value.getFullYea
                 </td>
                 <td class="px-3 py-2.5"><input v-model="r.checkIn" type="time" :disabled="future || r.status === 'absent' || r.status === 'leave'" class="h-9 rounded-lg border border-slate-200 px-2 text-sm tabular focus:border-brand-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-300" :aria-label="`Check-in for ${r.name}`" @input="dirty = true"></td>
                 <td class="px-3 py-2.5"><input v-model="r.checkOut" type="time" :disabled="future || r.status === 'absent' || r.status === 'leave'" class="h-9 rounded-lg border border-slate-200 px-2 text-sm tabular focus:border-brand-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-300" :aria-label="`Check-out for ${r.name}`" @input="dirty = true"></td>
+              <td class="px-3 py-2.5">
+                <UiRowActions
+                  :label="r.name" :view="() => { employeeId = r.employeeId; view = 'monthly' }"
+                  :items="[{ label: 'Clear times', icon: Eraser, onClick: () => { r.checkIn = ''; r.checkOut = ''; dirty = true }, hidden: future }, { label: 'Employee record', icon: UserRound, to: '/hr/employees' }]"
+                />
+              </td>
               </tr>
             </tbody>
           </table>

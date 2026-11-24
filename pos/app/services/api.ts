@@ -103,7 +103,7 @@ export function useSalesApi() {
     async complete(payload: {
       warehouseId: number
       customerId: number
-      lines: { productId: number; unitId: number; qty: number; batchId?: number; discount?: number }[]
+      lines: { productId: number; unitId: number; qty: number; batchId?: number; discount?: number; custom?: { name: string; code: string; price: number } }[]
       orderDiscount: number
       payments: PaymentLine[]
     }, idempotencyKey: string): Promise<{ number: string; grandTotal: number; change: number; due: number }> {

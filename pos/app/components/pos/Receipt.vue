@@ -1,31 +1,30 @@
 <script setup lang="ts">
-import type { PaymentLine } from '~/types/domain'
+import type { ReceiptSnapshot } from '~/stores/cart'
 
-defineProps<{ number: string; payments: PaymentLine[]; change: number }>()
-const cart = useCartStore()
+/** 80 mm thermal receipt, rendered from a snapshot so it can be reprinted later. Visible only when printing. */
+defineProps<{ receipt: ReceiptSnapshot }>()
 const auth = useAuthStore()
 </script>
 
 <template>
-  <!-- 80 mm thermal receipt, only visible when printing -->
   <Teleport to="body">
     <div id="print-receipt" class="hidden">
       <div class="receipt">
         <p class="center bold big">Red Pharma</p>
         <p class="center">{{ auth.warehouse?.name }}</p>
-        <p class="center small">{{ number }} · {{ dateTime(new Date().toISOString()) }}</p>
-        <p class="center small">Cashier: {{ auth.user?.name }} · Customer: {{ cart.customer?.name ?? 'Walk-in' }}</p>
+        <p class="center small">{{ receipt.number }} · {{ dateTime(receipt.at) }}</p>
+        <p class="center small">Cashier: {{ auth.user?.name }} · Customer: {{ receipt.customer }}</p>
         <hr>
-        <div v-for="l in cart.lines" :key="l.key" class="row">
-          <span>{{ l.product.name }} {{ l.product.strength }}<br><small>{{ l.qty }} × {{ cart.unitOf(l).label }} @ {{ money(cart.unitOf(l).price, false) }}</small></span>
-          <span>{{ money(cart.lineTotal(l), false) }}</span>
+        <div v-for="(l, i) in receipt.lines" :key="i" class="row">
+          <span>{{ l.name }}<br><small>{{ l.qty }} × {{ l.unitLabel }} @ {{ money(l.unitPrice, false) }}<template v-if="l.batch"> · B:{{ l.batch }}</template></small></span>
+          <span>{{ money(l.total, false) }}</span>
         </div>
         <hr>
-        <div class="row"><span>Subtotal</span><span>{{ money(cart.subtotal, false) }}</span></div>
-        <div v-if="cart.lineDiscounts + cart.orderDiscount" class="row"><span>Discount</span><span>-{{ money(cart.lineDiscounts + cart.orderDiscount, false) }}</span></div>
-        <div class="row bold big"><span>TOTAL</span><span>{{ money(cart.total) }}</span></div>
-        <div v-for="(p, i) in payments" :key="i" class="row"><span>{{ p.method.toUpperCase() }}</span><span>{{ money(p.amount, false) }}</span></div>
-        <div class="row"><span>Change</span><span>{{ money(change, false) }}</span></div>
+        <div class="row"><span>Subtotal</span><span>{{ money(receipt.subtotal, false) }}</span></div>
+        <div v-if="receipt.discount" class="row"><span>Discount</span><span>-{{ money(receipt.discount, false) }}</span></div>
+        <div class="row bold big"><span>TOTAL</span><span>{{ money(receipt.total) }}</span></div>
+        <div v-for="(p, i) in receipt.payments" :key="`p${i}`" class="row"><span>{{ p.method.toUpperCase() }}</span><span>{{ money(p.amount, false) }}</span></div>
+        <div class="row"><span>Change</span><span>{{ money(receipt.change, false) }}</span></div>
         <hr>
         <p class="center small">Medicines once sold are returnable only as per pharmacy policy. Thank you!</p>
       </div>

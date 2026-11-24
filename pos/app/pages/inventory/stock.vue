@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Boxes, PackageX, PackageMinus, CalendarClock, Download, Layers, ClipboardEdit, ArrowRightLeft } from 'lucide-vue-next'
-import type { Column } from '~/types/domain'
+import { Barcode, ShoppingCart } from 'lucide-vue-next'
+import type { Column, RowAction } from '~/types/domain'
 import type { StockRow } from '~/types/inventory'
 
 definePageMeta({ title: 'Stock overview' })
@@ -18,6 +19,14 @@ const columns: Column[] = [
   { key: 'valueAtCost', label: 'Value at cost', align: 'right' },
   { key: 'expiringSoon', label: 'Expiring ≤ 90d', align: 'center' },
   { key: 'status', label: 'Status' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
+]
+const auth = useAuthStore()
+const rowItems = (r: StockRow): RowAction[] => [
+  { label: 'Adjust stock', icon: ClipboardEdit, to: `/inventory/adjustments?reason=correction&product=${r.id}`, hidden: !auth.can('inventory.adjust') },
+  { label: 'Transfer', icon: ArrowRightLeft, to: '/inventory/transfers', hidden: !auth.can('inventory.transfer') },
+  { label: 'Plan purchase order', icon: ShoppingCart, to: '/purchases/orders', hidden: !auth.can('reorder.manage') },
+  { label: 'Print barcode labels', icon: Barcode, to: '/catalog/labels', hidden: !auth.can('products.print_barcode') },
 ]
 const tone = { out: 'danger', low: 'warning', ok: 'success' } as const
 const label = { out: 'Out of stock', low: 'Low', ok: 'In stock' } as const
@@ -27,7 +36,7 @@ const drawer = computed({ get: () => !!selected.value, set: v => { if (!v) selec
 const levelPct = (r: StockRow) => Math.min(100, (r.sellableBase / Math.max(1, r.reorderLevelBase * 3)) * 100)
 
 function exportCsv() {
-  downloadCsv('stock-overview.csv', columns, (result.value?.data ?? []).map(r => ({ ...r, name: `${r.name} ${r.strength ?? ''}`.trim(), status: label[r.status] })))
+  downloadCsv('stock-overview.csv', columns.filter(c => c.key !== 'actions'), (result.value?.data ?? []).map(r => ({ ...r, name: `${r.name} ${r.strength ?? ''}`.trim(), status: label[r.status] })))
 }
 </script>
 
@@ -68,6 +77,9 @@ function exportCsv() {
         <span v-else class="text-slate-300">—</span>
       </template>
       <template #cell-status="{ row }"><UiBadge :tone="tone[row.status as keyof typeof tone]" dot>{{ label[row.status as keyof typeof label] }}</UiBadge></template>
+      <template #cell-actions="{ row }">
+        <UiRowActions :label="row.name" :view="() => (selected = row)" :edit="auth.can('products.edit') ? `/products/${row.id}` : undefined" :items="rowItems(row)" />
+      </template>
     </UiDataTable>
 
     <UiDrawer v-model="drawer" :title="selected ? `${selected.name} ${selected.strength ?? ''}` : ''" :description="selected ? `${selected.manufacturer} · SKU ${selected.sku}` : ''">

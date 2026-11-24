@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Crown, Phone, Mail, MapPin, Users, Wallet, Star, ShoppingBag, CalendarDays } from 'lucide-vue-next'
+import { Crown, Phone, Mail, MapPin, Users, Wallet, Star, ShoppingBag, CalendarDays, Printer } from 'lucide-vue-next'
 import type { CustomerProfile } from '~/types/people'
 
 /** Shared content of the customer drawer and the full customer page. */
@@ -55,6 +55,7 @@ const entryTone = { opening: 'neutral', invoice: 'info', payment: 'success', ret
           <span class="text-xs text-slate-500">{{ dateTime(s.date) }} · {{ s.items }} items</span>
           <UiBadge v-if="s.status === 'void'" tone="neutral" class="ml-auto">Void</UiBadge>
           <span class="ml-auto font-semibold tabular" :class="s.status === 'void' && 'ml-0 text-slate-400 line-through'">{{ money(s.total) }}</span>
+          <UiRowActions :label="s.number" :view="`/sales/${s.id}`" :items="[{ label: 'Print receipt', icon: Printer, to: `/sales/${s.id}?print=1` }]" />
         </li>
         <li v-if="!p.purchases.length" class="py-6 text-center text-sm text-slate-500">No purchases yet.</li>
       </ul>

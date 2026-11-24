@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { Banknote, Landmark, Smartphone, Plus, Pencil, FileText, Star, Printer } from 'lucide-vue-next'
+import { Banknote, Landmark, Smartphone, Plus, FileText, Star, Printer, ArrowRightLeft, Power } from 'lucide-vue-next'
 import type { Account, AccountType, StatementLine } from '~/types/finance'
 import type { DateRange } from '~/types/domain'
 
@@ -61,6 +61,32 @@ function exportStatement() {
   ], lines.value)
 }
 
+// ---- Row actions ----
+const { ask } = useConfirm()
+const canManage = computed(() => auth.can('accounts.view'))
+async function deactivate(a: Account) {
+  const { ok } = await ask({ title: `Deactivate ${a.name}?`, description: 'It disappears from payment and transfer choices. Its history and statement stay available.', confirmLabel: 'Deactivate' })
+  if (!ok) return
+  try { await api.setAccountActive(a.id, false); toast.success('Account deactivated', a.name); load() }
+  catch (e: any) { toast.error('Cannot deactivate', e?.message) }
+}
+async function activate(a: Account) {
+  try { await api.setAccountActive(a.id, true); toast.success('Account activated', a.name); load() }
+  catch (e: any) { toast.error('Could not activate', e?.message) }
+}
+async function makeDefault(a: Account) {
+  try { await api.setDefaultAccount(a.id); toast.success('Default account changed', a.name); load() }
+  catch (e: any) { toast.error('Could not change default', e?.message) }
+}
+function accountActions(a: Account) {
+  return [
+    { label: 'Statement', icon: FileText, onClick: () => openStatement(a) },
+    { label: 'Transfer money', icon: ArrowRightLeft, to: `/finance/transfers?from=${a.id}`, hidden: !auth.can('accounts.transfer') || !a.isActive },
+    { label: 'Set as default', icon: Star, onClick: () => makeDefault(a), hidden: !canManage.value || a.isDefault || !a.isActive },
+    { label: 'Activate', icon: Power, onClick: () => activate(a), hidden: !canManage.value || a.isActive },
+  ]
+}
+
 // ---- Create / edit ----
 const formOpen = ref(false)
 const form = ref<Partial<Account>>({})
@@ -115,9 +141,14 @@ async function save() {
         <p class="relative mt-4 font-semibold text-ink">{{ a.name }}</p>
         <p class="relative text-xs text-slate-500">{{ typeLabel[a.type] }} · {{ a.code }} · {{ a.accountNo }}</p>
         <p class="relative mt-3 font-display text-2xl font-extrabold tracking-tight tabular" :data-balance="a.balance">{{ money(0) }}</p>
-        <div class="relative mt-4 flex gap-2">
-          <UiButton size="sm" :icon="FileText" @click="openStatement(a)">Statement</UiButton>
-          <UiButton size="sm" variant="ghost" :icon="Pencil" aria-label="Edit account" @click="startForm(a)" />
+        <div class="relative mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <span class="label">Actions</span>
+          <UiRowActions
+            :label="a.name" :view="() => openStatement(a)"
+            :edit="canManage ? () => startForm(a) : undefined"
+            :remove="canManage && a.isActive && !a.isDefault ? () => deactivate(a) : undefined"
+            :items="accountActions(a)"
+          />
         </div>
       </div>
     </div>

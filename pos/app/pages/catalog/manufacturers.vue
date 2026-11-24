@@ -1,10 +1,23 @@
 <script setup lang="ts">
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import { Power, Pill, ShoppingCart } from 'lucide-vue-next'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
 import type { Manufacturer } from '~/types/inventory'
 
 definePageMeta({ title: 'Manufacturers' })
 
 const resource = useResource<Manufacturer>('catalog/manufacturers', async () => (await import('~/mocks/inventory')).manufacturers)
+const auth = useAuthStore()
+const toast = useToast()
+const crud = ref<{ reload: () => void } | null>(null)
+async function toggleActive(r: Manufacturer) {
+  try { await resource.save({ id: r.id, isActive: !r.isActive } as Partial<Manufacturer>); toast.success(r.isActive ? 'Manufacturer deactivated' : 'Manufacturer activated', r.name); crud.value?.reload() }
+  catch (e: any) { toast.error('Not changed', e?.message) }
+}
+const rowActions = (r: Manufacturer): RowAction[] => [
+  { label: 'View products', icon: Pill, to: `/products?search=${encodeURIComponent(r.name)}` },
+  { label: 'Plan purchase order', icon: ShoppingCart, to: '/purchases/orders', hidden: !auth.can('reorder.manage') },
+  { label: r.isActive ? 'Deactivate' : 'Activate', icon: Power, onClick: () => toggleActive(r), hidden: !auth.can('catalog.manage') },
+]
 
 const columns: CrudColumn[] = [
   { key: 'name', label: 'Manufacturer' },
@@ -24,7 +37,7 @@ const fields: FieldDef[] = [
 <template>
   <UiCrudPage
     title="Manufacturers" description="Pharmaceutical companies. Legacy “brands” are imported here."
-    :resource="resource" :columns="columns" :fields="fields" noun="Manufacturer" create-permission="catalog.manage"
+    :resource="resource" :columns="columns" :fields="fields" ref="crud" noun="Manufacturer" create-permission="catalog.manage" :row-actions="rowActions"
     :defaults="() => ({ name: '', shortName: '', country: 'Bangladesh', isActive: true, products: 0 })" :item-label="r => r.name"
   >
     <template #cell-name="{ row }">

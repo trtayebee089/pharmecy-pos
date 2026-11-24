@@ -1,11 +1,22 @@
 <script setup lang="ts">
-import { CornerDownRight, FolderTree } from 'lucide-vue-next'
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import { CornerDownRight, FolderTree, Power, Pill } from 'lucide-vue-next'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
 import type { CategoryRow } from '~/types/inventory'
 
 definePageMeta({ title: 'Categories' })
 
 const resource = useResource<CategoryRow>('catalog/categories', async () => (await import('~/mocks/inventory')).categories)
+const auth = useAuthStore()
+const toast = useToast()
+const crud = ref<{ reload: () => void } | null>(null)
+async function toggleActive(r: CategoryRow) {
+  try { await resource.save({ id: r.id, isActive: !r.isActive } as Partial<CategoryRow>); toast.success(r.isActive ? 'Category deactivated' : 'Category activated', r.name); crud.value?.reload() }
+  catch (e: any) { toast.error('Not changed', e?.message) }
+}
+const rowActions = (r: CategoryRow): RowAction[] => [
+  { label: 'View products', icon: Pill, to: `/products?search=${encodeURIComponent(r.name)}` },
+  { label: r.isActive ? 'Deactivate' : 'Activate', icon: Power, onClick: () => toggleActive(r), hidden: !auth.can('catalog.manage') },
+]
 
 // Parent options come from the current top-level categories.
 const parents = ref<{ value: number; label: string }[]>([])
@@ -29,7 +40,6 @@ const fields = computed<FieldDef[]>(() => [
 ])
 
 /** Keep the display path in sync with the chosen parent before saving (the API derives it too). */
-const crud = ref<{ reload: () => void } | null>(null)
 async function onSaved(row: CategoryRow) {
   const parent = parents.value.find(p => p.value === row.parentId)
   const path = parent ? `${parent.label} › ${row.name}` : row.name
@@ -42,7 +52,7 @@ async function onSaved(row: CategoryRow) {
   <UiCrudPage
     ref="crud"
     title="Categories" description="Shop and therapeutic grouping for products and reports (two levels)."
-    :resource="resource" :columns="columns" :fields="fields" noun="Category" create-permission="catalog.manage"
+    :resource="resource" :columns="columns" :fields="fields" noun="Category" create-permission="catalog.manage" :row-actions="rowActions"
     :defaults="() => ({ name: '', parentId: null, sortOrder: 1, isActive: true, products: 0, path: '' })" :item-label="r => r.path || r.name"
     @saved="onSaved"
   >

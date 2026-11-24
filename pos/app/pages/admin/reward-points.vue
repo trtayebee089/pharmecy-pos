@@ -42,9 +42,12 @@ async function save() {
   if (c.value.maxRedeemPercent < 0 || c.value.maxRedeemPercent > 100) errors.value.maxPct = 'Between 0 and 100'
   if (Object.keys(errors.value).length) { toast.error('Check the highlighted fields'); return }
   saving.value = true
-  await api.saveRewards(c.value)
-  saving.value = false
-  toast.success('Reward point settings saved', 'New rules apply to sales from now on; past points are unchanged.')
+  try {
+    await api.saveRewards(c.value)
+    toast.success('Reward point settings saved', 'New rules apply to sales from now on; past points are unchanged.')
+  }
+  catch (e: any) { toast.error('Settings not saved', e?.message) }
+  finally { saving.value = false }
 }
 </script>
 

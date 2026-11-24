@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { ArrowRightLeft, ArrowRight, PackageCheck, Ban, Trash2, Truck, Eye } from 'lucide-vue-next'
-import type { Column, Product } from '~/types/domain'
+import { ArrowRightLeft, ArrowRight, PackageCheck, Ban, Trash2, Truck, Printer } from 'lucide-vue-next'
+import type { Column, Product, RowAction } from '~/types/domain'
 import type { TransferLine, TransferSummary } from '~/types/inventory'
 
 definePageMeta({ title: 'Transfers' })
@@ -18,7 +18,7 @@ const columns: Column[] = [
   { key: 'qty', label: 'Pieces', align: 'right' },
   { key: 'status', label: 'Status' },
   { key: 'createdBy', label: 'By' },
-  { key: 'actions', label: '', align: 'right' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
 ]
 const tone = { draft: 'info', sent: 'warning', received: 'success', void: 'neutral' } as const
 const statusLabel = { draft: 'Draft', sent: 'In transit', received: 'Received', void: 'Void' } as const
@@ -44,6 +44,12 @@ async function voidTransfer(t: TransferSummary) {
   detail.value = null
   reload()
 }
+
+function printTransfer(t: TransferSummary) { detail.value = t; nextTick(() => setTimeout(() => window.print(), 500)) }
+const rowItems = (t: TransferSummary): RowAction[] => [
+  { label: 'Receive goods', icon: PackageCheck, onClick: () => receive(t), hidden: t.status !== 'sent' || !auth.can('inventory.transfer') },
+  { label: 'Print transfer note', icon: Printer, onClick: () => printTransfer(t) },
+]
 
 // ---- New transfer ----
 interface Draft { key: string; product: Product; batchId: number; qty: number }
@@ -111,10 +117,13 @@ async function send() {
       <template #cell-status="{ row }"><UiBadge :tone="tone[row.status as keyof typeof tone]" dot>{{ statusLabel[row.status as keyof typeof statusLabel] }}</UiBadge></template>
       <template #cell-createdBy="{ row }"><span class="text-slate-500">{{ row.createdBy }}</span></template>
       <template #cell-actions="{ row }">
-        <div class="flex justify-end gap-1">
-          <UiButton v-if="row.status === 'sent'" size="sm" variant="soft" :icon="PackageCheck" @click="receive(row)">Receive</UiButton>
-          <UiButton size="sm" variant="ghost" :icon="Eye" :aria-label="`View ${row.number}`" @click="detail = row" />
-        </div>
+        <UiRowActions
+          :label="row.number" :view="() => (detail = row)" remove-kind="void"
+          :remove="(row.status === 'draft' || row.status === 'sent') && auth.can('inventory.transfer') ? () => voidTransfer(row) : undefined"
+          :items="rowItems(row)"
+        >
+          <UiButton v-if="row.status === 'sent' && auth.can('inventory.transfer')" size="sm" variant="soft" :icon="PackageCheck" @click="receive(row)">Receive</UiButton>
+        </UiRowActions>
       </template>
     </UiDataTable>
 

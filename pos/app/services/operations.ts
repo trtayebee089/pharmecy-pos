@@ -166,3 +166,89 @@ export function useAdminApi() {
     },
   }
 }
+
+/**
+ * Row-level document actions used by list tables (void, SMS, deactivate, duplicate).
+ * Voids keep the record and reverse its stock/ledger effects server-side.
+ */
+export function useRowActionsApi() {
+  const api = useApi()
+  const key = () => crypto.randomUUID()
+  async function mockWrite<T>(fn?: () => T | Promise<T>): Promise<T | undefined> {
+    await mockDelay(450)
+    return fn ? await fn() : undefined
+  }
+  return {
+    async voidSale(id: number, reason: string) {
+      if (api.useMocks) { await mockWrite(async () => { const s = (await seed()).sales.find(x => x.id === id); if (s) { s.status = 'void'; s.paidTotal = 0; s.dueTotal = 0 } }); return }
+      return api.post(`/sales/${id}/void`, { reason }, key())
+    },
+    async smsReceipt(id: number) {
+      if (api.useMocks) { await mockWrite(); return }
+      return api.post(`/sales/${id}/sms-receipt`, {}, key())
+    },
+    async voidPurchase(id: number, reason: string) {
+      if (api.useMocks) { await mockWrite(async () => { const p = (await seed()).purchases.find(x => x.id === id); if (p) p.status = 'void' }); return }
+      return api.post(`/purchases/${id}/void`, { reason }, key())
+    },
+    async duplicatePurchase(id: number): Promise<{ id: number; number: string }> {
+      if (api.useMocks) {
+        return (await mockWrite(async () => {
+          const { purchases } = await seed()
+          const p = purchases.find(x => x.id === id)!
+          const copy = { ...p, id: Math.max(...purchases.map(x => x.id)) + 1, status: 'draft' as const, paidTotal: 0, dueTotal: p.grandTotal, date: new Date().toISOString().slice(0, 10) }
+          copy.number = `P-DHK1-2026-${String(copy.id).padStart(5, '0')}`
+          purchases.unshift(copy)
+          return { id: copy.id, number: copy.number }
+        }))!
+      }
+      return api.post(`/purchases/${id}/duplicate`, {}, key())
+    },
+    async voidDocument(kind: 'sale-returns' | 'purchase-returns' | 'adjustments' | 'transfers', id: number, reason: string) {
+      if (api.useMocks) {
+        await mockWrite(async () => {
+          if (kind === 'adjustments') { const a = (await extra()).adjustments.find(x => x.id === id); if (a) a.status = 'void' }
+        })
+        return
+      }
+      return api.post(`/${kind}/${id}/void`, { reason }, key())
+    },
+    /** Products and customers are deactivated, never hard-deleted (history keeps referencing them). */
+    async deactivateProduct(id: number) {
+      if (api.useMocks) { await mockWrite(async () => { const p = (await seed()).products.find(x => x.id === id); if (p) p.isActive = false }); return }
+      return api.post(`/catalog/products/${id}/deactivate`, {}, key())
+    },
+    async duplicateProduct(id: number): Promise<{ id: number }> {
+      if (api.useMocks) {
+        return (await mockWrite(async () => {
+          const { products } = await seed()
+          const p = products.find(x => x.id === id)!
+          const copy = { ...structuredClone(p), id: Math.max(...products.map(x => x.id)) + 1, sku: `${p.sku}-C`, name: `${p.name} (copy)`, batches: [], stockBase: 0 }
+          products.push(copy)
+          return { id: copy.id }
+        }))!
+      }
+      return api.post(`/catalog/products/${id}/duplicate`, {}, key())
+    },
+    /** Profile fields only; balances, points and membership come from ledgers and cannot be edited here. */
+    async updateCustomer(id: number, input: { name: string; phone: string | null; group: string | null }) {
+      if (api.useMocks) {
+        await mockWrite(async () => {
+          const { customers } = await seed()
+          if (input.phone && customers.some(x => x.id !== id && x.phone === input.phone)) throw new ApiError('The given data was invalid.', 422, { phone: ['Another customer already uses this phone.'] })
+          const c = customers.find(x => x.id === id)
+          if (c) Object.assign(c, input)
+        })
+        return
+      }
+      return api.put(`/customers/${id}`, input)
+    },
+    async deactivateCustomer(id: number) {
+      if (api.useMocks) {
+        await mockWrite(async () => { const { customers } = await seed(); const i = customers.findIndex(x => x.id === id); if (i >= 0) customers.splice(i, 1) })
+        return
+      }
+      return api.post(`/customers/${id}/deactivate`, {}, key())
+    },
+  }
+}

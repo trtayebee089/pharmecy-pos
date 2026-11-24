@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Download, Printer, Search, ChevronLeft, ChevronRight } from 'lucide-vue-next'
-import type { DateRange, ReportResult } from '~/types/domain'
+import type { DateRange, ReportResult, RowAction } from '~/types/domain'
 
 /**
  * Standard report layout: date range + filters → KPI strip, optional trend
@@ -12,11 +12,15 @@ const props = defineProps<{
   description?: string
   filters?: { key: string; label: string; options: { value: string; label: string }[] }[]
   load: (params: { range: DateRange; filters: Record<string, string> }) => Promise<ReportResult>
+  /** When rows are documents: link View to the document and add extra actions. Return null for no actions on that row. */
+  rowActions?: (row: Record<string, any>) => { view?: string | (() => void); items?: RowAction[] } | null
 }>()
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const range = ref<DateRange>({ from: iso(new Date(Date.now() - 29 * 864e5)), to: iso(new Date()) })
-const filterValues = ref<Record<string, string>>(Object.fromEntries((props.filters ?? []).map(f => [f.key, ''])))
+// Filters can be preset from the URL, e.g. /reports/customer?customer=12
+const route = useRoute()
+const filterValues = ref<Record<string, string>>(Object.fromEntries((props.filters ?? []).map(f => [f.key, typeof route.query[f.key] === 'string' ? String(route.query[f.key]) : ''])))
 const data = ref<ReportResult | null>(null)
 const loading = ref(false)
 const q = ref('')
@@ -111,12 +115,16 @@ function exportCsv() {
           <thead>
             <tr class="border-b border-slate-100 bg-slate-50/70">
               <th v-for="c in data?.columns ?? []" :key="c.key" class="label h-10 px-4 whitespace-nowrap" :class="align(c.align)">{{ c.label }}</th>
+              <th v-if="rowActions" class="label h-10 px-4 text-right" data-noprint>Actions</th>
             </tr>
           </thead>
           <tbody v-if="!data"><tr v-for="i in 6" :key="i"><td class="px-4 py-3"><div class="skeleton h-4 w-full" /></td></tr></tbody>
           <tbody v-else>
             <tr v-for="(r, i) in pageRows" :key="i" class="border-b border-slate-50 transition-colors hover:bg-brand-50/40">
               <td v-for="c in data.columns" :key="c.key" class="px-4 py-2.5 whitespace-nowrap" :class="align(c.align)"><UiCell :value="r[c.key]" :column="c" /></td>
+              <td v-if="rowActions" class="px-3 py-1" data-noprint>
+                <UiRowActions v-if="rowActions(r)" :view="rowActions(r)?.view" :items="rowActions(r)?.items ?? []" />
+              </td>
             </tr>
           </tbody>
           <tfoot v-if="data?.totals">
@@ -125,6 +133,7 @@ function exportCsv() {
                 <template v-if="ci === 0">Total</template>
                 <UiCell v-else-if="data.totals[c.key] !== undefined" :value="data.totals[c.key]" :column="c" />
               </td>
+              <td v-if="rowActions" />
             </tr>
           </tfoot>
         </table>

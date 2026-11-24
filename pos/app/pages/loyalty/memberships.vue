@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { Crown, Check, Pencil, Users, Search, Plus, X, CalendarClock } from 'lucide-vue-next'
+import { Crown, Check, Users, Search, Plus, X, CalendarClock, RefreshCw, ArrowUpDown, Pause, Play, Ban } from 'lucide-vue-next'
 import type { Member, MembershipPlan } from '~/types/people'
 
 definePageMeta({ title: 'Membership plans' })
@@ -64,6 +64,68 @@ const filteredMembers = computed(() => members.value.filter(m =>
   `${m.customer} ${m.phone}`.toLowerCase().includes(q.value.toLowerCase()) && (planFilter.value === 'all' || m.plan === planFilter.value)))
 const renewalsSoon = computed(() => members.value.filter(m => m.status === 'active' && daysLeft(m) <= 30).length)
 const planTone = { Silver: 'neutral', Gold: 'warning', Platinum: 'violet' } as const
+
+// ---- Row actions ----
+const { ask } = useConfirm()
+const canManage = computed(() => auth.can('loyalty.manage'))
+const viewPlan = ref<MembershipPlan | null>(null)
+const viewPlanOpen = ref(false)
+async function togglePlan(p: MembershipPlan) {
+  const saved = await api.savePlan({ ...p, isActive: !p.isActive })
+  Object.assign(p, saved)
+  toast.success(p.isActive ? 'Plan open for new members' : 'Plan paused', p.name)
+}
+async function removePlan(p: MembershipPlan) {
+  const { ok } = await ask({ title: `Delete ${p.name}?`, description: 'Only plans without members can be deleted.', confirmLabel: 'Delete plan' })
+  if (!ok) return
+  try { await api.deletePlan(p.id); plans.value = plans.value.filter(x => x.id !== p.id); toast.success('Plan deleted', p.name) }
+  catch (e: any) { toast.error('Could not delete', e?.message) }
+}
+function planActions(p: MembershipPlan) {
+  return [{ label: p.isActive ? 'Pause new joins' : 'Open for new members', icon: p.isActive ? Pause : Play, onClick: () => togglePlan(p), hidden: !canManage.value }]
+}
+
+async function renew(m: Member) {
+  const { ok } = await ask({ title: `Renew ${m.customer} (${m.plan})?`, description: 'Extends the membership by the plan duration from its current end date. A joining fee, if set, is collected at the counter.', confirmLabel: 'Renew', tone: 'primary' })
+  if (!ok) return
+  try {
+    const r = await api.renewMember(m.id, crypto.randomUUID())
+    m.endsAt = r.endsAt
+    m.status = 'active'
+    toast.success('Membership renewed', `${m.customer} · until ${date(r.endsAt)}`)
+  }
+  catch (e: any) { toast.error('Renewal failed', e?.message) }
+}
+const planOpen = ref(false)
+const planTarget = ref<Member | null>(null)
+const newPlan = ref<Member['plan']>('Silver')
+const planReason = ref('')
+function startChangePlan(m: Member) { planTarget.value = m; newPlan.value = m.plan; planReason.value = ''; planOpen.value = true }
+async function changePlan() {
+  const m = planTarget.value
+  if (!m || newPlan.value === m.plan || !planReason.value.trim()) return
+  try {
+    await api.changeMemberPlan(m.id, newPlan.value, planReason.value)
+    toast.success('Plan changed', `${m.customer}: ${m.plan} → ${newPlan.value}`)
+    m.plan = newPlan.value
+    m.source = 'manual'
+    planOpen.value = false
+  }
+  catch (e: any) { toast.error('Could not change plan', e?.message) }
+}
+async function cancelMembership(m: Member) {
+  const { ok, reason } = await ask({ title: `Cancel membership of ${m.customer}?`, description: 'Benefits stop immediately. The record is kept.', confirmLabel: 'Cancel membership', requireReason: true })
+  if (!ok) return
+  try { await api.cancelMember(m.id, reason); m.status = 'cancelled'; toast.success('Membership cancelled', m.customer) }
+  catch (e: any) { toast.error('Could not cancel', e?.message) }
+}
+function memberActions(m: Member) {
+  return [
+    { label: 'Renew', icon: RefreshCw, onClick: () => renew(m), hidden: !canManage.value || m.status === 'cancelled' },
+    { label: 'Change plan', icon: ArrowUpDown, onClick: () => startChangePlan(m), hidden: !canManage.value || m.status !== 'active' },
+    { label: 'Cancel membership', icon: Ban, onClick: () => cancelMembership(m), danger: true, hidden: !canManage.value || m.status !== 'active' },
+  ]
+}
 </script>
 
 <template>
@@ -99,7 +161,15 @@ const planTone = { Silver: 'neutral', Gold: 'warning', Platinum: 'violet' } as c
             <ul class="space-y-2">
               <li v-for="b in p.benefits" :key="b" class="flex items-start gap-2 text-sm text-slate-600"><Check class="mt-0.5 size-4 shrink-0 text-brand-600" />{{ b }}</li>
             </ul>
-            <UiButton v-if="auth.can('loyalty.manage')" class="mt-5" block :icon="Pencil" @click="edit(p)">Edit plan</UiButton>
+            <div class="mt-5 flex items-center justify-between border-t border-slate-100 pt-3">
+              <span class="label">Actions</span>
+              <UiRowActions
+                :label="p.name" :view="() => { viewPlan = p; viewPlanOpen = true }"
+                :edit="canManage ? () => edit(p) : undefined"
+                :remove="canManage && p.members === 0 ? () => removePlan(p) : undefined"
+                :items="planActions(p)"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -113,7 +183,7 @@ const planTone = { Silver: 'neutral', Gold: 'warning', Platinum: 'violet' } as c
       </div>
       <div class="overflow-x-auto">
         <table class="w-full min-w-[640px] text-sm">
-          <thead><tr class="border-b border-slate-100 bg-slate-50/70"><th class="label h-10 px-4 text-left">Member</th><th class="label text-left">Plan</th><th class="label text-left">Started</th><th class="label text-left">Ends</th><th class="label text-left">Source</th><th class="label px-4 text-left">Status</th></tr></thead>
+          <thead><tr class="border-b border-slate-100 bg-slate-50/70"><th class="label h-10 px-4 text-left">Member</th><th class="label text-left">Plan</th><th class="label text-left">Started</th><th class="label text-left">Ends</th><th class="label text-left">Source</th><th class="label px-4 text-left">Status</th><th class="label px-4 text-right">Actions</th></tr></thead>
           <tbody>
             <tr v-for="m in filteredMembers" :key="m.id" class="border-b border-slate-50 hover:bg-brand-50/40">
               <td class="px-4 py-3"><NuxtLink :to="`/customers/${m.id}`" class="font-semibold text-ink hover:text-brand-700 hover:underline">{{ m.customer }}</NuxtLink><p class="text-xs text-slate-500 tabular">{{ m.phone }}</p></td>
@@ -122,6 +192,7 @@ const planTone = { Silver: 'neutral', Gold: 'warning', Platinum: 'violet' } as c
               <td :class="m.status === 'active' && daysLeft(m) <= 30 ? 'font-semibold text-amber-600' : 'text-slate-600'">{{ date(m.endsAt) }}<span v-if="m.status === 'active' && daysLeft(m) <= 30" class="ml-1 text-xs">({{ daysLeft(m) }}d)</span></td>
               <td class="capitalize text-slate-500">{{ m.source }}</td>
               <td class="px-4"><UiBadge :tone="m.status === 'active' ? 'success' : 'neutral'" dot class="capitalize">{{ m.status }}</UiBadge></td>
+              <td class="px-3"><UiRowActions :label="m.customer" :view="`/customers/${m.id}`" :items="memberActions(m)" /></td>
             </tr>
           </tbody>
         </table>
@@ -129,7 +200,31 @@ const planTone = { Silver: 'neutral', Gold: 'warning', Platinum: 'violet' } as c
       </div>
     </div>
 
-    <UiModal v-model="editOpen" :title="form ? `Edit ${form.name}` : ''" description="Changes apply to new joins and renewals; current terms are honoured until they end." size="lg" :dismissible="!saving">
+    <UiDrawer v-model="viewPlanOpen" :title="viewPlan?.name" :description="viewPlan ? `${viewPlan.code} plan · ${viewPlan.members} members` : ''" width="md">
+      <dl v-if="viewPlan" class="divide-y divide-slate-100 text-sm">
+        <div v-for="[k, v] in [['Qualifying spend', `${money(viewPlan.minAnnualSpend)} / year`], ['Joining fee', viewPlan.fee ? money(viewPlan.fee) : 'None'], ['Discount', `${viewPlan.discountPct}%`], ['Points', `${viewPlan.pointsMultiplier}×`], ['Duration', `${viewPlan.durationMonths} months`], ['New members', viewPlan.isActive ? 'Open' : 'Paused']]" :key="k" data-stagger class="flex justify-between gap-6 py-3"><dt class="text-slate-500">{{ k }}</dt><dd class="font-medium">{{ v }}</dd></div>
+      </dl>
+      <ul v-if="viewPlan" class="mt-4 space-y-2">
+        <li v-for="b in viewPlan.benefits" :key="b" class="flex items-start gap-2 text-sm text-slate-600"><Check class="mt-0.5 size-4 shrink-0 text-brand-600" />{{ b }}</li>
+      </ul>
+      <template #footer>
+        <UiButton variant="ghost" @click="viewPlanOpen = false">Close</UiButton>
+        <UiButton v-if="canManage && viewPlan" variant="primary" @click="viewPlanOpen = false; edit(viewPlan!)">Edit plan</UiButton>
+      </template>
+    </UiDrawer>
+
+    <UiModal v-model="planOpen" :title="planTarget ? `Change plan · ${planTarget.customer}` : ''" description="Takes effect immediately; the end date is unchanged." size="sm">
+      <div class="space-y-4">
+        <UiSelect v-model="newPlan" label="New plan" :options="plans.map(p => ({ value: p.code, label: p.name }))" />
+        <UiInput v-model="planReason" label="Reason (required)" />
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" @click="planOpen = false">Cancel</UiButton>
+        <UiButton variant="primary" :disabled="!planTarget || newPlan === planTarget.plan || !planReason.trim()" @click="changePlan">Change plan</UiButton>
+      </template>
+    </UiModal>
+
+    <UiModal v-model="editOpen":title="form ? `Edit ${form.name}` : ''" description="Changes apply to new joins and renewals; current terms are honoured until they end." size="lg" :dismissible="!saving">
       <div v-if="form" class="grid gap-4 sm:grid-cols-2">
         <UiInput v-model="form.name" label="Plan name" />
         <UiInput v-model.number="form.minAnnualSpend" type="number" label="Qualifying annual spend (৳)" />

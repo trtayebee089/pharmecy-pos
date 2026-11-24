@@ -8,6 +8,21 @@ export interface CartLine {
   qty: number
   discountPct: number
   batchId?: number // cashier override (non-expired only)
+  /** Free-text item not in the catalogue (legacy "custom product"); no stock, no batch. */
+  custom?: { name: string; code: string }
+}
+
+/** Snapshot of the last completed sale, for "Print last receipt". */
+export interface ReceiptSnapshot {
+  number: string
+  at: string
+  customer: string
+  lines: { name: string; qty: number; unitLabel: string; unitPrice: number; total: number; batch?: string }[]
+  subtotal: number
+  discount: number
+  total: number
+  payments: PaymentLine[]
+  change: number
 }
 
 export interface Allocation { batchId: number; batchNo: string; expiryDate: string; qtyBase: number }
@@ -23,6 +38,7 @@ export const useCartStore = defineStore('cart', {
     customer: null as Customer | null,
     orderDiscount: 0, // amount in BDT
     held: [] as { id: string; at: string; lines: CartLine[]; customer: Customer | null; orderDiscount: number }[],
+    lastReceipt: null as ReceiptSnapshot | null,
   }),
   getters: {
     unitOf: () => (l: CartLine) => l.product.units.find(u => u.id === l.unitId) ?? l.product.units[0]!,
@@ -32,6 +48,7 @@ export const useCartStore = defineStore('cart', {
     /** FEFO across sellable batches, or the override batch first. */
     allocation(): (l: CartLine) => { parts: Allocation[]; short: number } {
       return (l) => {
+        if (l.custom) return { parts: [], short: 0 }
         const today = new Date().toISOString().slice(0, 10)
         let need = this.qtyBase(l)
         const sellable = l.product.batches.filter(b => b.expiryDate >= today)
@@ -67,6 +84,26 @@ export const useCartStore = defineStore('cart', {
       this.lines.unshift({ key: `${product.id}-${unit}-${Date.now()}`, product, unitId: unit, qty: 1, discountPct: 0 })
       return 'added'
     },
+    /** Adds a free-text item at a typed price (no stock movement; needs the pos.custom_item permission). */
+    addCustom(name: string, code: string, price: number, qty: number) {
+      const id = -Date.now()
+      const product: Product = {
+        id, sku: code || 'CUSTOM', name, strength: null, generic: null, manufacturer: 'Custom item', dosageForm: 'Custom', category: 'Custom',
+        requiresPrescription: false, isActive: true, reorderLevelBase: 0,
+        units: [{ id, code: 'piece', label: 'Piece', factor: 1, price, isSaleDefault: true }], batches: [], stockBase: Number.MAX_SAFE_INTEGER,
+      }
+      this.lines.unshift({ key: `custom-${-id}`, product, unitId: id, qty, discountPct: 0, custom: { name, code } })
+    },
+    snapshot(number: string, payments: PaymentLine[], change: number): ReceiptSnapshot {
+      return {
+        number, at: new Date().toISOString(), customer: this.customer?.name ?? 'Walk-in customer',
+        lines: this.lines.map(l => ({
+          name: `${l.product.name}${l.product.strength ? ` ${l.product.strength}` : ''}`, qty: l.qty, unitLabel: this.unitOf(l).label,
+          unitPrice: this.unitOf(l).price, total: this.lineTotal(l), batch: this.allocation(l).parts.map(p => p.batchNo).join('+') || undefined,
+        })),
+        subtotal: this.subtotal, discount: this.lineDiscounts + this.orderDiscount, total: this.total, payments: structuredClone(toRaw(payments)), change,
+      }
+    },
     remove(key: string) { this.lines = this.lines.filter(l => l.key !== key) },
     clear() { this.lines = []; this.customer = null; this.orderDiscount = 0 },
     hold() {
@@ -85,7 +122,9 @@ export const useCartStore = defineStore('cart', {
       return {
         warehouseId,
         customerId: this.customer?.id ?? 1,
-        lines: this.lines.map(l => ({ productId: l.product.id, unitId: l.unitId, qty: l.qty, batchId: l.batchId, discount: l.discountPct })),
+        lines: this.lines.map(l => l.custom
+          ? { productId: 0, unitId: 0, qty: l.qty, discount: l.discountPct, custom: { ...l.custom, price: this.unitOf(l).price } }
+          : { productId: l.product.id, unitId: l.unitId, qty: l.qty, batchId: l.batchId, discount: l.discountPct }),
         orderDiscount: this.orderDiscount,
         payments,
       }

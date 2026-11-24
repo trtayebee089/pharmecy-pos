@@ -1,8 +1,23 @@
 <script setup lang="ts">
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import { Phone, Kanban, UserCheck, UserX } from 'lucide-vue-next'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
+import type { Rider } from '~/types/orders'
 
 definePageMeta({ title: 'Riders' })
 const resource = useRidersResource()
+const toast = useToast()
+const auth = useAuthStore()
+const crud = ref<{ reload: () => void } | null>(null)
+async function setStatus(r: Rider, status: Rider['status']) {
+  try { await resource.save({ id: r.id, status }); toast.success(`${r.name} is now ${status.replace('_', ' ')}`); crud.value?.reload() }
+  catch (e: any) { toast.error('Status not changed', e?.message) }
+}
+const rowActions = (r: Rider): RowAction[] => [
+  { label: `Call ${r.phone}`, icon: Phone, onClick: () => { window.location.href = `tel:${r.phone}` } },
+  { label: 'Open fulfilment board', icon: Kanban, to: '/delivery' },
+  { label: 'Mark active', icon: UserCheck, onClick: () => setStatus(r, 'active'), hidden: r.status === 'active' || !auth.can('riders.manage') },
+  { label: 'Mark on leave', icon: UserX, onClick: () => setStatus(r, 'on_leave'), hidden: r.status !== 'active' || !auth.can('riders.manage') },
+]
 
 const columns: CrudColumn[] = [
   { key: 'name', label: 'Rider' },
@@ -22,7 +37,7 @@ const fields: FieldDef[] = [
 <template>
   <UiCrudPage
     title="Riders" description="Own delivery riders. Only active riders can be assigned to orders; phone numbers are unique."
-    :resource="resource" :columns="columns" :fields="fields" noun="Rider" create-permission="riders.manage" :deletable="false"
+    :resource="resource" :columns="columns" :fields="fields" ref="crud" noun="Rider" create-permission="riders.manage" :row-actions="rowActions"
     :segments="{ key: 'status', options: [{ value: 'active', label: 'Active' }, { value: 'on_leave', label: 'On leave' }, { value: 'inactive', label: 'Inactive' }] }"
     :defaults="() => ({ name: '', phone: '', nid: '', status: 'active' as const, assignedOrders: 0 })" :item-label="r => r.name"
   >

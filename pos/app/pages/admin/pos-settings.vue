@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { Save, ScanBarcode, CreditCard, ReceiptText, Printer, Plus, Pencil, Trash2, Zap, Cable, Globe, Monitor, CheckCircle2, KeyRound } from 'lucide-vue-next'
+import { Save, ScanBarcode, CreditCard, LayoutGrid, Rows3, Check, ReceiptText, Printer, Plus, Pencil, Trash2, Zap, Cable, Globe, Monitor, CheckCircle2, KeyRound } from 'lucide-vue-next'
 import type { PosConfig, PrinterProfile } from '~/services/settings'
 
 /** Legacy "POS Setting" (setting/pos_setting) with a proper printer setup. */
@@ -36,11 +36,15 @@ async function save() {
   if (c.value.productsPerPage < 6 || c.value.productsPerPage > 100) { toast.error('Products per page must be between 6 and 100'); tab.value = 'counter'; return }
   if (!c.value.paymentMethods.some(p => p.enabled && p.code === 'cash')) { toast.error('Cash must stay enabled', 'The counter needs at least cash payments.'); tab.value = 'payments'; return }
   saving.value = true
-  await api.savePos(c.value, printNodeKey.value || undefined)
-  if (printNodeKey.value) { c.value.printNodeConfigured = true; printNodeKey.value = '' }
-  saving.value = false
-  dirty.value = false
-  toast.success('POS settings saved', 'Counters pick up the change on their next sale.')
+  try {
+    await api.savePos(c.value, printNodeKey.value || undefined)
+    useState<'grid' | 'classic'>('pos-layout').value = c.value.layout
+    if (printNodeKey.value) { c.value.printNodeConfigured = true; printNodeKey.value = '' }
+    dirty.value = false
+    toast.success('POS settings saved', 'Counters pick up the change on their next sale.')
+  }
+  catch (e: any) { toast.error('Settings not saved', e?.message) }
+  finally { saving.value = false }
 }
 
 // ---- Printers ----
@@ -120,6 +124,47 @@ watch(() => c.value?.invoice.format, () => preview.value && !prefersReducedMotio
               <UiSelect v-model="c.defaultCustomerId" label="Default customer" :options="customers" />
               <UiSelect v-model="c.defaultWarehouseId" label="Default warehouse" :options="(auth.user?.warehouses ?? []).map(w => ({ value: w.id, label: w.name }))" />
               <UiSelect v-model="c.defaultBillerId" label="Default biller" :options="billers" hint="Billing identity printed on the invoice" />
+            </div>
+          </UiSection>
+          <UiSection title="POS screen layout" description="Applies to every counter. Cashiers see the chosen layout the next time they open the POS." :icon="LayoutGrid">
+            <template #actions>
+              <a :href="`/pos?layout=${c.layout}`" target="_blank" rel="noopener"><UiButton size="sm" variant="soft">Preview {{ c.layout }}</UiButton></a>
+            </template>
+            <div class="grid gap-4 md:grid-cols-2">
+              <button
+                v-for="opt in ([
+                  { value: 'grid', title: 'Grid', icon: LayoutGrid, text: 'Product cards with stock and expiry at a glance, cart panel on the right. Best for touch screens and browsing.' },
+                  { value: 'classic', title: 'Classic', icon: Rows3, text: 'Table-based full-screen counter like the previous POS: search with a results table, cart table, big payment buttons. Best for barcode-scanner and keyboard use.' },
+                ] as const)" :key="opt.value" type="button"
+                class="group relative overflow-hidden rounded-2xl border-2 p-4 text-left transition"
+                :class="c.layout === opt.value ? 'border-brand-500 bg-brand-50/40 shadow-[var(--shadow-glow)]' : 'border-slate-200 hover:border-slate-300'"
+                :aria-pressed="c.layout === opt.value" @click="c.layout = opt.value"
+              >
+                <span v-if="c.layout === opt.value" class="absolute top-3 right-3 grid size-6 place-items-center rounded-full bg-brand-600 text-white"><Check class="size-3.5" /></span>
+                <!-- mini preview -->
+                <div class="mb-3 h-28 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                  <div v-if="opt.value === 'grid'" class="flex h-full gap-1.5">
+                    <div class="flex flex-1 flex-col gap-1.5">
+                      <div class="h-3 rounded bg-white ring-1 ring-slate-200" />
+                      <div class="grid flex-1 grid-cols-4 gap-1">
+                        <div v-for="i in 8" :key="i" class="rounded bg-white ring-1 ring-slate-200"><div class="m-1 h-1 w-3/4 rounded bg-slate-300" /><div class="mx-1 h-1 w-1/2 rounded bg-brand-300" /></div>
+                      </div>
+                    </div>
+                    <div class="flex w-1/3 flex-col gap-1 rounded bg-white p-1 ring-1 ring-slate-200">
+                      <div v-for="i in 3" :key="i" class="h-2 rounded bg-slate-200" /><div class="mt-auto h-3 rounded bg-brand-500" />
+                    </div>
+                  </div>
+                  <div v-else class="flex h-full flex-col gap-1">
+                    <div class="grid grid-cols-4 gap-1"><div v-for="i in 4" :key="i" class="h-2.5 rounded bg-white ring-1 ring-slate-200" /></div>
+                    <div class="h-3 rounded bg-white ring-2 ring-brand-300" />
+                    <div class="flex flex-1 flex-col gap-0.5 rounded bg-white p-1 ring-1 ring-slate-200"><div class="h-1.5 rounded bg-slate-200" /><div v-for="i in 3" :key="i" class="h-1.5 rounded bg-slate-100" /></div>
+                    <div class="h-3 rounded bg-gradient-to-r from-brand-600 to-brand-800" />
+                    <div class="flex justify-center gap-1"><span class="h-2.5 w-6 rounded bg-slate-600" /><span class="h-2.5 w-6 rounded bg-amber-400" /><span class="h-2.5 w-6 rounded bg-rose-500" /><span class="h-2.5 w-6 rounded bg-emerald-500" /></div>
+                  </div>
+                </div>
+                <p class="flex items-center gap-2 font-display text-[15px] font-bold"><component :is="opt.icon" class="size-4 text-brand-600" />{{ opt.title }}</p>
+                <p class="mt-1 text-[12.5px] text-slate-500">{{ opt.text }}</p>
+              </button>
             </div>
           </UiSection>
           <UiSection title="Counter screen">

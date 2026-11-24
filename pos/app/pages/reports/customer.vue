@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Printer, HandCoins } from 'lucide-vue-next'
 import type { DateRange, ReportResult } from '~/types/domain'
 
 /**
@@ -45,7 +46,7 @@ async function load({ range, filters }: { range: DateRange; filters: Record<stri
   const rows = customers.filter(c => !c.isWalkIn).map((c) => {
     const st = m.customerStatement(c.id)
     return {
-      name: c.name, phone: c.phone, membership: c.membership ?? '', invoices: st.filter(r => r.type === 'sale').length,
+      customerId: c.id, name: c.name, phone: c.phone, membership: c.membership ?? '', invoices: st.filter(r => r.type === 'sale').length,
       purchases: st.filter(r => r.type === 'sale').reduce((s, r) => s + r.debit, 0), paid: st.filter(r => r.type === 'payment').reduce((s, r) => s + r.credit, 0),
       returns: st.filter(r => r.type === 'return').reduce((s, r) => s + r.credit, 0), due: Math.max(0, st[st.length - 1]?.balance ?? 0), points: c.points,
     }
@@ -67,11 +68,16 @@ async function load({ range, filters }: { range: DateRange; filters: Record<stri
     totals: { invoices: rows.reduce((s, r) => s + r.invoices, 0), purchases: rows.reduce((s, r) => s + r.purchases, 0), paid: rows.reduce((s, r) => s + r.paid, 0), returns: rows.reduce((s, r) => s + r.returns, 0), due: rows.reduce((s, r) => s + r.due, 0) },
   }
 }
+function statementActions(r: Record<string, any>) {
+  if (r.saleId) return { view: `/sales/${r.saleId}`, items: [{ label: 'Print invoice', icon: Printer, to: `/sales/${r.saleId}?print=1`, hidden: r.type !== 'sale' }] }
+  if (r.customerId) return { view: `/customers/${r.customerId}`, items: [{ label: 'Collect due', icon: HandCoins, to: '/customers/due', hidden: !(r.due > 0) }] }
+  return null
+}
 </script>
 
 <template>
   <UiReportPage
     title="Customer report" description="Pick a customer for their statement: every sale, payment and return with the running balance."
-    :filters="[{ key: 'customer', label: 'Customers', options: customerOptions }]" :load="load"
+    :filters="[{ key: 'customer', label: 'Customers', options: customerOptions }]" :load="load" :row-actions="statementActions"
   />
 </template>

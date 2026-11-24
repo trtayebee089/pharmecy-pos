@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Eye, Phone, Mail, Building2, CalendarDays, Wallet, UserRound, KeyRound } from 'lucide-vue-next'
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import { Phone, Mail, Building2, CalendarDays, Wallet, UserRound, KeyRound, CalendarCheck, HandCoins, Power, IdCard } from 'lucide-vue-next'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
 import type { AttendanceStatus, Department, Designation, Employee } from '~/types/hr'
 
 definePageMeta({ title: 'Employees' })
@@ -56,6 +56,29 @@ async function view(e: Employee) {
   open.value = true
   month.value = await attendance.month(e.id, now.getFullYear(), now.getMonth())
 }
+// ---- Row actions (employees are deactivated, never deleted: payroll history refers to them) ----
+const auth = useAuthStore()
+const toast = useToast()
+const { ask } = useConfirm()
+const crud = ref<{ reload: () => void } | null>(null)
+async function setActive(e: Employee, active: boolean) {
+  if (!active) {
+    const { ok } = await ask({ title: `Deactivate ${e.name}?`, description: 'They are left out of attendance and future payroll runs. History is kept.', confirmLabel: 'Deactivate' })
+    if (!ok) return
+  }
+  try { await employees.save({ id: e.id, isActive: active }); toast.success(active ? 'Employee activated' : 'Employee deactivated', e.name); crud.value?.reload() }
+  catch (err: any) { toast.error('Could not update', err?.message) }
+}
+function employeeActions(e: Employee): RowAction[] {
+  const manage = auth.can('hr.manage')
+  return [
+    { label: 'Profile & attendance', icon: IdCard, onClick: () => view(e) },
+    { label: 'Attendance sheet', icon: CalendarCheck, to: '/hr/attendance' },
+    { label: 'Salary advance', icon: HandCoins, to: `/hr/payroll?tab=advances&employee=${e.id}`, hidden: !auth.can('hr.payroll') },
+    { label: e.isActive ? 'Deactivate' : 'Activate', icon: Power, onClick: () => setActive(e, !e.isActive), danger: e.isActive, hidden: !manage },
+  ]
+}
+
 const tenure = computed(() => {
   if (!current.value) return ''
   const m = Math.max(0, Math.round((Date.now() - new Date(current.value.joinDate).getTime()) / (30.44 * 864e5)))
@@ -69,6 +92,8 @@ const tenure = computed(() => {
 
     <UiCrudPage
       v-if="tab === 'employees'"
+      ref="crud"
+      :row-actions="employeeActions"
       title="Employees" description="Staff records used by attendance and payroll. A POS login is a separate user account linked here."
       :resource="employees" :columns="employeeColumns" :fields="employeeFields" noun="Employee" create-permission="hr.manage" :deletable="false"
       :defaults="() => ({ code: '', name: '', phone: '', email: '', department: deptList[0]?.name ?? '', designation: '', joinDate: new Date().toISOString().slice(0, 10), basicSalary: 0, userAccount: null, warehouse: 'Dhanmondi', isActive: true })"
@@ -84,7 +109,6 @@ const tenure = computed(() => {
         <span v-if="row.userAccount" class="inline-flex items-center gap-1 text-slate-600"><KeyRound class="size-3.5 text-brand-600" />@{{ row.userAccount }}</span>
         <span v-else class="text-slate-400">No login</span>
       </template>
-      <template #row-actions="{ row }"><UiButton size="sm" variant="ghost" :icon="Eye" aria-label="View employee" @click="view(row)" /></template>
     </UiCrudPage>
 
     <UiCrudPage

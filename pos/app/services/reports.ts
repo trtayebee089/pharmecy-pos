@@ -95,7 +95,7 @@ export function useReportsApi() {
           const cost = sum(pr.batches, b => b.qtyBase * b.unitCost)
           const retail = r2(pr.stockBase * pr.units[0]!.price / pr.units[0]!.factor)
           return {
-            product: `${pr.name} ${pr.strength ?? ''}`.trim(), manufacturer: pr.manufacturer, form: pr.dosageForm,
+            productId: pr.id, product: `${pr.name} ${pr.strength ?? ''}`.trim(), manufacturer: pr.manufacturer, form: pr.dosageForm,
             batches: pr.batches.length, pieces: pr.stockBase, reorder: pr.reorderLevelBase,
             status: pr.stockBase <= 0 ? 'out' : pr.stockBase <= pr.reorderLevelBase ? 'low' : 'ok',
             costValue: cost, retailValue: retail,
@@ -132,7 +132,7 @@ export function useReportsApi() {
         .filter(b => want ? b.bucket === want : b.bucket !== 'ok')
         .filter(b => !p.filters.manufacturer || b.manufacturer === p.filters.manufacturer)
         .sort((a, b) => a.days - b.days)
-        .map(b => ({ product: b.productName, manufacturer: b.manufacturer, batchNo: b.batchNo, expiryDate: b.expiryDate, days: b.days, bucket: b.bucket, qty: b.qtyBase, value: b.value }))
+        .map(b => ({ productId: b.productId, batchId: b.batchId, product: b.productName, manufacturer: b.manufacturer, batchNo: b.batchNo, expiryDate: b.expiryDate, days: b.days, bucket: b.bucket, qty: b.qtyBase, value: b.value }))
       const val = (k: string) => sum(all.filter(b => b.bucket === k), b => b.value)
       return {
         kpis: [
@@ -162,7 +162,7 @@ export function useReportsApi() {
             const g = list.filter(x => x.supplier === s)
             return { supplier: s, invoices: g.length, lines: sum(g, x => x.items), grandTotal: sum(g, x => x.grandTotal), paidTotal: sum(g, x => x.paidTotal), dueTotal: sum(g, x => x.dueTotal) }
           }).sort((a, b) => b.grandTotal - a.grandTotal)
-        : list.map(x => ({ number: x.number, date: x.date, supplier: x.supplier, invoiceNo: x.supplierInvoiceNo, lines: x.items, grandTotal: x.grandTotal, paidTotal: x.paidTotal, dueTotal: x.dueTotal }))
+        : list.map(x => ({ id: x.id, number: x.number, date: x.date, supplier: x.supplier, invoiceNo: x.supplierInvoiceNo, lines: x.items, grandTotal: x.grandTotal, paidTotal: x.paidTotal, dueTotal: x.dueTotal }))
       const total = sum(list, x => x.grandTotal)
       return {
         kpis: [
@@ -188,7 +188,7 @@ export function useReportsApi() {
         .filter(c => p.filters.due !== 'yes' || c.dueBalance > 0)
         .map((c) => {
           const s = sales.filter(x => x.customer === c.name && x.status === 'completed' && inRange(x.date, p.range))
-          return { name: c.name, phone: c.phone, membership: c.membership ?? 'none', invoices: s.length, periodSpend: sum(s, x => x.grandTotal), lifetime: c.totalSpent, points: c.points, due: c.dueBalance, lastVisit: c.lastVisit }
+          return { customerId: c.id, name: c.name, phone: c.phone, membership: c.membership ?? 'none', invoices: s.length, periodSpend: sum(s, x => x.grandTotal), lifetime: c.totalSpent, points: c.points, due: c.dueBalance, lastVisit: c.lastVisit }
         }).sort((a, b) => b.lifetime - a.lifetime)
       return {
         kpis: [
@@ -219,7 +219,7 @@ export function useReportsApi() {
         const purchased = sum(g, x => x.grandTotal)
         const returns = r2(purchased * ((h(name) % 4) / 100))
         const s = suppliers.find(x => x.name === name)
-        return { supplier: name, phone: s?.phone ?? null, invoices: g.length, purchased, returns, paid: sum(g, x => x.paidTotal), periodDue: sum(g, x => x.dueTotal), balance: s?.dueBalance ?? sum(g, x => x.dueTotal) }
+        return { supplierId: s?.id ?? null, supplier: name, phone: s?.phone ?? null, invoices: g.length, purchased, returns, paid: sum(g, x => x.paidTotal), periodDue: sum(g, x => x.dueTotal), balance: s?.dueBalance ?? sum(g, x => x.dueTotal) }
       }).filter(r => p.filters.due !== 'yes' || r.balance > 0).sort((a, b) => b.purchased - a.purchased)
       return {
         kpis: [
@@ -246,11 +246,11 @@ export function useReportsApi() {
       const accountOf = (m: string) => m === 'cash' ? 'Cash drawer' : m === 'card' ? 'Dutch-Bangla Bank ••4410' : m === 'bkash' ? 'bKash Merchant ••7788' : 'Nagad Merchant ••3321'
       const ins = sales.filter(s => s.paidTotal > 0 && inRange(s.date, p.range)).map((s) => {
         const m = methods[s.id % methods.length]!
-        return { ref: `PAY-${s.id}`, date: s.date, direction: 'in', party: s.customer, document: s.number, method: m, account: accountOf(m), amount: s.paidTotal }
+        return { docType: 'sale', docId: s.id, ref: `PAY-${s.id}`, date: s.date, direction: 'in', party: s.customer, document: s.number, method: m, account: accountOf(m), amount: s.paidTotal }
       })
       const outs = purchases.filter(x => x.paidTotal > 0 && inRange(x.date, p.range)).map((x) => {
         const m = x.id % 3 === 0 ? 'cash' : 'bank'
-        return { ref: `PAY-P${x.id}`, date: x.date, direction: 'out', party: x.supplier, document: x.number, method: m, account: m === 'cash' ? 'Cash drawer' : 'Dutch-Bangla Bank ••4410', amount: x.paidTotal }
+        return { docType: 'purchase', docId: x.id, ref: `PAY-P${x.id}`, date: x.date, direction: 'out', party: x.supplier, document: x.number, method: m, account: m === 'cash' ? 'Cash drawer' : 'Dutch-Bangla Bank ••4410', amount: x.paidTotal }
       })
       const rows = [...ins, ...outs]
         .filter(r => (!p.filters.direction || r.direction === p.filters.direction) && (!p.filters.method || r.method === p.filters.method))

@@ -39,11 +39,11 @@ export function customerStatement(customerId: number) {
   const c = customers.find(x => x.id === customerId)
   if (!c) return []
   const own = sales.filter(s => s.status === 'completed' && (s.customer === c.name || s.id % 43 === customerId))
-  const entries: { date: string; type: string; reference: string; debit: number; credit: number }[] = []
+  const entries: { date: string; type: string; reference: string; debit: number; credit: number; saleId: number }[] = []
   for (const s of own) {
-    entries.push({ date: s.date, type: 'sale', reference: s.number, debit: s.grandTotal, credit: 0 })
-    if (s.paidTotal > 0) entries.push({ date: s.date, type: 'payment', reference: `RCV-${s.id}`, debit: 0, credit: s.paidTotal })
-    if (s.id % 11 === 0) entries.push({ date: s.date, type: 'return', reference: `R-${s.id}`, debit: 0, credit: r2(s.grandTotal * 0.2) })
+    entries.push({ date: s.date, type: 'sale', reference: s.number, debit: s.grandTotal, credit: 0, saleId: s.id })
+    if (s.paidTotal > 0) entries.push({ date: s.date, type: 'payment', reference: `RCV-${s.id}`, debit: 0, credit: s.paidTotal, saleId: s.id })
+    if (s.id % 11 === 0) entries.push({ date: s.date, type: 'return', reference: `R-${s.id}`, debit: 0, credit: r2(s.grandTotal * 0.2), saleId: s.id })
   }
   entries.sort((a, b) => a.date.localeCompare(b.date))
   let bal = 0

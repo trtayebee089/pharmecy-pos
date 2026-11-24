@@ -151,6 +151,13 @@ export function usePurchaseReturnsApi() {
       m.purchaseReturns.unshift(r)
       return r
     },
+    /** Voids a posted return: pieces go back into their batches and the supplier credit is reversed. */
+    async void(id: number, reason: string): Promise<void> {
+      if (!api.useMocks) return api.post(`/purchase-returns/${id}/void`, { reason }, crypto.randomUUID())
+      await mockDelay(450)
+      const r = (await inv()).purchaseReturns.find(x => x.id === id)
+      if (r) r.status = 'void'
+    },
   }
 }
 

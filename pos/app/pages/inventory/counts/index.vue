@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ClipboardList, Play, ChevronRight } from 'lucide-vue-next'
-import type { Column } from '~/types/domain'
+import { ClipboardList, Play, Printer, ClipboardCheck } from 'lucide-vue-next'
+import type { Column, RowAction } from '~/types/domain'
 import type { CountSession } from '~/types/inventory'
 
 definePageMeta({ title: 'Stock counts' })
 const api = useCountsApi()
 const toast = useToast()
-const { search, page, filters, result, loading } = useList<CountSession>(q => api.list(q), { status: '' })
+const auth = useAuthStore()
+const { ask } = useConfirm()
+const { search, page, filters, result, loading, reload } = useList<CountSession>(q => api.list(q), { status: '' })
 const status = computed({ get: () => filters.value.status || 'all', set: v => (filters.value.status = v === 'all' ? '' : v) })
 
 const columns: Column[] = [
@@ -16,7 +18,18 @@ const columns: Column[] = [
   { key: 'progress', label: 'Progress', width: '180px' },
   { key: 'varianceValue', label: 'Variance', align: 'right' },
   { key: 'status', label: 'Status' },
-  { key: 'go', label: '', align: 'right' },
+  { key: 'go', label: 'Actions', align: 'right', width: '1%' },
+]
+const isOpen = (s: CountSession) => s.status === 'open' || s.status === 'counting'
+async function cancelCount(s: CountSession) {
+  const { ok, reason } = await ask({ title: `Cancel ${s.number}?`, description: 'Counted quantities are discarded and no stock changes. The session stays on record as cancelled.', confirmLabel: 'Cancel count', requireReason: true })
+  if (!ok) return
+  try { await api.cancel(s.id, reason); toast.success('Count cancelled', s.number); reload() }
+  catch (e: any) { toast.error('Not cancelled', e?.message) }
+}
+const rowItems = (s: CountSession): RowAction[] => [
+  { label: 'Continue counting', icon: ClipboardCheck, to: `/inventory/counts/${s.id}`, hidden: !isOpen(s) },
+  { label: 'Print count sheet', icon: Printer, to: `/inventory/counts/${s.id}?print=1` },
 ]
 const tone = { open: 'info', counting: 'brand', posted: 'success', cancelled: 'neutral' } as const
 
@@ -72,7 +85,14 @@ async function start() {
         <span class="tabular" :class="row.varianceValue < 0 ? 'font-semibold text-rose-600' : row.varianceValue > 0 ? 'font-semibold text-emerald-600' : 'text-slate-400'">{{ row.varianceValue ? money(row.varianceValue) : '—' }}</span>
       </template>
       <template #cell-status="{ row }"><UiBadge :tone="tone[row.status as keyof typeof tone]" dot class="capitalize">{{ row.status === 'counting' ? 'In progress' : row.status }}</UiBadge></template>
-      <template #cell-go="{ row }"><NuxtLink :to="`/inventory/counts/${row.id}`"><UiButton size="sm" variant="ghost" :icon="ChevronRight" :aria-label="`Open ${row.number}`" /></NuxtLink></template>
+      <template #cell-go="{ row }">
+        <UiRowActions
+          :label="row.number" :view="`/inventory/counts/${row.id}`"
+          :edit="isOpen(row) && auth.can('inventory.count') ? `/inventory/counts/${row.id}` : undefined"
+          remove-kind="void" :remove="isOpen(row) && auth.can('inventory.count') ? () => cancelCount(row) : undefined"
+          :items="rowItems(row)"
+        />
+      </template>
     </UiDataTable>
 
     <UiModal v-model="open" title="Start a stock count" description="The system snapshot is taken per batch when the count starts." :dismissible="!starting">

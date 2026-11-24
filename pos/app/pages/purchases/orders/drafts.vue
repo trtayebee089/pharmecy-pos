@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Eye, Trash2, Plus, Sparkles } from 'lucide-vue-next'
+import { Plus, Sparkles, Truck, ClipboardList, PackageOpen } from 'lucide-vue-next'
 import type { Company, DraftSummary } from '~/types/purchase-orders'
-import type { DateRange } from '~/types/domain'
+import type { DateRange, RowAction } from '~/types/domain'
 
 definePageMeta({ title: 'Draft orders' })
 const api = usePurchaseOrdersApi()
@@ -27,6 +27,12 @@ async function load() {
 onMounted(async () => { companies.value = await api.companies(); load() })
 watch([() => range.value.from, () => range.value.to, companyId, status], load)
 
+const auth = useAuthStore()
+const rowItems = (d: DraftSummary): RowAction[] => [
+  { label: 'Create purchase order', icon: Truck, to: `/purchases/orders/${d.id}`, hidden: d.status !== 'draft' || !auth.can('purchases.create') },
+  { label: 'Receive goods now', icon: PackageOpen, to: `/purchases/new?draft=${d.id}`, hidden: !auth.can('purchases.create') },
+  { label: 'Plan again for this company', icon: ClipboardList, to: `/purchases/orders?company=${d.companyId}` },
+]
 async function remove(d: DraftSummary) {
   const { ok } = await ask({ title: `Delete draft ${d.number}?`, description: `${d.company} · ${d.lines} lines. Drafts are planning only; nothing was ordered yet.`, confirmLabel: 'Delete draft' })
   if (!ok) return
@@ -58,7 +64,7 @@ const totals = computed(() => ({ pcs: rows.value.reduce((s, d) => s + d.orderQty
           <thead><tr class="border-b border-slate-100 bg-slate-50/70">
             <th class="label h-10 px-4 text-left">Draft</th><th class="label px-3 text-left">Company</th><th class="label px-3 text-left">Date</th>
             <th class="label px-3 text-right">Lines</th><th class="label px-3 text-right">Order (pcs)</th><th class="label px-3 text-right">Est. value</th>
-            <th class="label px-3 text-left">Status</th><th class="w-24" />
+            <th class="label px-3 text-left">Status</th><th class="label px-4 text-right">Actions</th>
           </tr></thead>
           <tbody v-if="loading"><tr v-for="i in 5" :key="i"><td colspan="8" class="px-4 py-2"><div class="skeleton h-9" /></td></tr></tbody>
           <tbody v-else ref="list">
@@ -77,10 +83,12 @@ const totals = computed(() => ({ pcs: rows.value.reduce((s, d) => s + d.orderQty
                 <UiBadge v-else tone="info" dot>Draft</UiBadge>
               </td>
               <td class="pr-3">
-                <div class="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-                  <NuxtLink :to="`/purchases/orders/${d.id}`"><UiButton size="sm" variant="ghost" :icon="Eye" aria-label="Open draft" /></NuxtLink>
-                  <UiButton v-if="d.status === 'draft'" size="sm" variant="ghost" :icon="Trash2" aria-label="Delete draft" @click="remove(d)" />
-                </div>
+                <UiRowActions
+                  :label="d.number" :view="`/purchases/orders/${d.id}`"
+                  :edit="d.status === 'draft' && auth.can('reorder.manage') ? `/purchases/orders/${d.id}` : undefined"
+                  :remove="d.status === 'draft' && auth.can('reorder.manage') ? () => remove(d) : undefined"
+                  :items="rowItems(d)"
+                />
               </td>
             </tr>
           </tbody>

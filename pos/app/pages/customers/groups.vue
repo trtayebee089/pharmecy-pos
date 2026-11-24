@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import { Users, FileText } from 'lucide-vue-next'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
+import type { CustomerGroup } from '~/types/people'
 
 definePageMeta({ title: 'Customer groups' })
 
 const resource = useCustomerGroupsResource()
+const rowActions = (g: CustomerGroup): RowAction[] => [
+  { label: 'View members', icon: Users, to: `/customers?search=${encodeURIComponent(g.name)}` },
+  { label: 'Customer report', icon: FileText, to: '/reports/customer' },
+]
 const columns: CrudColumn[] = [
   { key: 'name', label: 'Group' },
   { key: 'discountPct', label: 'Discount', align: 'right', format: 'percent' },
@@ -20,7 +26,7 @@ const fields: FieldDef[] = [
 <template>
   <UiCrudPage
     title="Customer groups" description="Price groups that give members an automatic discount. The API caps it by the cashier's role limit."
-    :resource="resource" :columns="columns" :fields="fields" noun="Group" create-permission="customers.manage"
+    :resource="resource" :columns="columns" :fields="fields" noun="Group" create-permission="customers.manage" :row-actions="rowActions"
     :defaults="() => ({ name: '', discountPct: 0, members: 0, notes: '' })" :item-label="r => r.name"
   >
     <template #cell-name="{ row }"><span class="font-semibold text-ink">{{ row.name }}</span></template>

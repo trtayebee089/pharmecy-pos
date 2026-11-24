@@ -29,7 +29,7 @@ export function useAttendanceApi() {
     async day(day: string): Promise<AttendanceRow[]> {
       if (!api.useMocks) return api.get('/hr/attendance', { date: day })
       await mockDelay(250)
-      if (saved.value[day]) return structuredClone(saved.value[day]!)
+      if (saved.value[day]) return JSON.parse(JSON.stringify(saved.value[day]!)) as AttendanceRow[]
       const m = await hrMocks()
       return m.employees.filter(e => e.isActive).map((e) => {
         const status = m.attendanceFor(e.id, day)
@@ -64,6 +64,7 @@ export function useAttendanceApi() {
 export function usePayrollApi() {
   const api = useApi()
   const runs = useState<PayrollRun[] | null>('mock-payroll-runs', () => null)
+  const advanceStore = useState<SalaryAdvance[] | null>('mock-salary-advances', () => null)
   async function mockRuns() {
     if (!runs.value) runs.value = structuredClone((await hrMocks()).payrollRuns)
     return runs.value!
@@ -107,6 +108,20 @@ export function usePayrollApi() {
       const r = (await mockRuns()).find(x => x.id === id)
       if (r) Object.assign(r, { status: 'paid', paidAt: new Date().toISOString().slice(0, 10), paidFrom: account })
     },
+    /** Only draft runs can be deleted; approved/paid runs are kept for audit. */
+    async deleteRun(id: number): Promise<void> {
+      if (!api.useMocks) return api.del(`/hr/payroll-runs/${id}`)
+      await mockDelay(400)
+      const list = await mockRuns()
+      const r = list.find(x => x.id === id)
+      if (r && r.status !== 'draft') throw new ApiError('Only draft payroll runs can be deleted.', 422, { status: ['Not a draft'] })
+      runs.value = list.filter(x => x.id !== id)
+    },
+    /** Draft runs only: manual addition (bonus, overtime) with a note. Net is recomputed by the API. */
+    async updatePayslip(runId: number, slipId: number, additions: number, note: string): Promise<void> {
+      if (!api.useMocks) return api.put(`/hr/payroll-runs/${runId}/payslips/${slipId}`, { additions, note })
+      await mockDelay(400)
+    },
     async accounts(): Promise<string[]> {
       if (!api.useMocks) return api.get('/finance/accounts/payout')
       return (await hrMocks()).accountsForPayout
@@ -114,7 +129,71 @@ export function usePayrollApi() {
     async advances(): Promise<SalaryAdvance[]> {
       if (!api.useMocks) return api.get('/hr/salary-advances')
       await mockDelay()
-      return (await hrMocks()).advances
+      advanceStore.value ??= structuredClone((await hrMocks()).advances)
+      return advanceStore.value
+    },
+    /** Gives an advance (posts a payment out from the account); recovered from the next payroll runs. */
+    async giveAdvance(payload: { employeeId: number; employee: string; amount: number; account: string }, idempotencyKey: string): Promise<SalaryAdvance> {
+      if (!api.useMocks) return api.post('/hr/salary-advances', payload, idempotencyKey)
+      await mockDelay(500)
+      advanceStore.value ??= structuredClone((await hrMocks()).advances)
+      const a: SalaryAdvance = { id: Math.max(0, ...advanceStore.value.map(x => x.id)) + 1, employee: payload.employee, amount: payload.amount, givenAt: new Date().toISOString().slice(0, 10), recovered: 0, status: 'open' }
+      advanceStore.value = [a, ...advanceStore.value]
+      return a
+    },
+    /** Cash repayment outside payroll. */
+    async recordRecovery(id: number, amount: number, idempotencyKey: string): Promise<void> {
+      if (!api.useMocks) return api.post(`/hr/salary-advances/${id}/recoveries`, { amount }, idempotencyKey)
+      await mockDelay(450)
+      const a = advanceStore.value?.find(x => x.id === id)
+      if (a) { a.recovered = Math.min(a.amount, a.recovered + amount); if (a.recovered >= a.amount) a.status = 'recovered' }
+    },
+    /** Void an advance given by mistake (only before any recovery); the payment out is reversed. */
+    async voidAdvance(id: number, reason: string): Promise<void> {
+      if (!api.useMocks) return api.post(`/hr/salary-advances/${id}/void`, { reason })
+      await mockDelay(400)
+      const a = advanceStore.value?.find(x => x.id === id)
+      if (a && a.recovered > 0) throw new ApiError('Advances with recoveries cannot be voided.', 422, { recovered: ['Already partly recovered'] })
+      advanceStore.value = (advanceStore.value ?? []).filter(x => x.id !== id)
+    },
+  }
+}
+
+/**
+ * Staff user administration writes (/api/pos/v1/admin/users). Granting Admin/Owner
+ * and disabling users are permission-checked by the API (roles.manage / users.view).
+ */
+export function useUserAdminApi() {
+  const api = useApi()
+  return {
+    async save(u: { id?: number; name: string; username: string; email: string; role: string; warehouses: string[] }, idempotencyKey: string): Promise<{ id: number }> {
+      if (!api.useMocks) return u.id ? api.put(`/admin/users/${u.id}`, u) : api.post('/admin/users', u, idempotencyKey)
+      await mockDelay(450)
+      return { id: u.id ?? Date.now() }
+    },
+    async setActive(id: number, active: boolean): Promise<void> {
+      if (!api.useMocks) return api.post(`/admin/users/${id}/${active ? 'enable' : 'disable'}`)
+      await mockDelay(350)
+    },
+    /** Creates a role (e.g. a duplicate); returns its id. */
+    async createRole(r: { name: string; description: string; permissions: string[]; maxDiscountPct: number }, idempotencyKey: string): Promise<{ id: number }> {
+      if (!api.useMocks) return api.post('/admin/roles', r, idempotencyKey)
+      await mockDelay(450)
+      return { id: Date.now() }
+    },
+    async updateRoleDetails(id: number, r: { name: string; description: string }): Promise<void> {
+      if (!api.useMocks) return api.put(`/admin/roles/${id}/details`, r)
+      await mockDelay(350)
+    },
+    /** System roles and roles still assigned to users cannot be deleted (API returns 422). */
+    async deleteRole(id: number): Promise<void> {
+      if (!api.useMocks) return api.del(`/admin/roles/${id}`)
+      await mockDelay(350)
+    },
+    /** Sends a reset link and forces a new password at next sign-in. No password is ever shown. */
+    async resetPassword(id: number): Promise<void> {
+      if (!api.useMocks) return api.post(`/admin/users/${id}/password-reset`)
+      await mockDelay(400)
     },
   }
 }

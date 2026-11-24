@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Undo2, Trash2, PackageX, CalendarX, AlertTriangle } from 'lucide-vue-next'
-import type { Column, Product, Supplier } from '~/types/domain'
+import { Undo2, Trash2, PackageX, CalendarX, AlertTriangle, Printer, Truck } from 'lucide-vue-next'
+import type { Column, Product, RowAction, Supplier } from '~/types/domain'
 import type { PurchaseReturnSummary } from '~/types/inventory'
 
 definePageMeta({ title: 'Purchase returns' })
@@ -17,7 +17,27 @@ const columns: Column[] = [
   { key: 'qty', label: 'Pieces', align: 'right' },
   { key: 'total', label: 'Credit', align: 'right' },
   { key: 'status', label: 'Status' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
 ]
+const auth = useAuthStore()
+const viewing = ref<PurchaseReturnSummary | null>(null)
+const viewOpen = computed({ get: () => !!viewing.value, set: v => { if (!v) viewing.value = null } })
+async function voidReturn(r: PurchaseReturnSummary) {
+  const { ok, reason } = await ask({ title: `Void ${r.number}?`, description: 'The pieces go back into their batches and the supplier credit is reversed. The return stays on record as void.', confirmLabel: 'Void return', requireReason: true })
+  if (!ok) return
+  try { await api.void(r.id, reason); toast.success('Return voided', r.number); reload() }
+  catch (e: any) { toast.error('Could not void', e?.message) }
+}
+function printNote(r: PurchaseReturnSummary) { viewing.value = r; nextTick(() => setTimeout(() => window.print(), 500)) }
+const rowItems = (r: PurchaseReturnSummary): RowAction[] => [
+  { label: 'Print return note', icon: Printer, onClick: () => printNote(r) },
+  { label: 'Open supplier', icon: Truck, to: '/suppliers' },
+]
+const viewRows = computed(() => viewing.value ? [
+  ['Date', dateTime(viewing.value.date)], ['Supplier', viewing.value.supplier], ['Credit note', viewing.value.creditNote || '—'],
+  ['Reason', viewing.value.reason], ['Lines', String(viewing.value.lines)], ['Pieces returned', num(viewing.value.qty)],
+  ['Credit value', money(viewing.value.total)], ['Status', viewing.value.status === 'posted' ? 'Posted' : 'Void'],
+] : [])
 
 // ---- New return ----
 interface RLine { key: string; product: Product; batchId: number; qty: number; unitCost: number }
@@ -85,7 +105,22 @@ async function post() {
       <template #cell-qty="{ row }"><span class="tabular">{{ num(row.qty) }}</span><p class="text-xs text-slate-400">{{ row.lines }} lines</p></template>
       <template #cell-total="{ row }"><span class="font-semibold tabular">{{ money(row.total) }}</span></template>
       <template #cell-status="{ row }"><UiBadge :tone="row.status === 'posted' ? 'success' : 'neutral'" dot class="capitalize">{{ row.status }}</UiBadge></template>
+      <template #cell-actions="{ row }">
+        <UiRowActions
+          :label="row.number" :view="() => (viewing = row)" remove-kind="void"
+          :remove="row.status !== 'void' && auth.can('purchase_returns.view') ? () => voidReturn(row) : undefined"
+          :items="rowItems(row)"
+        />
+      </template>
     </UiDataTable>
+
+    <UiDrawer v-model="viewOpen" title="Purchase return" :description="viewing?.number" width="md">
+      <dl class="divide-y divide-slate-100 text-sm">
+        <div v-for="[k, v] in viewRows" :key="k" data-stagger class="flex justify-between gap-6 py-3">
+          <dt class="text-slate-500">{{ k }}</dt><dd class="text-right font-medium">{{ v }}</dd>
+        </div>
+      </dl>
+    </UiDrawer>
 
     <UiModal v-model="open" title="Return to supplier" description="Expired and nearest-expiry batches are listed first." size="xl" :dismissible="!posting">
       <div class="grid gap-4 sm:grid-cols-3">

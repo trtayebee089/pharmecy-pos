@@ -12,6 +12,7 @@ export function useFinanceApi() {
   const accountStore = useState<Account[] | null>('mock-finance-accounts', () => null)
   const transferStore = useState<MoneyTransfer[] | null>('mock-finance-transfers', () => null)
   const entryStore = useState<Record<string, FinanceEntry[]>>('mock-finance-entries', () => ({}))
+  const voidedTransfers = useState<Record<number, string>>('mock-finance-voided-transfers', () => ({}))
 
   async function mockAccounts() {
     if (!accountStore.value) accountStore.value = structuredClone((await financeMocks()).accounts)
@@ -38,6 +39,21 @@ export function useFinanceApi() {
       }
       return a.id ? api.put(`/finance/accounts/${a.id}`, a) : api.post('/finance/accounts', a)
     },
+    /** Deactivate (hide) or re-activate an account; history is kept. The API refuses while a balance remains. */
+    async setAccountActive(id: number, active: boolean): Promise<void> {
+      if (api.useMocks) {
+        await mockDelay(350)
+        const a = (await mockAccounts()).find(x => x.id === id)
+        if (a && !active && Math.abs(a.balance) > 0.005) throw new ApiError('Move the remaining balance out before deactivating.', 422, { balance: ['Balance must be zero'] })
+        if (a) a.isActive = active
+        return
+      }
+      return api.post(`/finance/accounts/${id}/${active ? 'activate' : 'deactivate'}`)
+    },
+    async setDefaultAccount(id: number): Promise<void> {
+      if (api.useMocks) { await mockDelay(300); (await mockAccounts()).forEach(a => (a.isDefault = a.id === id)); return }
+      return api.post(`/finance/accounts/${id}/default`)
+    },
     async statement(accountId: number, from: string, to: string): Promise<StatementLine[]> {
       if (api.useMocks) { await mockDelay(300); return (await financeMocks()).statement(accountId) }
       return api.get(`/finance/accounts/${accountId}/statement`, { from, to })
@@ -63,6 +79,25 @@ export function useFinanceApi() {
         return t
       }
       return api.post('/finance/money-transfers', payload, idempotencyKey)
+    },
+    /** Void reason per voided transfer id (transfers are never deleted). */
+    voidedTransfers,
+    /** Voiding posts the reverse account transactions; the transfer stays on record as void. */
+    async voidTransfer(id: number, reason: string, idempotencyKey: string): Promise<void> {
+      if (api.useMocks) {
+        await mockDelay(450)
+        const t = transferStore.value?.find(x => x.id === id)
+        const list = await mockAccounts()
+        if (t) {
+          const from = list.find(a => a.name === t.fromAccount)
+          const to = list.find(a => a.name === t.toAccount)
+          if (from) from.balance += t.amount
+          if (to) to.balance -= t.amount
+        }
+        voidedTransfers.value = { ...voidedTransfers.value, [id]: reason }
+        return
+      }
+      return api.post(`/finance/money-transfers/${id}/void`, { reason }, idempotencyKey)
     },
     categories(kind: 'expense' | 'income') {
       return useResource<FinanceCategory>(`finance/${kind}-categories`, async () => (await financeMocks())[kind === 'expense' ? 'expenseCategories' : 'incomeCategories'])
@@ -91,6 +126,16 @@ export function useFinanceApi() {
         return
       }
       return api.post(`/finance/${kind}/${id}/void`, { reason })
+    },
+    /** Signed, short-lived URL of the attached bill/receipt. */
+    async attachmentUrl(kind: 'expenses' | 'incomes', id: number): Promise<string> {
+      if (api.useMocks) {
+        await mockDelay(250)
+        const e = (await mockEntries(kind)).find(x => x.id === id)
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="420" height="560"><rect width="100%" height="100%" fill="#fff"/><text x="30" y="60" font-family="monospace" font-size="20">${e?.number ?? ''}</text><text x="30" y="100" font-family="monospace" font-size="16">${e?.category ?? ''}</text><text x="30" y="130" font-family="monospace" font-size="16">BDT ${e?.amount ?? 0}</text><text x="30" y="520" font-family="monospace" font-size="12" fill="#999">Development mock attachment</text></svg>`
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+      }
+      return (await api.get<{ url: string }>(`/finance/${kind}/${id}/attachment`)).url
     },
     async balanceSheet(asOf: string): Promise<BalanceSheet> {
       if (api.useMocks) { await mockDelay(500); return (await financeMocks()).balanceSheet(asOf) }

@@ -4,6 +4,7 @@ import { Banknote, CreditCard, Smartphone, Plus, X, CheckCircle2, Printer } from
 import type { PaymentLine } from '~/types/domain'
 
 const open = defineModel<boolean>({ default: false })
+const props = withDefaults(defineProps<{ presetMethod?: PaymentLine['method'] }>(), { presetMethod: 'cash' })
 const emit = defineEmits<{ completed: [number: string] }>()
 
 const cart = useCartStore()
@@ -26,7 +27,7 @@ let idemKey = ''
 watch(open, (o) => {
   if (o) {
     done.value = null
-    payments.value = [{ method: 'cash', amount: cart.total }]
+    payments.value = [{ method: props.presetMethod, amount: cart.total }]
     idemKey = crypto.randomUUID() // one key per checkout attempt: retries cannot double-charge
   }
 })
@@ -57,6 +58,7 @@ async function complete() {
   try {
     const res = await salesApi.complete(cart.payload(auth.warehouseId, payments.value), idemKey)
     done.value = { number: res.number }
+    cart.lastReceipt = cart.snapshot(res.number, payments.value, change.value)
     await nextTick()
     if (successIcon.value && !prefersReducedMotion()) {
       gsap.fromTo(successIcon.value, { scale: 0, rotate: -30 }, { scale: 1, rotate: 0, duration: 0.6, ease: 'back.out(2)' })
@@ -100,7 +102,7 @@ onKeyStroke('Enter', (e) => {
         <UiButton :icon="Printer" size="lg" @click="printReceipt">Print receipt</UiButton>
         <UiButton variant="primary" size="lg" @click="newSale">New sale <UiKbd class="ml-1 border-white/20 bg-white/10 text-white">Enter</UiKbd></UiButton>
       </div>
-      <PosReceipt :number="done.number" :payments="payments" :change="change" />
+      <PosReceipt v-if="cart.lastReceipt" :receipt="cart.lastReceipt" />
     </div>
 
     <!-- Payment entry -->

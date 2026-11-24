@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { Download, Eye, Globe, Smartphone, Kanban, RefreshCw, Info } from 'lucide-vue-next'
-import type { Column, Paginated } from '~/types/domain'
+import { Download, Globe, Smartphone, Kanban, RefreshCw, Info, ArrowRight, Bike, Printer, Phone } from 'lucide-vue-next'
+import type { Column, Paginated, RowAction } from '~/types/domain'
 import type { OnlineOrder, OrderStatus, Rider } from '~/types/orders'
 
 definePageMeta({ title: 'Online orders' })
 const api = useOnlineOrdersApi()
 const ridersRes = useRidersResource()
 const toast = useToast()
+const auth = useAuthStore()
+const { ask } = useConfirm()
 
 const orders = ref<OnlineOrder[]>([])
 const riders = ref<Rider[]>([])
@@ -50,7 +52,7 @@ const columns: Column[] = [
   { key: 'codAmount', label: 'COD', align: 'right' },
   { key: 'rider', label: 'Rider' },
   { key: 'status', label: 'Status' },
-  { key: 'actions', label: '', align: 'right' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
 ]
 
 const selectedId = ref<number | null>(null)
@@ -62,6 +64,30 @@ function onChanged(o: OnlineOrder) {
 }
 const pendingCod = computed(() => orders.value.filter(o => !['delivered', 'cancelled'].includes(o.status)).reduce((s, o) => s + o.codAmount, 0))
 
+const isClosed = (o: OnlineOrder) => o.status === 'delivered' || o.status === 'cancelled'
+async function advance(o: OnlineOrder) {
+  const next = nextOrderStatus(o.status)
+  if (!next) return
+  if (next === 'in_transit' && !o.riderId) { toast.info('Assign a rider first', 'Opening the order so you can pick a rider.'); selectedId.value = o.id; return }
+  try { onChanged(await api.transition(o.id, next, '', crypto.randomUUID())); toast.success(`Order ${ORDER_STATUS_LABEL[next].toLowerCase()}`, o.number) }
+  catch (e: any) { toast.error('Status not changed', e?.message) }
+}
+async function cancelOrder(o: OnlineOrder) {
+  const { ok, reason } = await ask({ title: `Cancel ${o.number}?`, description: o.status === 'pending' ? 'No stock was allocated yet.' : 'Allocated stock is released back to the same batches. The order stays on record as cancelled.', confirmLabel: 'Cancel order', requireReason: true })
+  if (!ok) return
+  try { onChanged(await api.transition(o.id, 'cancelled', reason, crypto.randomUUID())); toast.success('Order cancelled', o.number) }
+  catch (e: any) { toast.error('Not cancelled', e?.message) }
+}
+function printSlip(o: OnlineOrder) { selectedId.value = o.id; nextTick(() => setTimeout(() => window.print(), 500)) }
+const rowItems = (o: OnlineOrder): RowAction[] => {
+  const next = nextOrderStatus(o.status)
+  return [
+    { label: next ? `Mark ${ORDER_STATUS_LABEL[next].toLowerCase()}` : 'Advance status', icon: ArrowRight, onClick: () => advance(o), hidden: !next || isClosed(o) || !auth.can('orders.fulfil') },
+    { label: o.riderId ? 'Change rider' : 'Assign rider', icon: Bike, onClick: () => (selectedId.value = o.id), hidden: isClosed(o) },
+    { label: 'Print order slip', icon: Printer, onClick: () => printSlip(o) },
+    { label: `Call ${o.phone}`, icon: Phone, onClick: () => { window.location.href = `tel:${o.phone}` } },
+  ]
+}
 function exportCsv() {
   downloadCsv('online-orders.csv', columns.filter(c => c.key !== 'actions'), filtered.value.map(o => ({ ...o, rider: o.riderName ?? '', status: ORDER_STATUS_LABEL[o.status] })))
 }
@@ -106,9 +132,11 @@ function exportCsv() {
       </template>
       <template #cell-status="{ row }"><UiBadge :tone="ORDER_STATUS_TONE[row.status as OrderStatus]" dot>{{ ORDER_STATUS_LABEL[row.status as OrderStatus] }}</UiBadge></template>
       <template #cell-actions="{ row }">
-        <div class="flex justify-end opacity-0 transition group-hover:opacity-100">
-          <UiButton size="sm" variant="ghost" :icon="Eye" :aria-label="`Open order ${row.number}`" @click="selectedId = row.id" />
-        </div>
+        <UiRowActions
+          :label="row.number" :view="() => (selectedId = row.id)" remove-kind="void"
+          :remove="!isClosed(row) && auth.can('orders.fulfil') ? () => cancelOrder(row) : undefined"
+          :items="rowItems(row)"
+        />
       </template>
     </UiDataTable>
 

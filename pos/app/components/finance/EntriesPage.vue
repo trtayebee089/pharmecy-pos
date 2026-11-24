@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, Search, Paperclip, Ban, Download, Receipt, Tags, Upload } from 'lucide-vue-next'
+import { Plus, Search, Paperclip, Download, Receipt, Tags, Upload, Printer, Copy } from 'lucide-vue-next'
 import type { CrudColumn, FieldDef } from '~/types/domain'
 import type { Account, FinanceCategory, FinanceEntry } from '~/types/finance'
 
@@ -89,6 +89,42 @@ async function voidEntry(r: FinanceEntry) {
   catch (e: any) { toast.error('Could not void', e?.message) }
 }
 
+// ---- Row actions ----
+const viewing = ref<FinanceEntry | null>(null)
+const viewOpen = ref(false)
+const attachment = ref<string | null>(null)
+function view(r: FinanceEntry) { viewing.value = r; attachment.value = null; viewOpen.value = true }
+async function showAttachment(r: FinanceEntry) {
+  view(r)
+  try { attachment.value = await api.attachmentUrl(props.kind, r.id) }
+  catch (e: any) { toast.error('Attachment not available', e?.message) }
+}
+function duplicate(r: FinanceEntry) {
+  start()
+  form.categoryId = categories.value.find(c => c.name === r.category)?.id ?? null
+  form.accountId = accounts.value.find(a => a.name === r.account)?.id ?? form.accountId
+  form.amount = r.amount
+  form.note = r.note
+}
+function printVoucher(r: FinanceEntry) {
+  const w = window.open('', '_blank', 'width=640,height=720')
+  if (!w) { toast.warning('Allow pop-ups to print the voucher'); return }
+  w.document.write(`<html><head><title>${r.number}</title><style>body{font:14px system-ui;padding:32px;color:#0f1b2d}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:20px}td{padding:8px;border-bottom:1px solid #e2e8f0}td:first-child{color:#64748b;width:40%}.sig{margin-top:64px;display:flex;justify-content:space-between}.sig span{border-top:1px solid #000;padding-top:4px;width:40%;text-align:center}</style></head><body>
+    <h1>Red Pharma · ${noun.value} voucher</h1><div>${r.number}${r.status === 'void' ? ' · VOID' : ''}</div>
+    <table><tr><td>Date</td><td>${date(r.date)}</td></tr><tr><td>Category</td><td>${r.category}</td></tr><tr><td>${isExpense.value ? 'Paid from' : 'Received into'}</td><td>${r.account}</td></tr>
+    <tr><td>Amount</td><td><b>${money(r.amount)}</b></td></tr><tr><td>Note</td><td>${r.note || '—'}</td></tr><tr><td>Entered by</td><td>${r.createdBy}</td></tr></table>
+    <div class="sig"><span>Prepared by</span><span>Approved by</span></div></body></html>`)
+  w.document.close()
+  w.print()
+}
+function entryActions(r: FinanceEntry) {
+  return [
+    { label: 'Print voucher', icon: Printer, onClick: () => printVoucher(r) },
+    { label: 'Duplicate', icon: Copy, onClick: () => duplicate(r), hidden: !auth.can(props.permission) },
+    { label: 'View attachment', icon: Paperclip, onClick: () => showAttachment(r), hidden: !r.hasAttachment },
+  ]
+}
+
 const csvColumns = [
   { key: 'number', label: 'Number' }, { key: 'date', label: 'Date' }, { key: 'category', label: 'Category' }, { key: 'account', label: 'Account' },
   { key: 'amount', label: 'Amount' }, { key: 'status', label: 'Status' }, { key: 'note', label: 'Note' }, { key: 'createdBy', label: 'By' },
@@ -135,7 +171,7 @@ const catFields = computed<FieldDef[]>(() => [
         </div>
         <div class="overflow-x-auto">
           <table class="w-full min-w-[760px] text-sm">
-            <thead><tr class="border-b border-slate-100 bg-slate-50/70"><th class="label h-10 px-4 text-left">Entry</th><th class="label text-left">Category</th><th class="label text-left">Account</th><th class="label text-right">Amount</th><th class="label pl-6 text-left">Status</th><th class="label text-left">By</th><th /></tr></thead>
+            <thead><tr class="border-b border-slate-100 bg-slate-50/70"><th class="label h-10 px-4 text-left">Entry</th><th class="label text-left">Category</th><th class="label text-left">Account</th><th class="label text-right">Amount</th><th class="label pl-6 text-left">Status</th><th class="label text-left">By</th><th class="label px-4 text-right">Actions</th></tr></thead>
             <tbody v-if="loading"><tr v-for="i in 8" :key="i"><td colspan="7" class="px-4 py-2"><div class="skeleton h-8" /></td></tr></tbody>
             <tbody v-else ref="tbody">
               <tr v-for="r in filtered" :key="r.id" class="group border-b border-slate-50 hover:bg-brand-50/40">
@@ -148,8 +184,12 @@ const catFields = computed<FieldDef[]>(() => [
                 <td class="text-right font-semibold tabular" :class="r.status === 'void' && 'text-slate-400 line-through'">{{ money(r.amount) }}</td>
                 <td class="pl-6"><UiBadge :tone="r.status === 'posted' ? 'success' : 'neutral'" dot class="capitalize" :title="r.voidReason">{{ r.status }}</UiBadge></td>
                 <td class="text-slate-500">{{ r.createdBy }}</td>
-                <td class="px-3 text-right">
-                  <UiButton v-if="r.status === 'posted' && auth.can(permission)" size="sm" variant="ghost" :icon="Ban" class="opacity-0 group-hover:opacity-100 hover:!text-rose-600" :aria-label="`Void ${r.number}`" @click="voidEntry(r)">Void</UiButton>
+                <td class="px-3">
+                  <UiRowActions
+                    :label="r.number" :view="() => view(r)" remove-kind="void"
+                    :remove="r.status === 'posted' && auth.can(permission) ? () => voidEntry(r) : undefined"
+                    :items="entryActions(r)"
+                  />
                 </td>
               </tr>
             </tbody>
@@ -169,6 +209,24 @@ const catFields = computed<FieldDef[]>(() => [
       <template #cell-name="{ row }"><span class="flex items-center gap-2 font-semibold"><Tags class="size-3.5 text-slate-400" />{{ row.name }}</span></template>
       <template #cell-parent="{ row }"><span class="text-slate-500">{{ row.parent || '—' }}</span></template>
     </UiCrudPage>
+
+    <UiDrawer v-model="viewOpen" :title="viewing?.number" :description="`${noun} · ${viewing ? date(viewing.date) : ''}`" width="md">
+      <dl v-if="viewing" class="divide-y divide-slate-100 text-sm">
+        <div v-for="[k, v] in [['Category', viewing.category], [isExpense ? 'Paid from' : 'Received into', viewing.account], ['Amount', money(viewing.amount)], ['Status', viewing.status], ['Note', viewing.note || '—'], ['Entered by', viewing.createdBy]]" :key="k" data-stagger class="flex justify-between gap-6 py-3">
+          <dt class="text-slate-500">{{ k }}</dt><dd class="text-right font-medium">{{ v }}</dd>
+        </div>
+        <div v-if="viewing.voidReason" class="py-3 text-rose-600">Void reason: {{ viewing.voidReason }}</div>
+      </dl>
+      <div v-if="viewing?.hasAttachment" class="mt-5">
+        <p class="label mb-2">Attachment</p>
+        <img v-if="attachment" :src="attachment" alt="Attached bill" class="w-full rounded-xl border border-slate-200">
+        <UiButton v-else :icon="Paperclip" @click="viewing && showAttachment(viewing)">Load attachment</UiButton>
+      </div>
+      <template #footer>
+        <UiButton :icon="Printer" @click="viewing && printVoucher(viewing)">Print voucher</UiButton>
+        <UiButton variant="ghost" @click="viewOpen = false">Close</UiButton>
+      </template>
+    </UiDrawer>
 
     <UiModal v-model="open" :title="`New ${noun.toLowerCase()}`" :dismissible="!posting">
       <div class="grid gap-4 sm:grid-cols-2">

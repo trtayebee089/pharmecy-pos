@@ -1,11 +1,32 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { Banknote, Lock, LockOpen, Clock, ArrowDownLeft, ArrowUpRight, Smartphone, CheckCircle2, AlertTriangle } from 'lucide-vue-next'
+import { Banknote, Lock, LockOpen, Clock, ArrowDownLeft, ArrowUpRight, Smartphone, CheckCircle2, AlertTriangle, Printer } from 'lucide-vue-next'
 import type { RegisterSession } from '~/types/domain'
 
 definePageMeta({ title: 'Cash registers' })
 const api = useRegisterApi()
 const toast = useToast()
+
+// ---- Session history actions (closed sessions are read-only) ----
+const viewingSession = ref<RegisterSession | null>(null)
+const sessionOpen = ref(false)
+function viewSession(s: RegisterSession) { viewingSession.value = s; sessionOpen.value = true }
+function sessionRows(s: RegisterSession): [string, string][] {
+  return [
+    ['Register', s.register], ['Opened', `${dateTime(s.openedAt)} by ${s.openedBy}`], ['Closed', dateTime(s.closedAt)],
+    ['Opening float', money(s.openingFloat)], ['Cash sales', money(s.cashSales)], ['Cash refunds', money(-s.cashRefunds)],
+    ['Cash in / out', `${money(s.cashIn)} / ${money(-s.cashOut)}`], ['Expected cash', money(s.expectedCash)], ['Counted cash', money(s.countedCash)],
+    ['Difference', s.difference ? money(s.difference) : 'Exact'],
+    ...s.nonCash.map(n => [n.method, money(n.amount)] as [string, string]),
+  ]
+}
+function printZReport(s: RegisterSession) {
+  const w = window.open('', '_blank', 'width=420,height=640')
+  if (!w) { toast.warning('Allow pop-ups to print the report'); return }
+  w.document.write(`<html><head><title>Z report ${s.id}</title><style>body{font:12px ui-monospace,monospace;width:72mm;padding:8px}.r{display:flex;justify-content:space-between;margin:3px 0}h3{text-align:center;margin:4px 0}hr{border:0;border-top:1px dashed #000}</style></head><body><h3>RED PHARMA · Z REPORT</h3><div style="text-align:center">Session #${s.id}</div><hr>${sessionRows(s).map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`).join('')}<hr><div style="text-align:center">Printed ${new Date().toLocaleString()}</div></body></html>`)
+  w.document.close()
+  w.print()
+}
 const sessions = ref<RegisterSession[]>([])
 const loading = ref(true)
 const root = ref<HTMLElement | null>(null)
@@ -174,10 +195,21 @@ const elapsed = (iso: string) => {
             <span class="text-sm font-semibold tabular" :class="!s.difference ? 'text-slate-400' : s.difference > 0 ? 'text-emerald-600' : 'text-rose-600'">
               {{ s.difference ? (s.difference > 0 ? '+' : '') + money(s.difference) : 'exact' }}
             </span>
+            <UiRowActions :label="`session ${s.id}`" :view="() => viewSession(s)" :items="[{ label: 'Print Z report', icon: Printer, onClick: () => printZReport(s) }]" />
           </li>
         </ul>
       </div>
     </div>
+
+    <UiDrawer v-model="sessionOpen" :title="viewingSession ? `${viewingSession.register} · session #${viewingSession.id}` : ''" description="Closed register session (read-only)" width="md">
+      <dl v-if="viewingSession" class="divide-y divide-slate-100 text-sm">
+        <div v-for="[k, v] in sessionRows(viewingSession)" :key="k" data-stagger class="flex justify-between gap-6 py-2.5"><dt class="text-slate-500">{{ k }}</dt><dd class="text-right font-medium tabular">{{ v }}</dd></div>
+      </dl>
+      <template #footer>
+        <UiButton :icon="Printer" @click="viewingSession && printZReport(viewingSession)">Print Z report</UiButton>
+        <UiButton variant="ghost" @click="sessionOpen = false">Close</UiButton>
+      </template>
+    </UiDrawer>
 
     <UiModal v-model="moveOpen" :title="move.type === 'cash_in' ? 'Cash in' : 'Cash out'" :description="move.type === 'cash_in' ? 'Money added to the drawer, e.g. change float top-up.' : 'Money taken from the drawer, e.g. petty expense or bank deposit.'" size="sm" :dismissible="!moving">
       <div class="space-y-4">

@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { Download, Eye, Layers, PackageCheck, PackageX, Undo2 } from 'lucide-vue-next'
-import type { Column } from '~/types/domain'
+import { Download, Layers, PackageCheck, PackageX, Undo2, Printer, Receipt } from 'lucide-vue-next'
+import type { Column, RowAction } from '~/types/domain'
 import type { SaleReturnSummary } from '~/types/orders'
 
 definePageMeta({ title: 'Sale returns' })
 const api = useSaleReturnsApi()
-const { search, page, filters, result, loading } = useList<SaleReturnSummary>(q => api.list(q), { refundMethod: '' })
+const auth = useAuthStore()
+const toast = useToast()
+const { ask } = useConfirm()
+const actionsApi = useRowActionsApi()
+const voided = ref(new Set<number>())
+const { search, page, filters, result, loading, reload } = useList<SaleReturnSummary>(q => api.list(q), { refundMethod: '' })
 const method = computed({ get: () => filters.value.refundMethod || 'all', set: v => (filters.value.refundMethod = v === 'all' ? '' : v) })
 
 const columns: Column[] = [
@@ -17,7 +22,7 @@ const columns: Column[] = [
   { key: 'stock', label: 'Restocked / written off', align: 'right' },
   { key: 'refundMethod', label: 'Refund' },
   { key: 'total', label: 'Refund total', align: 'right' },
-  { key: 'actions', label: '', align: 'right' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
 ]
 const methodLabel: Record<string, string> = { cash: 'Cash', credit: 'Customer credit', bkash: 'bKash' }
 const methodTone = { cash: 'success', credit: 'info', bkash: 'violet' } as const
@@ -25,6 +30,17 @@ const methodTone = { cash: 'success', credit: 'info', bkash: 'violet' } as const
 const selected = ref<SaleReturnSummary | null>(null)
 const drawer = computed({ get: () => !!selected.value, set: v => { if (!v) selected.value = null } })
 
+async function voidReturn(row: SaleReturnSummary) {
+  const { ok, reason } = await ask({ title: `Void return ${row.number}?`, description: 'Restocked pieces are taken back out of their batches and the refund is reversed. The return stays on record as void.', confirmLabel: 'Void return', requireReason: true })
+  if (!ok) return
+  try { await actionsApi.voidDocument('sale-returns', row.id, reason); voided.value.add(row.id); toast.success('Return voided', row.number); reload() }
+  catch (e: any) { toast.error('Could not void', e?.message) }
+}
+function printReturn(row: SaleReturnSummary) { selected.value = row; nextTick(() => setTimeout(() => window.print(), 400)) }
+const rowItems = (row: SaleReturnSummary): RowAction[] => [
+  { label: 'Open original invoice', icon: Receipt, to: `/sales/${row.saleId}` },
+  { label: 'Print return note', icon: Printer, onClick: () => printReturn(row) },
+]
 function exportCsv() {
   const rows = (result.value?.data ?? []).map(r => ({ ...r, stock: `${r.restockedQty} / ${r.writtenOffQty}`, refundMethod: methodLabel[r.refundMethod] }))
   downloadCsv('sale-returns.csv', columns.filter(c => c.key !== 'actions'), rows)
@@ -57,9 +73,11 @@ function exportCsv() {
       <template #cell-refundMethod="{ row }"><UiBadge :tone="methodTone[row.refundMethod as keyof typeof methodTone]">{{ methodLabel[row.refundMethod] }}</UiBadge></template>
       <template #cell-total="{ row }"><span class="font-semibold tabular">{{ money(row.total) }}</span></template>
       <template #cell-actions="{ row }">
-        <div class="flex justify-end opacity-0 transition group-hover:opacity-100">
-          <UiButton size="sm" variant="ghost" :icon="Eye" :aria-label="`View return ${row.number}`" @click="selected = row" />
-        </div>
+        <UiRowActions
+          :label="row.number" :view="() => (selected = row)" remove-kind="void"
+          :remove="!voided.has(row.id) && auth.can('returns.create') ? () => voidReturn(row) : undefined"
+          :items="rowItems(row)"
+        />
       </template>
     </UiDataTable>
 

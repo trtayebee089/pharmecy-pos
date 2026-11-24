@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Printer } from 'lucide-vue-next'
 import type { DateRange, ReportResult } from '~/types/domain'
 
 definePageMeta({ title: 'Custom product sales' })
@@ -43,11 +44,16 @@ onMounted(async () => {
   const names = [...new Set((await import('~/mocks/reports-extra')).customProductRows().map(r => r.productName))].sort()
   productOptions.value = names.map(n => ({ value: n, label: n }))
 })
+function saleActions(r: Record<string, any>) {
+  const id = r.saleId
+  if (!id) return null
+  return { view: `/sales/${id}`, items: [{ label: 'Print invoice', icon: Printer, to: `/sales/${id}?print=1` }] }
+}
 </script>
 
 <template>
   <UiReportPage
     title="Custom product sales" description="Items sold as free-text lines for products not in the catalogue. They carry no stock; frequent ones are candidates to add as real products."
-    :filters="[{ key: 'product', label: 'Items', options: productOptions }]" :load="load"
+    :filters="[{ key: 'product', label: 'Items', options: productOptions }]" :load="load" :row-actions="saleActions"
   />
 </template>

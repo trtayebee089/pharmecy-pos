@@ -26,6 +26,7 @@ onMounted(async () => {
   loading.value = false
   await nextTick()
   revealStagger(root.value?.querySelectorAll('[data-reveal]') ?? [], { stagger: 0.06 })
+  if (route.query.print && session.value) setTimeout(() => window.print(), 600)
 })
 
 const editable = computed(() => session.value?.status === 'counting' || session.value?.status === 'open')

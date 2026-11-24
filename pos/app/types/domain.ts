@@ -1,3 +1,4 @@
+import type { Component } from 'vue'
 // Types mirror the planned /api/pos/v1 contract (docs/rebuild/database-design.md).
 
 export type UnitCode = 'piece' | 'strip' | 'box' | 'bottle' | 'tube' | 'vial'
@@ -298,3 +299,15 @@ export interface ReportResult {
 }
 
 export interface DateRange { from: string; to: string }
+
+// ---- Row actions -----------------------------------------------------------------
+export interface RowAction {
+  label: string
+  icon?: Component
+  /** Route to open, or a handler */
+  to?: string
+  onClick?: () => void
+  danger?: boolean
+  disabled?: boolean
+  hidden?: boolean
+}

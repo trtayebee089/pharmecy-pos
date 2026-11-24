@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BookOpen, HandCoins, Phone, Mail, MapPin, Truck, Undo2, PackagePlus } from 'lucide-vue-next'
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
 import type { SupplierLedgerEntry, SupplierRow } from '~/types/inventory'
 
 definePageMeta({ title: 'Suppliers' })
@@ -8,6 +8,13 @@ const book = useSupplierLedgerApi()
 const auth = useAuthStore()
 const toast = useToast()
 const crud = ref<{ reload: () => void } | null>(null)
+const supplierActions = (s: SupplierRow): RowAction[] => [
+  { label: 'Ledger', icon: BookOpen, onClick: () => openLedger(s) },
+  { label: 'Pay supplier', icon: HandCoins, onClick: () => openLedger(s).then(() => startPay(s)), hidden: !(s.dueBalance > 0) || !auth.can('payments.pay_supplier') },
+  { label: 'New purchase', icon: PackagePlus, to: `/purchases/new?supplier=${s.id}`, hidden: !auth.can('purchases.create') },
+  { label: 'Return to supplier', icon: Undo2, to: '/purchases/returns', hidden: !auth.can('purchase_returns.view') },
+  { label: `Call ${s.phone}`, icon: Phone, onClick: () => { window.location.href = `tel:${s.phone}` }, hidden: !s.phone },
+]
 
 const columns: CrudColumn[] = [
   { key: 'name', label: 'Supplier' },
@@ -102,7 +109,7 @@ async function submitPay() {
     <UiCrudPage
       ref="crud"
       title="Suppliers" description="Distributors and depots. The balance is what we owe, from purchases, payments and returns."
-      :resource="book.resource" :columns="columns" :fields="fields" noun="Supplier" create-permission="suppliers.manage" :deletable="false"
+      :resource="book.resource" :columns="columns" :fields="fields" noun="Supplier" create-permission="suppliers.manage" :deletable="false" :row-actions="supplierActions"
       :defaults="() => ({ name: '', companyName: '', phone: '', email: '', address: '', paymentTermsDays: 15, dueBalance: 0, purchases: 0, lastPurchase: null, isActive: true })"
       :item-label="r => r.name"
     >
@@ -115,10 +122,7 @@ async function submitPay() {
       <template #cell-phone="{ row }"><span class="text-slate-600 tabular">{{ row.phone }}</span></template>
       <template #cell-paymentTermsDays="{ row }"><span class="text-slate-500 tabular">{{ row.paymentTermsDays ? `${row.paymentTermsDays} days` : 'COD' }}</span></template>
       <template #cell-dueBalance="{ row }"><span class="tabular" :class="row.dueBalance ? 'font-semibold text-amber-600' : 'text-slate-400'">{{ row.dueBalance ? money(row.dueBalance) : 'Settled' }}</span></template>
-      <template #row-actions="{ row }">
-        <UiButton size="sm" variant="ghost" :icon="BookOpen" :aria-label="`Ledger for ${row.name}`" @click="openLedger(row)" />
-        <UiButton v-if="row.dueBalance > 0 && auth.can('payments.pay_supplier')" size="sm" variant="soft" :icon="HandCoins" @click="openLedger(row).then(() => startPay(row))">Pay</UiButton>
-      </template>
+
     </UiCrudPage>
 
     <UiDrawer v-model="drawer" width="xl">

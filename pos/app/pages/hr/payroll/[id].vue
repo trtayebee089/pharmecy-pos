@@ -27,7 +27,12 @@ async function load() {
   revealStagger(root.value?.querySelectorAll('[data-reveal], tbody tr') ?? [], { y: 8, stagger: 0.025 })
   animateStepper()
 }
-onMounted(load)
+onMounted(async () => {
+  await load()
+  // Deep links from the payroll list: ?action=pay | ?action=print
+  if (route.query.action === 'pay' && run.value?.status === 'approved') startPay()
+  if (route.query.action === 'print' && run.value) printAll()
+})
 
 const periodLabel = computed(() => run.value ? new Date(`${run.value.period}-01`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : '')
 const steps = ['draft', 'approved', 'paid'] as const
@@ -86,20 +91,49 @@ async function pay() {
 const slipOpen = ref(false)
 const slip = ref<Payslip | null>(null)
 function openSlip(p: Payslip) { slip.value = p; slipOpen.value = true }
-function printSlip() {
-  if (!slip.value || !run.value) return
-  const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
-  const p = { ...slip.value, name: esc(slip.value.name), designation: esc(slip.value.designation) }
-  const w = window.open('', '_blank', 'width=480,height=640')
-  if (!w) return
+const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
+function slipHtml(s: Payslip) {
+  const p = { ...s, name: esc(s.name), designation: esc(s.designation) }
   const row = (k: string, v: string) => `<tr><td>${k}</td><td style="text-align:right">${v}</td></tr>`
-  w.document.write(`<!doctype html><html><head><title>Payslip ${p.name} ${run.value.period}</title><style>body{font:13px/1.5 system-ui,sans-serif;padding:24px;color:#0f1b2d}h1{font-size:18px;margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}td{padding:6px 0;border-bottom:1px solid #e2e8f0}.net td{font-weight:700;font-size:15px;border:0;padding-top:12px}</style></head><body>
-    <h1>Red Pharma · Payslip</h1><p>${periodLabel.value}<br>${p.name} · ${p.designation}</p>
+  return `<section><h1>Red Pharma · Payslip</h1><p>${periodLabel.value}<br>${p.name} · ${p.designation}</p>
     <table>${row('Basic salary', money(p.basic))}${row('Additions', money(p.additions))}${row(`Absence deduction (${p.workingDays - p.presentDays} days)`, `−${money(p.deductions)}`)}${row('Advance recovery', `−${money(p.advanceRecovery)}`)}<tr class="net"><td>Net pay</td><td style="text-align:right">${money(p.net)}</td></tr></table>
-    <p style="margin-top:32px;color:#64748b">Status: ${run.value.status}${run.value.paidAt ? ` · paid ${date(run.value.paidAt)}` : ''}</p></body></html>`)
+    <p style="margin-top:32px;color:#64748b">Status: ${run.value?.status}${run.value?.paidAt ? ` · paid ${date(run.value.paidAt)}` : ''}</p></section>`
+}
+function printSlips(list: Payslip[]) {
+  if (!run.value || !list.length) return
+  const w = window.open('', '_blank', 'width=480,height=640')
+  if (!w) { toast.warning('Allow pop-ups to print payslips'); return }
+  w.document.write(`<!doctype html><html><head><title>Payslips ${run.value.period}</title><style>body{font:13px/1.5 system-ui,sans-serif;padding:24px;color:#0f1b2d}h1{font-size:18px;margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}td{padding:6px 0;border-bottom:1px solid #e2e8f0}.net td{font-weight:700;font-size:15px;border:0;padding-top:12px}section{page-break-after:always}section:last-child{page-break-after:auto}</style></head><body>${list.map(slipHtml).join('')}</body></html>`)
   w.document.close()
   w.focus()
   w.print()
+}
+function printSlip() { if (slip.value) printSlips([slip.value]) }
+function printAll() { printSlips(slips.value) }
+
+// ---- Edit payslip (draft runs only: manual addition with a note) ----
+const editOpen = ref(false)
+const editSlip = ref<Payslip | null>(null)
+const editAdditions = ref(0)
+const editNote = ref('')
+function startEdit(p: Payslip) { editSlip.value = p; editAdditions.value = p.additions; editNote.value = ''; editOpen.value = true }
+async function saveSlip() {
+  const p = editSlip.value
+  if (!p || !run.value || editAdditions.value < 0 || !editNote.value.trim()) return
+  await api.updatePayslip(run.value.id, p.id, Number(editAdditions.value), editNote.value)
+  const diff = Number(editAdditions.value) - p.additions
+  p.additions = Number(editAdditions.value)
+  p.net += diff
+  run.value.gross += diff
+  run.value.net += diff
+  editOpen.value = false
+  toast.success('Payslip updated', `${p.name} · net ${money(p.net)}`)
+}
+function slipActions(p: Payslip) {
+  return [
+    { label: 'Print payslip', icon: Printer, onClick: () => printSlips([p]) },
+    { label: 'Employee record', icon: FileText, to: '/hr/employees' },
+  ]
 }
 </script>
 
@@ -117,6 +151,7 @@ function printSlip() {
           </div>
         </div>
         <div class="flex gap-2">
+          <UiButton :icon="Printer" @click="printAll">Print payslips</UiButton>
           <UiButton v-if="run.status === 'draft'" variant="primary" :icon="CheckCircle2" :loading="busy" @click="approve">Approve</UiButton>
           <UiButton v-else-if="run.status === 'approved'" variant="primary" :icon="Banknote" :loading="busy" magnetic @click="startPay">Pay salaries</UiButton>
           <UiBadge v-else tone="success" size="md"><Lock class="size-3" />Paid · final</UiBadge>
@@ -149,7 +184,7 @@ function printSlip() {
               <tr class="border-b border-slate-100 bg-slate-50/70">
                 <th class="label h-10 px-4 text-left">Employee</th><th class="label px-3 text-right">Days</th><th class="label px-3 text-right">Basic</th>
                 <th class="label px-3 text-right">Additions</th><th class="label px-3 text-right">Deductions</th><th class="label px-3 text-right">Advance</th>
-                <th class="label px-4 text-right">Net</th><th />
+                <th class="label px-4 text-right">Net</th><th class="label px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -161,7 +196,9 @@ function printSlip() {
                 <td class="px-3 py-3 text-right tabular" :class="p.deductions ? 'text-rose-600' : 'text-slate-400'">{{ p.deductions ? `−${money(p.deductions)}` : '—' }}</td>
                 <td class="px-3 py-3 text-right tabular" :class="p.advanceRecovery ? 'text-rose-600' : 'text-slate-400'">{{ p.advanceRecovery ? `−${money(p.advanceRecovery)}` : '—' }}</td>
                 <td class="px-4 py-3 text-right font-semibold tabular">{{ money(p.net) }}</td>
-                <td class="pr-3"><UiButton size="sm" variant="ghost" :icon="FileText" :aria-label="`Payslip for ${p.name}`" @click="openSlip(p)" /></td>
+                <td class="pr-3">
+                  <UiRowActions :label="p.name" :view="() => openSlip(p)" :edit="run.status === 'draft' && useAuthStore().can('hr.payroll') ? () => startEdit(p) : undefined" :items="slipActions(p)" />
+                </td>
               </tr>
             </tbody>
             <tfoot>
@@ -184,6 +221,17 @@ function printSlip() {
         <template #footer>
           <UiButton variant="ghost" @click="payOpen = false">Cancel</UiButton>
           <UiButton variant="primary" :icon="Banknote" :loading="busy" :disabled="!account" @click="pay">Pay {{ money(totals.net) }}</UiButton>
+        </template>
+      </UiModal>
+
+      <UiModal v-model="editOpen" :title="editSlip ? `Edit payslip · ${editSlip.name}` : ''" description="Draft runs only. Add bonus or overtime; the note is kept for audit." size="sm">
+        <div class="space-y-4">
+          <UiInput v-model.number="editAdditions" type="number" label="Additions (৳)" />
+          <UiInput v-model="editNote" label="Note (required)" placeholder="e.g. Eid bonus, 6 h overtime" />
+        </div>
+        <template #footer>
+          <UiButton variant="ghost" @click="editOpen = false">Cancel</UiButton>
+          <UiButton variant="primary" :disabled="editAdditions < 0 || !editNote.trim()" @click="saveSlip">Save payslip</UiButton>
         </template>
       </UiModal>
 

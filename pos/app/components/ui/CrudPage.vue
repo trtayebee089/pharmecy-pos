@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T extends { id: number } & Record<string, any>">
-import { Plus, Pencil, Trash2, Download } from 'lucide-vue-next'
-import type { CrudColumn, FieldDef } from '~/types/domain'
+import { Plus, Pencil, Download } from 'lucide-vue-next'
+import type { CrudColumn, FieldDef, RowAction } from '~/types/domain'
 import type { Resource } from '~/services/resource'
 
 /**
@@ -20,6 +20,10 @@ const props = withDefaults(defineProps<{
   deletable?: boolean
   segments?: { key: string; options: { value: string; label: string }[] }
   itemLabel?: (row: T) => string
+  /** Extra actions for the row's More menu (Print, Duplicate, View history…) */
+  rowActions?: (row: T) => RowAction[]
+  /** Override the View action (e.g. a detail page); default opens a details drawer */
+  viewTo?: (row: T) => string
 }>(), { deletable: true })
 
 const emit = defineEmits<{ saved: [row: T] }>()
@@ -31,7 +35,7 @@ const segment = ref('all')
 const { search, page, filters, result, loading, reload } = useList<T>(q => props.resource.list(q), props.segments ? { [props.segments.key]: '' } : {})
 watch(segment, (v) => { if (props.segments) filters.value[props.segments.key] = v === 'all' ? '' : v })
 
-const allColumns = computed<CrudColumn[]>(() => [...props.columns, { key: '__actions', label: '', align: 'right' }])
+const allColumns = computed<CrudColumn[]>(() => [...props.columns, { key: '__actions', label: 'Actions', align: 'right', width: '1%' }])
 const canCreate = computed(() => auth.can(props.createPermission))
 const canEdit = computed(() => auth.can(props.editPermission ?? props.createPermission))
 
@@ -78,6 +82,17 @@ function exportCsv() {
   const rows = result.value?.data ?? []
   downloadCsv(`${props.title.toLowerCase().replace(/\s+/g, '-')}.csv`, props.columns, rows)
 }
+// ---- View drawer: every column and form field of the record ----
+const viewOpen = ref(false)
+const viewing = ref<T | null>(null)
+function openView(row: T) { viewing.value = row; viewOpen.value = true }
+const viewFields = computed(() => {
+  const seen = new Set<string>()
+  const out: { key: string; label: string; column?: CrudColumn }[] = []
+  for (const c of props.columns) { seen.add(c.key); out.push({ key: c.key, label: c.label, column: c }) }
+  for (const f of props.fields) if (!seen.has(f.key)) out.push({ key: f.key, label: f.label, column: { key: f.key, label: f.label, format: f.type === 'money' ? 'money' : f.type === 'switch' ? 'boolean' : f.type === 'date' ? 'date' : 'text' } })
+  return out
+})
 defineExpose({ reload, startCreate, startEdit })
 </script>
 
@@ -99,13 +114,30 @@ defineExpose({ reload, startCreate, startEdit })
         <slot :name="`cell-${c.key}`" :row="row" :value="value"><UiCell :value="value" :column="c" /></slot>
       </template>
       <template #cell-__actions="{ row }">
-        <div class="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
+        <UiRowActions
+          :label="itemLabel?.(row) ?? noun"
+          :view="viewTo ? viewTo(row) : () => openView(row)"
+          :edit="canEdit ? () => startEdit(row) : undefined"
+          :remove="deletable && canEdit ? () => remove(row) : undefined"
+          :items="rowActions?.(row) ?? []"
+        >
           <slot name="row-actions" :row="row" />
-          <UiButton v-if="canEdit" size="sm" variant="ghost" :icon="Pencil" :aria-label="`Edit ${noun}`" @click="startEdit(row)" />
-          <UiButton v-if="deletable && canEdit" size="sm" variant="ghost" :icon="Trash2" class="hover:!text-rose-600" :aria-label="`Delete ${noun}`" @click="remove(row)" />
-        </div>
+        </UiRowActions>
       </template>
     </UiDataTable>
+
+    <UiDrawer v-model="viewOpen" :title="viewing ? (itemLabel?.(viewing) ?? noun) : noun" :description="`${noun} details`" width="md">
+      <dl v-if="viewing" class="divide-y divide-slate-100">
+        <div v-for="f in viewFields" :key="f.key" data-stagger class="flex items-start justify-between gap-6 py-3 text-sm">
+          <dt class="text-slate-500">{{ f.label }}</dt>
+          <dd class="text-right font-medium text-ink"><UiCell :value="(viewing as any)[f.key]" :column="f.column!" /></dd>
+        </div>
+      </dl>
+      <template #footer>
+        <UiButton variant="ghost" @click="viewOpen = false">Close</UiButton>
+        <UiButton v-if="canEdit && viewing" variant="primary" :icon="Pencil" @click="viewOpen = false; startEdit(viewing!)">Edit</UiButton>
+      </template>
+    </UiDrawer>
 
     <UiModal v-model="open" :title="form.id ? `Edit ${noun.toLowerCase()}` : `New ${noun.toLowerCase()}`" :dismissible="!saving">
       <form class="grid gap-4 sm:grid-cols-2" @submit.prevent="save">

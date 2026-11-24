@@ -19,6 +19,8 @@ export interface PrinterProfile {
 }
 
 export interface PosConfig {
+  /** Counter screen: product cards (grid) or the classic table-based screen */
+  layout: 'grid' | 'classic'
   defaultCustomerId: number
   defaultWarehouseId: number
   defaultBillerId: number
@@ -55,6 +57,7 @@ export interface RewardPointConfig {
 }
 
 const posDefaults = (): PosConfig => ({
+  layout: 'grid',
   defaultCustomerId: 1, defaultWarehouseId: 1, defaultBillerId: 1, productsPerPage: 24, productGrid: 'comfortable',
   touchKeyboard: false, sendSmsAfterSale: true, requireCustomerForDue: true,
   paymentMethods: [
@@ -91,13 +94,13 @@ export function useSettingsApi() {
   const rewardStore = useState<RewardPointConfig | null>('mock-reward-config', () => null)
   return {
     async pos(): Promise<PosConfig> {
-      if (api.useMocks) { await mockDelay(300); posStore.value ??= posDefaults(); return structuredClone(toRaw(posStore.value)) }
+      if (api.useMocks) { await mockDelay(300); posStore.value ??= posDefaults(); return plainClone(posStore.value) }
       return api.get('/settings/pos')
     },
     async savePos(c: PosConfig, printNodeKey?: string): Promise<void> {
       if (api.useMocks) {
         await mockDelay(500)
-        posStore.value = { ...structuredClone(c), printNodeConfigured: c.printNodeConfigured || !!printNodeKey }
+        posStore.value = { ...plainClone(c), printNodeConfigured: c.printNodeConfigured || !!printNodeKey }
         return
       }
       return api.put('/settings/pos', { ...c, print_node_api_key: printNodeKey || undefined })
@@ -108,12 +111,15 @@ export function useSettingsApi() {
       return api.post(`/settings/printers/${printerId}/test`)
     },
     async rewards(): Promise<RewardPointConfig> {
-      if (api.useMocks) { await mockDelay(300); rewardStore.value ??= rewardDefaults(); return structuredClone(toRaw(rewardStore.value)) }
+      if (api.useMocks) { await mockDelay(300); rewardStore.value ??= rewardDefaults(); return plainClone(rewardStore.value) }
       return api.get('/settings/reward-points')
     },
     async saveRewards(c: RewardPointConfig): Promise<void> {
-      if (api.useMocks) { await mockDelay(500); rewardStore.value = structuredClone(c); return }
+      if (api.useMocks) { await mockDelay(500); rewardStore.value = plainClone(c); return }
       return api.put('/settings/reward-points', c)
     },
   }
 }
+
+/** Deep copy that also works on Vue reactive proxies (structuredClone throws on them). */
+function plainClone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T }

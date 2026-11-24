@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Plus, Minus, ClipboardEdit, Trash2, ArrowDown, ArrowUp } from 'lucide-vue-next'
-import type { AdjustmentSummary, Column, Product } from '~/types/domain'
+import { Plus, Minus, ClipboardEdit, Trash2, ArrowDown, ArrowUp, Printer, Copy } from 'lucide-vue-next'
+import type { AdjustmentSummary, Column, Product, RowAction } from '~/types/domain'
 
 definePageMeta({ title: 'Stock adjustments' })
 const api = useAdjustmentsApi()
@@ -18,6 +18,29 @@ const columns: Column[] = [
   { key: 'value', label: 'Value at cost', align: 'right' },
   { key: 'status', label: 'Status' },
   { key: 'createdBy', label: 'By' },
+  { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
+]
+const rowAuth = useAuthStore()
+const rowToast = useToast()
+const rowConfirm = useConfirm()
+const actionsApi = useRowActionsApi()
+const viewing = ref<AdjustmentSummary | null>(null)
+const viewOpen = computed({ get: () => !!viewing.value, set: v => { if (!v) viewing.value = null } })
+const viewRows = computed(() => viewing.value ? [
+  ['Number', viewing.value.number], ['Date', dateTime(viewing.value.date)], ['Reason', viewing.value.reason],
+  ['Lines', String(viewing.value.lines)], ['Pieces in', num(viewing.value.qtyIn)], ['Pieces out', num(viewing.value.qtyOut)],
+  ['Value at cost', money(viewing.value.value)], ['Status', viewing.value.status], ['Created by', viewing.value.createdBy],
+] : [])
+async function voidAdjustment(a: AdjustmentSummary) {
+  const { ok, reason } = await rowConfirm.ask({ title: `Void ${a.number}?`, description: 'Its stock movements are reversed on the same batches. The adjustment stays on record as void.', confirmLabel: 'Void adjustment', requireReason: true })
+  if (!ok) return
+  try { await actionsApi.voidDocument('adjustments', a.id, reason); rowToast.success('Adjustment voided', a.number); reload() }
+  catch (e: any) { rowToast.error('Could not void', e?.message) }
+}
+function printAdjustment(a: AdjustmentSummary) { viewing.value = a; nextTick(() => setTimeout(() => window.print(), 500)) }
+const rowItems = (a: AdjustmentSummary): RowAction[] => [
+  { label: 'Print', icon: Printer, onClick: () => printAdjustment(a) },
+  { label: 'New adjustment like this', icon: Copy, onClick: () => { start(); reason.value = a.reason }, hidden: !rowAuth.can('inventory.adjust') },
 ]
 const reasonTone = { damage: 'danger', expiry: 'warning', correction: 'info', lost: 'danger', found: 'success' } as const
 const reasonOptions = [
@@ -103,7 +126,22 @@ async function post() {
       <template #cell-value="{ row }"><span class="tabular">{{ money(row.value) }}</span></template>
       <template #cell-status="{ row }"><UiBadge :tone="row.status === 'posted' ? 'success' : 'info'" dot class="capitalize">{{ row.status }}</UiBadge></template>
       <template #cell-createdBy="{ row }"><span class="text-slate-500">{{ row.createdBy }}</span></template>
+      <template #cell-actions="{ row }">
+        <UiRowActions
+          :label="row.number" :view="() => (viewing = row)" remove-kind="void"
+          :remove="row.status !== 'void' && rowAuth.can('inventory.adjust') ? () => voidAdjustment(row) : undefined"
+          :items="rowItems(row)"
+        />
+      </template>
     </UiDataTable>
+
+    <UiDrawer v-model="viewOpen" title="Stock adjustment" :description="viewing?.number" width="md">
+      <dl class="divide-y divide-slate-100 text-sm">
+        <div v-for="[k, v] in viewRows" :key="k" data-stagger class="flex justify-between gap-6 py-3">
+          <dt class="text-slate-500">{{ k }}</dt><dd class="text-right font-medium capitalize">{{ v }}</dd>
+        </div>
+      </dl>
+    </UiDrawer>
 
     <UiModal v-model="open" title="New stock adjustment" description="Quantities are in pieces. A batch can never go below zero." size="xl" :dismissible="!posting">
       <div class="grid gap-4 sm:grid-cols-[240px_1fr]">
