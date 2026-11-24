@@ -73,7 +73,7 @@ async function post() {
     const e = await api.postEntry(props.kind, {
       date: form.date, categoryId: form.categoryId!, accountId: form.accountId!, amount: Number(form.amount), note: form.note,
       category: categories.value.find(c => c.id === form.categoryId)?.name ?? '', account: accounts.value.find(a => a.id === form.accountId)?.name ?? '', hasAttachment: !!form.file,
-    }, idemKey)
+    }, idemKey, form.file)
     toast.success(`${noun.value} posted`, `${e.number} · ${money(e.amount)}`)
     open.value = false
     load()

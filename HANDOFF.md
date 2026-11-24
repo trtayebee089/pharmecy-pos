@@ -93,6 +93,11 @@ Engineering decisions taken during the build (change only on purpose):
   current price list and live batches. Any counter of the warehouse may resume one; the first resume wins.
 - Purchase order "AI" forecast is a transparent statistical model on the server (28-day rate, 7-day trend, 21 days of
   cover); no data leaves the system. A real model can replace `PurchaseOrderPlanner::forecast` behind the same endpoint.
+- Finance: account balances are always derived from `account_transactions`; finance documents are voided with
+  reversing transactions, never edited. Expenses and incomes share `finance_entries` / `finance_categories` (column
+  `kind`) instead of the two table pairs in the design doc. Attachments live on the private `local` disk.
+- Date columns compared as dates (`txn_date`, `entry_date`, `transfer_date`, `order_date`) must not get an Eloquent
+  `date` cast without `whereDate`: the cast stores a time and string comparisons then fail on SQLite.
 
 ## 4. What is done
 
@@ -106,7 +111,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (115 Pest tests passing)
+### Laravel API (`api/`) – live slices (124 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -124,10 +129,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Customers: profile, edit, deactivate, groups, due list, open invoices, due collection | live |
 | Held sales: hold (F8), list, resume on any counter of the warehouse, discard | live |
 | Purchase orders: company report, forecast, drafts, convert to ordered purchase, drafts for all companies | live |
+| Finance: accounts, statements, money transfers, expenses and income (with attachments), categories, balance sheet + P&L | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (12 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 115 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (13 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 124 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -135,16 +141,18 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
-2. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-3. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-4. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-5. **HR & payroll**: employees, attendance, holidays, payroll.
-6. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-7. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-8. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
+2. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+3. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+4. **HR & payroll**: employees, attendance, holidays, payroll.
+5. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+6. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+7. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
+- Overdraw checks use the account's current balance, so an expense or transfer backdated to before the money arrived
+  can show a negative balance on historic statements and balance sheets.
+- Cash expenses are not tied to a cash register session (use the register's cash out for drawer money).
 - Screens build date ranges from the browser clock; counter PCs must use Bangladesh time (Asia/Dhaka) or "today"
   can differ from the API's day around midnight.
 - The inventory reorder suggestions screen (`useReorderApi`, `/reorder/*`) still runs on mocks; it overlaps with the
@@ -172,8 +180,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 115 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 115 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 124 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 124 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

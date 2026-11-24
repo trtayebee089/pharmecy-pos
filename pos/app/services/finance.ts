@@ -8,7 +8,7 @@ import type { Account, BalanceSheet, FinanceCategory, FinanceEntry, MoneyTransfe
 const financeMocks = () => import('~/mocks/finance')
 
 export function useFinanceApi() {
-  const api = useApi()
+  const api = useApi('finance')
   const accountStore = useState<Account[] | null>('mock-finance-accounts', () => null)
   const transferStore = useState<MoneyTransfer[] | null>('mock-finance-transfers', () => null)
   const entryStore = useState<Record<string, FinanceEntry[]>>('mock-finance-entries', () => ({}))
@@ -64,7 +64,10 @@ export function useFinanceApi() {
         if (!transferStore.value) transferStore.value = structuredClone((await financeMocks()).transfers)
         return transferStore.value
       }
-      return api.get('/finance/money-transfers')
+      const rows = await api.get<(MoneyTransfer & { status: 'posted' | 'void'; voidReason: string | null })[]>('/finance/money-transfers')
+      // The page reads void state from voidedTransfers; the API is the source of truth.
+      voidedTransfers.value = Object.fromEntries(rows.filter(t => t.status === 'void').map(t => [t.id, t.voidReason ?? '']))
+      return rows
     },
     async transfer(payload: { fromAccountId: number; toAccountId: number; amount: number; date: string; note: string }, idempotencyKey: string): Promise<MoneyTransfer> {
       if (api.useMocks) {
@@ -100,13 +103,14 @@ export function useFinanceApi() {
       return api.post(`/finance/money-transfers/${id}/void`, { reason }, idempotencyKey)
     },
     categories(kind: 'expense' | 'income') {
-      return useResource<FinanceCategory>(`finance/${kind}-categories`, async () => (await financeMocks())[kind === 'expense' ? 'expenseCategories' : 'incomeCategories'])
+      return useResource<FinanceCategory>(`finance/${kind}-categories`, async () => (await financeMocks())[kind === 'expense' ? 'expenseCategories' : 'incomeCategories'], 'finance')
     },
     async entries(kind: 'expenses' | 'incomes'): Promise<FinanceEntry[]> {
       if (api.useMocks) { await mockDelay(); return mockEntries(kind) }
       return api.get(`/finance/${kind}`)
     },
-    async postEntry(kind: 'expenses' | 'incomes', payload: { date: string; categoryId: number; accountId: number; amount: number; note: string; category: string; account: string; hasAttachment: boolean }, idempotencyKey: string): Promise<FinanceEntry> {
+    /** Posts the entry, then uploads the bill/receipt when one is given (PDF or image, at most 5 MB). */
+    async postEntry(kind: 'expenses' | 'incomes', payload: { date: string; categoryId: number; accountId: number; amount: number; note: string; category: string; account: string; hasAttachment: boolean }, idempotencyKey: string, file?: File | null): Promise<FinanceEntry> {
       if (api.useMocks) {
         await mockDelay(600)
         const list = await mockEntries(kind)
@@ -115,7 +119,12 @@ export function useFinanceApi() {
         list.unshift(e)
         return e
       }
-      return api.post(`/finance/${kind}`, payload, idempotencyKey)
+      const entry = await api.post<FinanceEntry>(`/finance/${kind}`, { date: payload.date, categoryId: payload.categoryId, accountId: payload.accountId, amount: payload.amount, note: payload.note }, idempotencyKey)
+      if (!file) return entry
+      const body = new FormData()
+      body.append('file', file)
+      try { return await api.post<FinanceEntry>(`/finance/${kind}/${entry.id}/attachment`, body) }
+      catch (e: any) { throw new ApiError(`${entry.number} was posted, but the attachment was not saved: ${e?.message ?? 'upload failed'}`, e?.status ?? 0, e?.errors ?? {}) }
     },
     /** Voiding posts a reversing account transaction; the entry stays on record. */
     async voidEntry(kind: 'expenses' | 'incomes', id: number, reason: string): Promise<void> {

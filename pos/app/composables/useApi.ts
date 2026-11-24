@@ -31,7 +31,7 @@ let csrfReady: Promise<void> | null = null
  * that domain to the real API, so finished endpoints can be used while the
  * rest of the UI still runs on mocks. With mocks off, everything is live.
  */
-export type ApiDomain = 'auth' | 'catalog' | 'customers' | 'sales' | 'dashboard' | 'purchases' | 'registers' | 'inventory'
+export type ApiDomain = 'auth' | 'catalog' | 'customers' | 'sales' | 'dashboard' | 'purchases' | 'registers' | 'inventory' | 'finance'
 
 export function useApi(domain?: ApiDomain) {
   const config = useRuntimeConfig()
