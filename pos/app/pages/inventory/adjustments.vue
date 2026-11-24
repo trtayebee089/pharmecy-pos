@@ -53,6 +53,22 @@ const batchOf = (l: AdjLine) => l.product.batches.find(b => b.batchId === l.batc
 const after = (l: AdjLine) => batchOf(l).qtyBase + (l.direction === 'in' ? l.qty : -l.qty)
 const invalid = computed(() => lines.value.some(l => l.qty <= 0 || after(l) < 0))
 
+// Deep link from Batches & expiry: /inventory/adjustments?reason=expiry&product=ID&batch=ID
+const route = useRoute()
+const catalog = useCatalogApi()
+onMounted(async () => {
+  if (!route.query.reason) return
+  start()
+  reason.value = String(route.query.reason)
+  const p = route.query.product ? await catalog.product(Number(route.query.product)) : null
+  if (p) {
+    addLine(p)
+    const b = p.batches.find(x => x.batchId === Number(route.query.batch))
+    if (b && lines.value[0]) { lines.value[0].batchId = b.batchId; lines.value[0].qty = b.qtyBase }
+    note.value = 'Expired stock written off'
+  }
+})
+
 async function post() {
   if (!lines.value.length || invalid.value) return
   if (!note.value.trim()) { toast.warning('Add a note', 'Every adjustment needs a short explanation for audit.'); return }

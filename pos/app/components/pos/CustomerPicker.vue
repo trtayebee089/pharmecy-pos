@@ -9,6 +9,8 @@ const q = ref('')
 const results = ref<Customer[]>([])
 const loading = ref(false)
 const list = ref<HTMLElement | null>(null)
+const newOpen = ref(false)
+function created(c: Customer) { cart.customer = c; open.value = false }
 
 async function load() {
   loading.value = true
@@ -45,7 +47,8 @@ function choose(c: Customer) {
       <p v-if="!loading && !results.length" class="py-6 text-center text-sm text-slate-500">No customer found.</p>
     </div>
     <template #footer>
-      <UiButton :icon="UserPlus">New customer</UiButton>
+      <UiButton :icon="UserPlus" @click="newOpen = true">New customer</UiButton>
     </template>
   </UiModal>
+  <PosNewCustomerModal v-model="newOpen" @created="created" />
 </template>

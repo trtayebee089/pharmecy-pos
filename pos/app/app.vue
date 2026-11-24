@@ -7,4 +7,5 @@ import { pageTransition } from '~/composables/useMotion'
     <NuxtPage :transition="pageTransition" />
   </NuxtLayout>
   <UiToaster />
+  <UiConfirmHost />
 </template>

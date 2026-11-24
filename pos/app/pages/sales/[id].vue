@@ -17,8 +17,10 @@ async function load() {
   loading.value = false
   await nextTick()
   revealStagger(root.value?.querySelectorAll('[data-reveal]') ?? [], { stagger: 0.07 })
+  if (route.query.print && sale.value) setTimeout(printInvoice, 600)
 }
 onMounted(load)
+function printInvoice() { window.print() }
 
 // ---- Return flow ----
 const returnOpen = ref(false)
@@ -90,7 +92,7 @@ const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as con
           </div>
         </div>
         <div class="flex gap-2">
-          <UiButton :icon="Printer">Reprint</UiButton>
+          <UiButton :icon="Printer" @click="printInvoice">Reprint</UiButton>
           <UiButton v-if="sale.status !== 'void' && auth.can('returns.create')" :icon="Undo2" @click="openReturn">Return items</UiButton>
           <UiButton v-if="sale.status !== 'void' && auth.can('sales.void')" variant="ghost" :icon="Ban" class="text-rose-600" @click="voidOpen = true">Void</UiButton>
         </div>

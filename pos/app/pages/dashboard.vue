@@ -13,11 +13,11 @@ const root = ref<HTMLElement | null>(null)
 
 async function load() {
   loading.value = true
-  try { data.value = await api.summary(auth.warehouseId) }
+  try { data.value = await api.summary(auth.warehouseId, range.value === '30d' ? 30 : 14) }
   catch (e: any) { useToast().error('Could not load the dashboard', e?.message) }
   finally { loading.value = false }
 }
-watch(() => auth.warehouseId, load)
+watch(() => [auth.warehouseId, range.value], load)
 onMounted(async () => {
   revealStagger(root.value?.querySelectorAll('[data-reveal]') ?? [], { stagger: 0.06 })
   await load()

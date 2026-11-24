@@ -28,12 +28,14 @@ npm run generate            # static build in .output/public
 | `app/stores/` | `auth` (`/me`, permissions, warehouse), `cart` (POS preview: units, FEFO, totals, hold/resume), `ui` |
 | `app/components/ui/` | Design system: Button, Input, Badge, Modal, Popover, DataTable, Segmented, StatCard, EmptyState, Toaster, ExpiryBadge… |
 | `app/components/pos/` | Counter: ProductCard, CartLine, PaymentModal (multi-method, change/due), CustomerPicker, 80 mm Receipt |
-| `app/pages/` | login, dashboard, pos, products (list, add, edit with unit ladder), inventory (batches, adjustments), sales (list, detail with per-batch returns and void), purchases (list, receive with batch/expiry), customers, cash registers (open/close with note count), admin (users, roles matrix, settings). Any other sidebar route shows an honest "planned" page with its phase and the legacy menu it replaces |
+| `app/pages/` | **Every sidebar module has a working screen** (60+ routes): counter, sales/returns/held, online orders + fulfilment board, products (list/add/edit/import), catalog masters, barcode labels, stock, batches, adjustments, counts, transfers, purchases (receive/detail/returns/AI reorder), suppliers, customers (profile, groups, due collection), loyalty, delivery, finance (registers, accounts, transfers, expenses, income, balance sheet), 9 reports, HR (employees, attendance, holidays, payroll), admin (users, roles, warehouses, settings) and the user account pages. Unknown routes show a 404 page |
+| `app/components/ui/CrudPage.vue`, `ReportPage.vue` | Config-driven templates for master-data CRUD and reports (date range, KPIs, trend, totals, CSV export, print) |
 
 ## POS keyboard map
 F2 search/scan · arrows move · Enter add (an exact barcode/SKU adds instantly) · F4 customer · F7 held sales · F8 hold · F9 pay · Ctrl+Enter complete · Ctrl+K command palette · F1 shortcuts
 
 ## Not done yet (next steps)
 - Laravel API `/api/pos/v1` (phase A+), then switch off the mocks.
-- Remaining modules: held-sales page, purchase returns, stock counts, transfers, online orders/delivery, loyalty, finance (accounts, expenses, income), HR, reports and the catalog lookup pages (sidebar items marked with their phase).
+- Expense/income attachment upload (UI validates only).
+- Code 128 barcode labels are encoded per spec but not yet test-scanned on a physical scanner.
 - Frontend tests (Vitest + Playwright) for cart math, keyboard flow and permissions.

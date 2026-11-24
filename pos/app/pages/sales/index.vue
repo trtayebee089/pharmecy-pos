@@ -18,12 +18,13 @@ const columns: Column[] = [
   { key: 'actions', label: '', align: 'right' },
 ]
 const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as const
+function exportCsv() { downloadCsv('sales.csv', columns.filter(c => c.key !== 'actions'), result.value?.data ?? []) }
 </script>
 
 <template>
   <div>
     <UiPageHeader title="Sales" description="Completed, voided and online sales. Completed invoices are immutable: correct them with a return or void.">
-      <UiButton :icon="Download">Export</UiButton>
+      <UiButton :icon="Download" :disabled="!result?.data.length" @click="exportCsv">Export</UiButton>
       <NuxtLink to="/pos"><UiButton variant="primary" :icon="ScanBarcode">New sale</UiButton></NuxtLink>
     </UiPageHeader>
 
@@ -49,7 +50,7 @@ const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as con
       <template #cell-actions="{ row }">
         <div class="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
           <NuxtLink :to="`/sales/${row.id}`"><UiButton size="sm" variant="ghost" :icon="Eye" aria-label="View" /></NuxtLink>
-          <UiButton size="sm" variant="ghost" :icon="Printer" aria-label="Reprint" />
+          <NuxtLink :to="`/sales/${row.id}?print=1`"><UiButton size="sm" variant="ghost" :icon="Printer" aria-label="Reprint" /></NuxtLink>
         </div>
       </template>
     </UiDataTable>

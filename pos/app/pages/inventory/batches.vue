@@ -18,12 +18,13 @@ const columns: Column[] = [
 ]
 // Visual shelf-life bar: 0–365 days
 const lifePct = (d: string) => Math.max(0, Math.min(100, (daysUntil(d) / 365) * 100))
+function exportCsv() { downloadCsv('batches.csv', columns.filter(c => c.key !== 'actions'), result.value?.data ?? []) }
 </script>
 
 <template>
   <div>
     <UiPageHeader title="Batches & expiry" description="Every unit of stock sits in a batch. Expired batches are blocked from sale automatically.">
-      <UiButton :icon="Download">Export</UiButton>
+      <UiButton :icon="Download" :disabled="!result?.data.length" @click="exportCsv">Export</UiButton>
     </UiPageHeader>
 
     <UiDataTable v-model:search="search" v-model:page="page" :columns="columns" :result="result" :loading="loading" row-key="batchId" search-placeholder="Product, batch no, manufacturer…" empty-title="No batches in this window">
@@ -45,8 +46,8 @@ const lifePct = (d: string) => Math.max(0, Math.min(100, (daysUntil(d) / 365) * 
       <template #cell-value="{ row }"><span class="tabular">{{ money(row.value) }}</span></template>
       <template #cell-actions="{ row }">
         <div class="flex justify-end gap-1 opacity-0 transition group-hover:opacity-100">
-          <UiButton size="sm" variant="ghost" :icon="Undo2" title="Return to supplier">Return</UiButton>
-          <UiButton v-if="daysUntil(row.expiryDate) < 0" size="sm" variant="ghost" :icon="Trash" title="Write off expired stock">Write off</UiButton>
+          <NuxtLink to="/purchases/returns"><UiButton size="sm" variant="ghost" :icon="Undo2" title="Return to supplier">Return</UiButton></NuxtLink>
+          <NuxtLink v-if="daysUntil(row.expiryDate) < 0" :to="`/inventory/adjustments?reason=expiry&product=${row.productId}&batch=${row.batchId}`"><UiButton size="sm" variant="ghost" :icon="Trash" title="Write off expired stock">Write off</UiButton></NuxtLink>
         </div>
       </template>
     </UiDataTable>

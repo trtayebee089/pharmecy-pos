@@ -64,6 +64,32 @@ async function closeRegister() {
   toast.success('Register closed', finalDiff === 0 ? 'Cash matches exactly.' : `Difference ${money(finalDiff)} recorded.`)
 }
 
+// ---- Cash in / out ----
+const moveOpen = ref(false)
+const move = reactive({ type: 'cash_in' as 'cash_in' | 'cash_out', amount: 0, reason: '' })
+const moving = ref(false)
+let moveKey = ''
+function startMove(type: 'cash_in' | 'cash_out') { Object.assign(move, { type, amount: 0, reason: '' }); moveKey = crypto.randomUUID(); moveOpen.value = true }
+const moveError = computed(() => {
+  if (!(move.amount > 0)) return 'Enter an amount'
+  if (move.type === 'cash_out' && current.value && move.amount > current.value.expectedCash) return 'More than the cash in the drawer'
+  if (!move.reason.trim()) return 'A reason is required'
+  return ''
+})
+async function submitMove() {
+  if (!current.value || moveError.value) return
+  moving.value = true
+  try {
+    await api.cashMovement(current.value.id, move.type, move.amount, move.reason, moveKey)
+    if (move.type === 'cash_in') { current.value.cashIn += move.amount; current.value.expectedCash += move.amount }
+    else { current.value.cashOut += move.amount; current.value.expectedCash -= move.amount }
+    toast.success(move.type === 'cash_in' ? 'Cash in recorded' : 'Cash out recorded', `${money(move.amount)} · ${move.reason}`)
+    moveOpen.value = false
+  }
+  catch (e: any) { toast.error('Not recorded', e?.message) }
+  finally { moving.value = false }
+}
+
 const elapsed = (iso: string) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
   return `${Math.floor(m / 60)}h ${m % 60}m`
@@ -116,8 +142,8 @@ const elapsed = (iso: string) => {
           </div>
         </div>
         <div class="flex justify-end gap-2 border-t border-slate-100 p-4">
-          <UiButton :icon="ArrowDownLeft">Cash in</UiButton>
-          <UiButton :icon="ArrowUpRight">Cash out</UiButton>
+          <UiButton :icon="ArrowDownLeft" @click="startMove('cash_in')">Cash in</UiButton>
+          <UiButton :icon="ArrowUpRight" @click="startMove('cash_out')">Cash out</UiButton>
           <UiButton variant="primary" :icon="Lock" magnetic @click="startClose">Close & count</UiButton>
         </div>
       </div>
@@ -152,6 +178,18 @@ const elapsed = (iso: string) => {
         </ul>
       </div>
     </div>
+
+    <UiModal v-model="moveOpen" :title="move.type === 'cash_in' ? 'Cash in' : 'Cash out'" :description="move.type === 'cash_in' ? 'Money added to the drawer, e.g. change float top-up.' : 'Money taken from the drawer, e.g. petty expense or bank deposit.'" size="sm" :dismissible="!moving">
+      <div class="space-y-4">
+        <UiInput v-model.number="move.amount" type="number" label="Amount (৳)" :icon="Banknote" />
+        <UiInput v-model="move.reason" label="Reason" placeholder="e.g. bank deposit, tea & snacks" />
+        <p v-if="moveError && move.amount" class="text-xs font-medium text-rose-600">{{ moveError }}</p>
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" @click="moveOpen = false">Cancel</UiButton>
+        <UiButton variant="primary" :loading="moving" :disabled="!!moveError" @click="submitMove">Record</UiButton>
+      </template>
+    </UiModal>
 
     <UiModal v-model="closeOpen" title="Close register" description="Count the notes and coins in the drawer." size="lg" :dismissible="!closing">
       <div class="grid gap-6 md:grid-cols-[1fr_.8fr]">

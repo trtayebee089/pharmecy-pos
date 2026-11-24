@@ -267,3 +267,34 @@ export interface PosSettings {
   pointsPerTaka: number
   pointValue: number
 }
+
+// ---- Generic page templates ---------------------------------------------------
+export type CellFormat = 'text' | 'money' | 'number' | 'date' | 'datetime' | 'percent' | 'boolean' | 'badge' | 'mono'
+
+export interface CrudColumn extends Column {
+  format?: CellFormat
+  /** For format 'badge': value → tone */
+  tones?: Record<string, 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'info' | 'violet'>
+}
+
+export interface FieldDef {
+  key: string
+  label: string
+  type: 'text' | 'number' | 'money' | 'textarea' | 'select' | 'switch' | 'date' | 'email' | 'tel' | 'color'
+  options?: { value: string | number; label: string }[]
+  required?: boolean
+  hint?: string
+  placeholder?: string
+  span?: 1 | 2
+}
+
+export interface ReportResult {
+  kpis: { label: string; value: number; format?: 'money' | 'number' | 'percent'; hint?: string }[]
+  series?: { label: string; value: number }[]
+  seriesTitle?: string
+  columns: CrudColumn[]
+  rows: Record<string, any>[]
+  totals?: Record<string, number>
+}
+
+export interface DateRange { from: string; to: string }

@@ -103,8 +103,8 @@ const notifications = computed(() => [
           </span>
         </button>
         <UiPopover :open="userMenu" class="right-0 w-56">
-          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><UserRound class="size-4 text-slate-400" />My profile</button>
-          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-50"><KeyRound class="size-4 text-slate-400" />Change password</button>
+          <NuxtLink to="/account/profile" class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-50" @click="userMenu = false"><UserRound class="size-4 text-slate-400" />My profile</NuxtLink>
+          <NuxtLink to="/account/password" class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-50" @click="userMenu = false"><KeyRound class="size-4 text-slate-400" />Change password</NuxtLink>
           <div class="my-1 border-t border-slate-100" />
           <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50" @click="auth.logout()"><LogOut class="size-4" />Sign out</button>
         </UiPopover>

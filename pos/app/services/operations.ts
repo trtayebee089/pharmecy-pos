@@ -108,6 +108,11 @@ export function useRegisterApi() {
       }
       return api.post('/cash-registers/sessions', { register_id: registerId, opening_float: openingFloat })
     },
+    /** Petty cash in/out at the till; recorded against the open session and the cash account. */
+    async cashMovement(sessionId: number, type: 'cash_in' | 'cash_out', amount: number, reason: string, idempotencyKey: string): Promise<void> {
+      if (api.useMocks) { await mockDelay(400); return }
+      return api.post(`/cash-registers/sessions/${sessionId}/movements`, { type, amount, reason }, idempotencyKey)
+    },
     async close(sessionId: number, countedCash: number, note: string): Promise<void> {
       if (api.useMocks) { await mockDelay(600); return }
       return api.post(`/cash-registers/sessions/${sessionId}/close`, { counted_cash: countedCash, note })

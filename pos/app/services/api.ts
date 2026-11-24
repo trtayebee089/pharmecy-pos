@@ -24,9 +24,9 @@ async function mocks() {
 export function useDashboardApi() {
   const api = useApi()
   return {
-    async summary(warehouseId: number): Promise<DashboardSummary> {
-      if (api.useMocks) { await mockDelay(500); return (await mocks()).dashboard() }
-      return api.get('/dashboard/summary', { warehouse_id: warehouseId })
+    async summary(warehouseId: number, days = 14): Promise<DashboardSummary> {
+      if (api.useMocks) { await mockDelay(500); return (await mocks()).dashboard(days) }
+      return api.get('/dashboard/summary', { warehouse_id: warehouseId, days })
     },
   }
 }

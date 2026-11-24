@@ -182,7 +182,7 @@ export const batchRows: BatchRow[] = products.flatMap(p => p.batches.map(b => ({
   manufacturer: p.manufacturer, expiryDate: b.expiryDate, qtyBase: b.qtyBase, value: round2(b.qtyBase * b.unitCost), status: 'active' as const,
 })))
 
-export function dashboard(): DashboardSummary {
+export function dashboard(days = 14): DashboardSummary {
   const today = sales.filter(s => s.status === 'completed' && new Date(s.date).toDateString() === new Date().toDateString())
   const total = today.reduce((s, x) => s + x.grandTotal, 0)
   return {
@@ -194,9 +194,9 @@ export function dashboard(): DashboardSummary {
     lowStockCount: products.filter(p => p.stockBase <= p.reorderLevelBase).length,
     nearExpiryCount: batchRows.filter(b => { const d = (new Date(b.expiryDate).getTime() - Date.now()) / 864e5; return d >= 0 && d <= 90 }).length,
     expiredCount: batchRows.filter(b => new Date(b.expiryDate).getTime() < Date.now() - 864e5).length,
-    salesSeries: Array.from({ length: 14 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - (13 - i))
-      return { label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }), value: int(38000, 92000) }
+    salesSeries: Array.from({ length: days }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (days - 1 - i))
+      return { label: d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }), value: 38000 + ((d.getDate() * 7919 + d.getMonth() * 104729) % 54000) }
     }),
     paymentMix: [
       { method: 'Cash', value: 64 }, { method: 'bKash', value: 21 }, { method: 'Card', value: 9 }, { method: 'Nagad', value: 6 },

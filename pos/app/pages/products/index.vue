@@ -4,7 +4,8 @@ import type { Column, Product } from '~/types/domain'
 
 definePageMeta({ title: 'Products' })
 const api = useProductsApi()
-const { search, page, filters, result, loading } = useList<Product>(q => api.list(q), { stock: '' })
+const importOpen = ref(false)
+const { search, page, filters, result, loading, reload } = useList<Product>(q => api.list(q), { stock: '' })
 const stockFilter = computed({ get: () => filters.value.stock || 'all', set: v => (filters.value.stock = v === 'all' ? '' : v) })
 
 const columns: Column[] = [
@@ -17,13 +18,20 @@ const columns: Column[] = [
   { key: 'status', label: 'Status' },
 ]
 const nextExpiry = (p: Product) => p.batches.find(b => daysUntil(b.expiryDate) >= 0)?.expiryDate
+function exportCsv() {
+  const rows = (result.value?.data ?? []).map(p => ({
+    name: `${p.name} ${p.strength ?? ''}`.trim(), generic: p.generic, manufacturer: p.manufacturer,
+    units: p.units.map(u => `${u.code}=${u.price}`).join(' | '), stock: p.stockBase, expiry: nextExpiry(p) ?? '', status: p.isActive ? 'Active' : 'Inactive',
+  }))
+  downloadCsv('products.csv', columns, rows)
+}
 </script>
 
 <template>
   <div>
     <UiPageHeader title="Products" description="Medicines, unit ladders (box · strip · piece), prices and batch stock.">
-      <UiButton :icon="Upload">Import</UiButton>
-      <UiButton :icon="Download">Export</UiButton>
+      <UiButton :icon="Upload" @click="importOpen = true">Import</UiButton>
+      <UiButton :icon="Download" :disabled="!result?.data.length" @click="exportCsv">Export</UiButton>
       <NuxtLink to="/products/new"><UiButton variant="primary" :icon="Plus">Add product</UiButton></NuxtLink>
     </UiPageHeader>
 
@@ -60,5 +68,6 @@ const nextExpiry = (p: Product) => p.batches.find(b => daysUntil(b.expiryDate) >
         <UiBadge :tone="row.isActive ? 'success' : 'neutral'" dot>{{ row.isActive ? 'Active' : 'Inactive' }}</UiBadge>
       </template>
     </UiDataTable>
+    <CatalogProductImport v-model="importOpen" @imported="reload" />
   </div>
 </template>

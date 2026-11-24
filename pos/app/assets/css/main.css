@@ -71,3 +71,11 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Document printing (invoices, GRNs, statements): print only the main content. */
+@media print {
+  aside, header, [data-noprint], .card button { display: none !important; }
+  body { background: #fff; }
+  main { padding: 0 !important; max-width: none !important; }
+  .card { box-shadow: none !important; border-color: #ddd !important; }
+}
