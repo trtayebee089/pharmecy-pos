@@ -18,10 +18,11 @@ export function useCatalogApi() {
       if (api.useMocks) { await mockDelay(150); return (await extra()).lookups }
       return api.get('/catalog/lookups')
     },
-    async product(id: number): Promise<Product | null> {
+    /** includeExpired lists every batch on hand (for write-offs, returns and counts), not only sellable ones. */
+    async product(id: number, opts: { warehouseId?: number; includeExpired?: boolean } = {}): Promise<Product | null> {
       const live = useApi('catalog') // product reads are served live; lookups and writes are not yet
       if (live.useMocks) { await mockDelay(250); return (await seed()).products.find(p => p.id === id) ?? null }
-      return live.get(`/catalog/products/${id}`)
+      return live.get(`/catalog/products/${id}`, { ...(opts.warehouseId ? { warehouse_id: opts.warehouseId } : {}), ...(opts.includeExpired ? { includeExpired: 1 } : {}) })
     },
     /** The API validates unique SKU and barcodes, exactly one base unit, factors > 0 and price rules. */
     async save(input: ProductInput): Promise<{ id: number }> {
@@ -127,7 +128,7 @@ export function useRegisterApi() {
 }
 
 export function useAdjustmentsApi() {
-  const api = useApi()
+  const api = useApi('inventory')
   return {
     async list(q: ListQuery): Promise<Paginated<AdjustmentSummary>> {
       if (api.useMocks) {
@@ -180,6 +181,7 @@ export function useRowActionsApi() {
   // Actions whose domain is already served live follow that domain's switch.
   const salesApi = useApi('sales')
   const purchasesApi = useApi('purchases')
+  const inventoryApi = useApi('inventory')
   const key = () => crypto.randomUUID()
   async function mockWrite<T>(fn?: () => T | Promise<T>): Promise<T | undefined> {
     await mockDelay(450)
@@ -212,13 +214,19 @@ export function useRowActionsApi() {
       return purchasesApi.post(`/purchases/${id}/duplicate`, {}, key())
     },
     async voidDocument(kind: 'sale-returns' | 'purchase-returns' | 'adjustments' | 'transfers', id: number, reason: string) {
-      if (api.useMocks) {
+      const target = {
+        'sale-returns': { client: api, path: `/sale-returns/${id}/void` },
+        'purchase-returns': { client: purchasesApi, path: `/purchase-returns/${id}/void` },
+        'adjustments': { client: inventoryApi, path: `/inventory/adjustments/${id}/void` },
+        'transfers': { client: inventoryApi, path: `/inventory/transfers/${id}/void` },
+      }[kind]
+      if (target.client.useMocks) {
         await mockWrite(async () => {
           if (kind === 'adjustments') { const a = (await extra()).adjustments.find(x => x.id === id); if (a) a.status = 'void' }
         })
         return
       }
-      return api.post(`/${kind}/${id}/void`, { reason }, key())
+      return target.client.post(target.path, { reason }, key())
     },
     /** Products and customers are deactivated, never hard-deleted (history keeps referencing them). */
     async deactivateProduct(id: number) {

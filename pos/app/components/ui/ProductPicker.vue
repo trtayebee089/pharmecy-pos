@@ -4,8 +4,11 @@ import { Search, Loader2 } from 'lucide-vue-next'
 import type { Product } from '~/types/domain'
 
 /** Combobox to find a product by name, generic, strength or barcode. Emits the chosen product. */
-/** includeExpired: list every batch on hand (expired too), for returns to the supplier. */
-const props = defineProps<{ placeholder?: string; autofocus?: boolean; includeExpired?: boolean }>()
+/**
+ * includeExpired: list every batch on hand (expired too), for returns, write-offs and counts.
+ * warehouseId: whose batches to show (defaults to the current warehouse), e.g. a transfer's source.
+ */
+const props = defineProps<{ placeholder?: string; autofocus?: boolean; includeExpired?: boolean; warehouseId?: number }>()
 const emit = defineEmits<{ pick: [product: Product] }>()
 const auth = useAuthStore()
 const api = useProductsApi()
@@ -23,7 +26,7 @@ onClickOutside(root, () => (open.value = false))
 watchDebounced(q, async (s) => {
   if (!s.trim()) { results.value = []; return }
   loading.value = true
-  results.value = (await api.search(s, auth.warehouseId, undefined, { includeExpired: props.includeExpired })).slice(0, 8)
+  results.value = (await api.search(s, props.warehouseId ?? auth.warehouseId, undefined, { includeExpired: props.includeExpired })).slice(0, 8)
   loading.value = false
   active.value = 0
   open.value = true

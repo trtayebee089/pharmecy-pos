@@ -83,7 +83,7 @@ onMounted(async () => {
   if (!route.query.reason) return
   start()
   reason.value = String(route.query.reason)
-  const p = route.query.product ? await catalog.product(Number(route.query.product)) : null
+  const p = route.query.product ? await catalog.product(Number(route.query.product), { warehouseId: auth.warehouseId, includeExpired: true }) : null
   if (p) {
     addLine(p)
     const b = p.batches.find(x => x.batchId === Number(route.query.batch))
@@ -148,7 +148,7 @@ async function post() {
         <UiSelect v-model="reason" label="Reason" :options="reasonOptions" />
         <UiInput v-model="note" label="Note (required)" placeholder="What happened? e.g. 2 strips crushed during unloading" />
       </div>
-      <div class="mt-4"><UiProductPicker placeholder="Search the product to adjust…" @pick="addLine" /></div>
+      <div class="mt-4"><UiProductPicker include-expired placeholder="Search the product to adjust…" @pick="addLine" /></div>
 
       <div v-if="lines.length" class="mt-4 space-y-2">
         <div v-for="(l, i) in lines" :key="l.key" class="grid items-center gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[1.4fr_1.4fr_auto_110px_110px_36px]">

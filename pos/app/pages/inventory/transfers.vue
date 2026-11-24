@@ -54,13 +54,14 @@ const rowItems = (t: TransferSummary): RowAction[] => [
 // ---- New transfer ----
 interface Draft { key: string; product: Product; batchId: number; qty: number }
 const open = ref(false)
-const form = reactive({ from: '', to: '', note: '' })
+const form = reactive({ from: null as number | null, to: null as number | null, note: '' })
+const nameOf = (id: number | null) => warehouses.value.find(w => w.id === id)?.name ?? ''
 const draft = ref<Draft[]>([])
 const sending = ref(false)
 let idemKey = ''
 function startNew() {
-  form.from = auth.warehouse?.name ?? warehouses.value[0]?.name ?? ''
-  form.to = warehouses.value.find(w => w.name !== form.from)?.name ?? ''
+  form.from = auth.warehouse?.id ?? warehouses.value[0]?.id ?? null
+  form.to = warehouses.value.find(w => w.id !== form.from)?.id ?? null
   form.note = ''
   draft.value = []
   idemKey = crypto.randomUUID()
@@ -87,7 +88,10 @@ async function send() {
   sending.value = true
   try {
     const lines: TransferLine[] = draft.value.map(d => ({ productId: d.product.id, productName: `${d.product.name} ${d.product.strength ?? ''}`.trim(), batchId: d.batchId, batchNo: batchOf(d).batchNo, expiryDate: batchOf(d).expiryDate, qtyBase: Number(d.qty) }))
-    const t = await api.send({ from: form.from, to: form.to, note: form.note, lines }, idemKey)
+    const t = await api.send(
+      { fromWarehouseId: form.from!, toWarehouseId: form.to!, note: form.note, lines: lines.map(l => ({ productId: l.productId, batchId: l.batchId, qtyBase: l.qtyBase })) },
+      idemKey, { from: nameOf(form.from), to: nameOf(form.to), lines },
+    )
     toast.success('Transfer sent', `${t.number} · ${num(t.qty)} pcs in transit`)
     open.value = false
     reload()
@@ -151,11 +155,11 @@ async function send() {
 
     <UiModal v-model="open" title="New transfer" description="Choose the exact batch for each product. Expired batches cannot be transferred." size="xl" :dismissible="!sending">
       <div class="grid grid-cols-[minmax(0,1fr)] items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        <UiSelect v-model="form.from" label="From" :options="warehouses.map(w => ({ value: w.name, label: w.name }))" />
+        <UiSelect v-model="form.from" label="From" :options="warehouses.map(w => ({ value: w.id, label: w.name }))" @update:model-value="draft = []" />
         <span ref="arrow" class="hidden h-10 place-items-center text-brand-600 sm:grid"><ArrowRight class="size-5" /></span>
-        <UiSelect v-model="form.to" label="To" :options="warehouses.filter(w => w.name !== form.from).map(w => ({ value: w.name, label: w.name }))" placeholder="Destination" :error="form.from && form.from === form.to ? 'Choose a different warehouse' : undefined" />
+        <UiSelect v-model="form.to" label="To" :options="warehouses.filter(w => w.id !== form.from).map(w => ({ value: w.id, label: w.name }))" placeholder="Destination" :error="form.from && form.from === form.to ? 'Choose a different warehouse' : undefined" />
       </div>
-      <div class="mt-4"><UiProductPicker placeholder="Search a product to transfer…" @pick="add" /></div>
+      <div class="mt-4"><UiProductPicker :warehouse-id="form.from ?? undefined" placeholder="Search a product to transfer…" @pick="add" /></div>
       <div v-if="draft.length" class="mt-4 space-y-2">
         <div v-for="(d, i) in draft" :key="d.key" class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_110px_36px]">
           <div><p class="text-sm font-semibold">{{ d.product.name }} <span class="font-medium text-slate-500">{{ d.product.strength }}</span></p><p class="text-xs text-slate-500">{{ d.product.manufacturer }}</p></div>

@@ -67,7 +67,8 @@ export function useProductsApi() {
 }
 
 export function useInventoryApi() {
-  const api = useApi()
+  const api = useApi('inventory')
+  const auth = useAuthStore()
   return {
     async batches(q: ListQuery): Promise<Paginated<BatchRow>> {
       if (api.useMocks) {
@@ -79,7 +80,7 @@ export function useInventoryApi() {
         else if (within) rows = rows.filter(b => { const d = daysUntil(b.expiryDate); return d >= 0 && d <= within })
         return paginate(rows, q, (b, s) => `${b.productName} ${b.batchNo} ${b.manufacturer}`.toLowerCase().includes(s))
       }
-      return api.get('/inventory/batches', { ...q, ...q.filters })
+      return api.get('/inventory/batches', { ...q, ...q.filters, filters: undefined, warehouse_id: auth.warehouseId })
     },
   }
 }

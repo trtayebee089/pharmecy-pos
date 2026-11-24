@@ -2,6 +2,7 @@
 import { ClipboardList, Play, Printer, ClipboardCheck } from 'lucide-vue-next'
 import type { Column, RowAction } from '~/types/domain'
 import type { CountSession } from '~/types/inventory'
+import type { StartCountPayload } from '~/services/inventory'
 
 definePageMeta({ title: 'Stock counts' })
 const api = useCountsApi()
@@ -47,8 +48,7 @@ async function start() {
   if (form.scope !== 'all' && !form.value.trim()) { toast.warning('Enter the scope value', 'e.g. Tablet, Square Pharmaceuticals…'); return }
   starting.value = true
   try {
-    const label = scopes.find(s => s.value === form.scope)!.label
-    const s = await api.start({ name: form.name, scope: form.scope === 'all' ? label : `${label.replace('One ', '')}: ${form.value}` }, crypto.randomUUID())
+    const s = await api.start({ warehouseId: auth.warehouseId, name: form.name, scopeType: form.scope as StartCountPayload['scopeType'], scopeValue: form.value }, crypto.randomUUID())
     open.value = false
     await navigateTo(`/inventory/counts/${s.id}`)
   }

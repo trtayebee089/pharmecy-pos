@@ -11,10 +11,11 @@ import type {
 const inv = () => import('~/mocks/inventory')
 
 export function useStockApi() {
-  const api = useApi()
+  const api = useApi('inventory')
+  const auth = useAuthStore()
   return {
     async list(q: ListQuery): Promise<Paginated<StockRow>> {
-      if (!api.useMocks) return api.get('/inventory/stock', { ...q, ...q.filters })
+      if (!api.useMocks) return api.get('/inventory/stock', { ...q, ...q.filters, filters: undefined, warehouse_id: auth.warehouseId })
       await mockDelay()
       let rows = (await inv()).stockRows()
       const f = q.filters?.status
@@ -24,7 +25,7 @@ export function useStockApi() {
       return paginate(rows, q, (r, s) => `${r.name} ${r.strength} ${r.manufacturer} ${r.sku}`.toLowerCase().includes(s))
     },
     async totals(): Promise<{ value: number; out: number; low: number; expiring: number; products: number }> {
-      if (!api.useMocks) return api.get('/inventory/stock/summary')
+      if (!api.useMocks) return api.get('/inventory/stock/summary', { warehouse_id: auth.warehouseId })
       await mockDelay(200)
       const rows = (await inv()).stockRows()
       return {
@@ -35,8 +36,16 @@ export function useStockApi() {
   }
 }
 
+export interface StartCountPayload {
+  warehouseId: number
+  name: string
+  scopeType: 'all' | 'dosage' | 'manufacturer' | 'category'
+  /** Name (or part of it) of the dosage form, manufacturer or category. */
+  scopeValue: string
+}
+
 export function useCountsApi() {
-  const api = useApi()
+  const api = useApi('inventory')
   return {
     async list(q: ListQuery): Promise<Paginated<CountSession>> {
       if (!api.useMocks) return api.get('/inventory/counts', { ...q, ...q.filters })
@@ -52,12 +61,13 @@ export function useCountsApi() {
       const session = m.countSessions.find(s => s.id === id)
       return session ? { session, lines: m.countLinesFor(session) } : null
     },
-    async start(payload: { name: string; scope: string }, idempotencyKey: string): Promise<CountSession> {
+    async start(payload: StartCountPayload, idempotencyKey: string): Promise<CountSession> {
       if (!api.useMocks) return api.post('/inventory/counts', payload, idempotencyKey)
       await mockDelay(500)
       const m = await inv()
       const id = Math.max(...m.countSessions.map(s => s.id)) + 1
-      const s: CountSession = { id, number: `SC-DHK1-2026-${String(id).padStart(4, '0')}`, name: payload.name, warehouse: 'Red Pharma · Dhanmondi', scope: payload.scope, status: 'counting', startedBy: 'You', startedAt: new Date().toISOString(), postedAt: null, lines: 0, counted: 0, varianceQty: 0, varianceValue: 0 }
+      const scope = payload.scopeType === 'all' ? 'All products' : `${{ dosage: 'Dosage form', manufacturer: 'Manufacturer', category: 'Category' }[payload.scopeType]}: ${payload.scopeValue}`
+      const s: CountSession = { id, number: `SC-DHK1-2026-${String(id).padStart(4, '0')}`, name: payload.name, warehouse: 'Red Pharma · Dhanmondi', scope, status: 'counting', startedBy: 'You', startedAt: new Date().toISOString(), postedAt: null, lines: 0, counted: 0, varianceQty: 0, varianceValue: 0 }
       m.countSessions.unshift(s)
       m.summarise(s)
       return s
@@ -86,8 +96,15 @@ export function useCountsApi() {
   }
 }
 
+export interface SendTransferPayload {
+  fromWarehouseId: number
+  toWarehouseId: number
+  note: string
+  lines: { productId: number; batchId: number; qtyBase: number }[]
+}
+
 export function useTransfersApi() {
-  const api = useApi()
+  const api = useApi('inventory')
   return {
     async list(q: ListQuery): Promise<Paginated<TransferSummary>> {
       if (!api.useMocks) return api.get('/inventory/transfers', { ...q, ...q.filters })
@@ -97,12 +114,13 @@ export function useTransfersApi() {
       return paginate(rows, q, (r, s) => `${r.number} ${r.from} ${r.to} ${r.createdBy}`.toLowerCase().includes(s))
     },
     /** Sending posts transfer_out movements; stock is in transit until received. */
-    async send(payload: { from: string; to: string; note: string; lines: TransferLine[] }, idempotencyKey: string): Promise<TransferSummary> {
+    /** `display` is only used by the mock layer (names and batch labels for the list). */
+    async send(payload: SendTransferPayload, idempotencyKey: string, display: { from: string; to: string; lines: TransferLine[] }): Promise<TransferSummary> {
       if (!api.useMocks) return api.post('/inventory/transfers', payload, idempotencyKey)
       await mockDelay(600)
       const m = await inv()
       const id = Math.max(...m.transfers.map(t => t.id)) + 1
-      const t: TransferSummary = { id, number: `TR-2026-${String(id).padStart(5, '0')}`, date: new Date().toISOString(), ...payload, qty: payload.lines.reduce((s, l) => s + l.qtyBase, 0), status: 'sent', createdBy: 'You' }
+      const t: TransferSummary = { id, number: `TR-2026-${String(id).padStart(5, '0')}`, date: new Date().toISOString(), from: display.from, to: display.to, note: payload.note, lines: display.lines, qty: payload.lines.reduce((s, l) => s + l.qtyBase, 0), status: 'sent', createdBy: 'You' }
       m.transfers.unshift(t)
       return t
     },
@@ -113,7 +131,7 @@ export function useTransfersApi() {
       if (t) t.status = 'received'
     },
     async void(id: number, reason: string): Promise<void> {
-      if (!api.useMocks) return api.post(`/inventory/transfers/${id}/void`, { reason })
+      if (!api.useMocks) return api.post(`/inventory/transfers/${id}/void`, { reason }, crypto.randomUUID())
       await mockDelay(400)
       const t = (await inv()).transfers.find(x => x.id === id)
       if (t) { t.status = 'void'; t.note = reason }
