@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\Idempotent;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,7 +14,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Sanctum SPA: requests from SANCTUM_STATEFUL_DOMAINS get session + CSRF.
+        $middleware->statefulApi();
+        $middleware->alias(['idempotent' => Idempotent::class]);
+        // An API has no login page: unauthenticated requests get 401 JSON.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
