@@ -40,7 +40,7 @@ export function useHeldSalesApi() {
 }
 
 export function useSaleReturnsApi() {
-  const api = useApi()
+  const api = useApi('sales')
   return {
     async list(q: ListQuery): Promise<Paginated<SaleReturnSummary>> {
       if (!api.useMocks) return api.get('/sales/returns', { ...q, ...q.filters })

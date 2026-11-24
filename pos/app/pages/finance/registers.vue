@@ -49,10 +49,13 @@ const openFloat = ref(5000)
 const opening = ref(false)
 async function openRegister() {
   opening.value = true
-  const s = await api.open(1, Number(openFloat.value) || 0)
-  sessions.value.unshift(s)
-  opening.value = false
-  toast.success('Register opened', `Float ${money(s.openingFloat)}`)
+  try {
+    const s = await api.open(1, Number(openFloat.value) || 0)
+    sessions.value.unshift(s)
+    toast.success('Register opened', `Float ${money(s.openingFloat)}`)
+  }
+  catch (e: any) { toast.error('Register not opened', e?.message) }
+  finally { opening.value = false }
 }
 
 // ---- Close with denomination count ----
@@ -78,11 +81,16 @@ async function closeRegister() {
   const session = current.value
   const finalDiff = diff.value // capture before the session leaves `current`
   const finalCount = counted.value
-  await api.close(session.id, finalCount, closeNote.value)
-  Object.assign(session, { status: 'closed', countedCash: finalCount, difference: finalDiff, closedAt: new Date().toISOString() })
-  closing.value = false
-  closeOpen.value = false
-  toast.success('Register closed', finalDiff === 0 ? 'Cash matches exactly.' : `Difference ${money(finalDiff)} recorded.`)
+  try {
+    // The API recomputes expected cash at close (sales may have happened since this page loaded).
+    const closed = await api.close(session.id, finalCount, closeNote.value)
+    Object.assign(session, closed ?? { status: 'closed', countedCash: finalCount, difference: finalDiff, closedAt: new Date().toISOString() })
+    closeOpen.value = false
+    const d = closed?.difference ?? finalDiff
+    toast.success('Register closed', d === 0 ? 'Cash matches exactly.' : `Difference ${money(d)} recorded.`)
+  }
+  catch (e: any) { toast.error('Register not closed', e?.message) }
+  finally { closing.value = false }
 }
 
 // ---- Cash in / out ----

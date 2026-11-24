@@ -78,14 +78,14 @@ export function useReceivingApi() {
 }
 
 export function useSaleDetailApi() {
-  const api = useApi()
+  const api = useApi('sales')
   return {
     async get(id: number): Promise<SaleDetail | null> {
       if (api.useMocks) { await mockDelay(300); return (await extra()).saleDetail(id) }
       return api.get(`/sales/${id}`)
     },
     /** Return quantities are re-validated by the API against sold minus already returned, per batch, under lock. */
-    async createReturn(saleId: number, payload: { items: { saleItemBatchId: number; qtyBase: number; restock: boolean }[]; refundMethod: string; reason: string }, idempotencyKey: string): Promise<{ number: string }> {
+    async createReturn(saleId: number, payload: { items: { saleItemBatchId: number; qtyBase: number; restock: boolean }[]; refundMethod: string; reason: string }, idempotencyKey: string): Promise<{ number: string; total?: number }> {
       if (api.useMocks) { await mockDelay(700); return { number: `R-DHK1-2026-${String(2081 + Math.floor(Math.random() * 50)).padStart(5, '0')}` } }
       return api.post(`/sales/${saleId}/returns`, payload, idempotencyKey)
     },
@@ -97,7 +97,7 @@ export function useSaleDetailApi() {
 }
 
 export function useRegisterApi() {
-  const api = useApi()
+  const api = useApi('registers')
   return {
     async sessions(): Promise<RegisterSession[]> {
       if (api.useMocks) { await mockDelay(); return structuredClone((await extra()).sessions) }
@@ -115,8 +115,9 @@ export function useRegisterApi() {
       if (api.useMocks) { await mockDelay(400); return }
       return api.post(`/cash-registers/sessions/${sessionId}/movements`, { type, amount, reason }, idempotencyKey)
     },
-    async close(sessionId: number, countedCash: number, note: string): Promise<void> {
-      if (api.useMocks) { await mockDelay(600); return }
+    /** Live: returns the closed session with the server's expected cash and difference. */
+    async close(sessionId: number, countedCash: number, note: string): Promise<RegisterSession | null> {
+      if (api.useMocks) { await mockDelay(600); return null }
       return api.post(`/cash-registers/sessions/${sessionId}/close`, { counted_cash: countedCash, note })
     },
   }

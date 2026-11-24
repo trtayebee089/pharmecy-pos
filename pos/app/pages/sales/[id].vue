@@ -51,8 +51,10 @@ async function submitReturn() {
   try {
     const items = Object.entries(qtys.value).filter(([, q]) => q > 0).map(([id, q]) => ({ saleItemBatchId: Number(id), qtyBase: q, restock: restock.value[Number(id)] ?? true }))
     const res = await api.createReturn(sale.value.id, { items, refundMethod: refundMethod.value, reason: reason.value }, idemKey)
-    toast.success('Return posted', `${res.number} · refund ${money(refundTotal.value)}`)
-    sale.value.returns.push({ number: res.number, date: new Date().toISOString(), total: Math.round(refundTotal.value * 100) / 100 })
+    // The API's total is authoritative (it includes the share of any order discount).
+    const total = res.total ?? Math.round(refundTotal.value * 100) / 100
+    toast.success('Return posted', `${res.number} · refund ${money(total)}`)
+    sale.value.returns.push({ number: res.number, date: new Date().toISOString(), total })
     for (const l of sale.value.lines) for (const b of l.batches) b.returnedQtyBase += qtys.value[b.saleItemBatchId] ?? 0
     returnOpen.value = false
   }
@@ -65,10 +67,13 @@ const voidOpen = ref(false)
 const voidReason = ref('')
 async function doVoid() {
   if (!sale.value || !voidReason.value.trim()) return
-  await api.void(sale.value.id, voidReason.value)
-  sale.value.status = 'void'
-  voidOpen.value = false
-  toast.success('Sale voided', 'Stock and payments were reversed.')
+  try {
+    await api.void(sale.value.id, voidReason.value)
+    sale.value.status = 'void'
+    voidOpen.value = false
+    toast.success('Sale voided', 'Stock and payments were reversed.')
+  }
+  catch (e: any) { toast.error('Sale not voided', e?.message) }
 }
 const payTone = { paid: 'success', partial: 'warning', unpaid: 'danger' } as const
 </script>
