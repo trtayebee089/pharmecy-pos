@@ -3,7 +3,9 @@
 use App\Http\Controllers\Pos\AuthController;
 use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CatalogMasterController;
+use App\Http\Controllers\Pos\CustomerAccountController;
 use App\Http\Controllers\Pos\CustomerController;
+use App\Http\Controllers\Pos\CustomerGroupController;
 use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\ProductController;
@@ -54,6 +56,23 @@ Route::prefix('pos/v1')->group(function () {
         Route::get('customers', [CustomerController::class, 'index'])->middleware('can:customers.view');
         Route::get('customers/lookup', [CustomerController::class, 'lookup'])->middleware('can:pos.sell');
         Route::post('customers', [CustomerController::class, 'store'])->middleware('can:customers.manage');
+        Route::get('customers/{customer}', [CustomerAccountController::class, 'show'])->middleware('can:customers.view')->whereNumber('customer');
+        Route::put('customers/{customer}', [CustomerAccountController::class, 'update'])->middleware('can:customers.manage')->whereNumber('customer');
+        Route::post('customers/{customer}/deactivate', [CustomerAccountController::class, 'deactivate'])->middleware(['can:customers.manage', 'idempotent'])->whereNumber('customer');
+        Route::middleware('can:payments.collect')->group(function () {
+            Route::get('customers/due', [CustomerAccountController::class, 'due']);
+            Route::get('customers/{customer}/open-invoices', [CustomerAccountController::class, 'openInvoices'])->whereNumber('customer');
+            Route::post('customers/{customer}/payments', [CustomerAccountController::class, 'collect'])->middleware('idempotent')->whereNumber('customer');
+            Route::post('customers/{customer}/due-reminders', [CustomerAccountController::class, 'dueReminder'])->middleware('idempotent')->whereNumber('customer');
+        });
+        Route::get('customer-groups', [CustomerGroupController::class, 'index'])->middleware('can:customers.view');
+        Route::get('customer-groups/{group}', [CustomerGroupController::class, 'show'])->middleware('can:customers.view')->whereNumber('group');
+        // Groups carry discounts: managed separately from registering customers at the counter.
+        Route::middleware('can:customer_groups.manage')->group(function () {
+            Route::post('customer-groups', [CustomerGroupController::class, 'store']);
+            Route::put('customer-groups/{group}', [CustomerGroupController::class, 'update'])->whereNumber('group');
+            Route::delete('customer-groups/{group}', [CustomerGroupController::class, 'destroy'])->whereNumber('group');
+        });
 
         Route::get('sales', [SaleController::class, 'index'])->middleware('can:sales.view');
         Route::get('sales/returns', [SaleController::class, 'returns'])->middleware('can:returns.view');
