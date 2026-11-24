@@ -11,6 +11,7 @@ use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\ProductController;
 use App\Http\Controllers\Pos\PurchaseController;
+use App\Http\Controllers\Pos\PurchaseOrderController;
 use App\Http\Controllers\Pos\PurchaseReturnController;
 use App\Http\Controllers\Pos\RegisterController;
 use App\Http\Controllers\Pos\SaleController;
@@ -128,6 +129,20 @@ Route::prefix('pos/v1')->group(function () {
                 Route::post('transfers/{transfer}/receive', [StockDocumentController::class, 'receiveTransfer'])->middleware('idempotent');
                 Route::post('transfers/{transfer}/void', [StockDocumentController::class, 'voidTransfer'])->middleware('idempotent');
             });
+        });
+
+        Route::middleware('can:reorder.manage')->prefix('purchase-orders')->group(function () {
+            Route::get('companies', [PurchaseOrderController::class, 'companies']);
+            Route::get('report', [PurchaseOrderController::class, 'report']);
+            Route::post('forecast', [PurchaseOrderController::class, 'forecast']);
+            Route::get('drafts', [PurchaseOrderController::class, 'drafts']);
+            Route::get('drafts/{draft}', [PurchaseOrderController::class, 'show'])->whereNumber('draft');
+            Route::post('drafts', [PurchaseOrderController::class, 'store'])->middleware('idempotent');
+            Route::put('drafts/{draft}', [PurchaseOrderController::class, 'update'])->whereNumber('draft');
+            Route::delete('drafts/{draft}', [PurchaseOrderController::class, 'destroy'])->whereNumber('draft');
+            Route::post('drafts/{draft}/purchase', [PurchaseOrderController::class, 'convert'])->middleware(['can:purchases.create', 'idempotent'])->whereNumber('draft');
+            Route::post('ai-runs', [PurchaseOrderController::class, 'startRun']);
+            Route::post('ai-runs/{run}/process', [PurchaseOrderController::class, 'processRun'])->whereNumber('run');
         });
 
         Route::get('purchase-returns', [PurchaseReturnController::class, 'index'])->middleware('can:purchase_returns.view');
