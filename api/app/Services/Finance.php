@@ -234,7 +234,7 @@ class Finance
             ->selectRaw('COALESCE(SUM(m.qty_base * m.unit_cost), 0) AS v')->value('v');
 
         $parties = fn (string $type, string $sign) => DB::query()->fromSub(
-            DB::table('party_ledger_entries')->where('party_type', $type)->where('entry_date', '<=', $asOf)
+            DB::table('party_ledger_entries')->where('party_type', $type)->whereDate('entry_date', '<=', $asOf)
                 ->groupBy('party_id')->selectRaw("party_id, SUM($sign) AS bal"), 'p');
         $receivable = (float) $parties('customer', 'debit - credit')->where('bal', '>', 0)->sum('bal');
         $customerCredit = (float) -$parties('customer', 'debit - credit')->where('bal', '<', 0)->sum('bal');

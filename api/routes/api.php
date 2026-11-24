@@ -15,6 +15,7 @@ use App\Http\Controllers\Pos\PurchaseController;
 use App\Http\Controllers\Pos\PurchaseOrderController;
 use App\Http\Controllers\Pos\PurchaseReturnController;
 use App\Http\Controllers\Pos\RegisterController;
+use App\Http\Controllers\Pos\ReportController;
 use App\Http\Controllers\Pos\SaleController;
 use App\Http\Controllers\Pos\StockDocumentController;
 use App\Http\Controllers\Pos\SupplierController;
@@ -145,6 +146,18 @@ Route::prefix('pos/v1')->group(function () {
             Route::post('ai-runs', [PurchaseOrderController::class, 'startRun']);
             Route::post('ai-runs/{run}/process', [PurchaseOrderController::class, 'processRun'])->whereNumber('run');
         });
+
+        Route::prefix('reports')->group(function () {
+            $perm = ['sales' => 'reports.sales', 'billers' => 'reports.sales', 'custom-products' => 'reports.sales', 'profit' => 'reports.profit',
+                'stock' => 'reports.stock', 'expiry' => 'reports.stock', 'purchases' => 'reports.purchases', 'customers' => 'reports.customers',
+                'customer' => 'reports.customers', 'suppliers' => 'reports.suppliers', 'payments' => 'reports.payments', 'cashiers' => 'reports.users'];
+            foreach ($perm as $report => $permission) {
+                Route::get($report, [ReportController::class, 'show'])->defaults('report', $report)->middleware("can:$permission");
+            }
+            Route::get('monthly-summary', [ReportController::class, 'monthlySummary'])->middleware('can:reports.profit');
+            Route::get('options', [ReportController::class, 'options'])->middleware('can:products.view'); // names only (manufacturers, forms, suppliers, custom items)
+        });
+        Route::get('billers', [ReportController::class, 'billers'])->middleware('can:reports.sales');
 
         Route::prefix('finance')->group(function () {
             Route::middleware('can:accounts.view')->group(function () {

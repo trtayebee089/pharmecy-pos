@@ -10,5 +10,6 @@ class PartyLedgerEntry extends Model
 
     public const UPDATED_AT = null;
 
-    protected $casts = ['debit' => 'decimal:2', 'credit' => 'decimal:2', 'entry_date' => 'date'];
+    // entry_date stays a plain Y-m-d string: a date cast stores a time and breaks date comparisons on SQLite.
+    protected $casts = ['debit' => 'decimal:2', 'credit' => 'decimal:2'];
 }
