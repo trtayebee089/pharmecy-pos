@@ -96,8 +96,11 @@ Engineering decisions taken during the build (change only on purpose):
 - Finance: account balances are always derived from `account_transactions`; finance documents are voided with
   reversing transactions, never edited. Expenses and incomes share `finance_entries` / `finance_categories` (column
   `kind`) instead of the two table pairs in the design doc. Attachments live on the private `local` disk.
-- Date columns compared as dates (`txn_date`, `entry_date`, `transfer_date`, `order_date`) must not get an Eloquent
-  `date` cast without `whereDate`: the cast stores a time and string comparisons then fail on SQLite.
+- Date columns compared as dates (`txn_date`, `entry_date` on finance entries and party ledger, `transfer_date`,
+  `order_date`) must not get an Eloquent `date` cast without `whereDate`: the cast stores a time and string comparisons
+  then fail on SQLite.
+- Reports run on the server over the selected warehouse (or all the user's). A "biller" is the branch (warehouse) an
+  invoice is issued from; memberships/points read `none`/0 until the loyalty module exists.
 
 ## 4. What is done
 
@@ -111,7 +114,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (124 Pest tests passing)
+### Laravel API (`api/`) – live slices (131 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -130,10 +133,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Held sales: hold (F8), list, resume on any counter of the warehouse, discard | live |
 | Purchase orders: company report, forecast, drafts, convert to ordered purchase, drafts for all companies | live |
 | Finance: accounts, statements, money transfers, expenses and income (with attachments), categories, balance sheet + P&L | live |
+| Reports: sales, profit, billers, custom items, stock, expiry, purchases, customers, customer statement, suppliers, payments, cashiers, monthly summary | live |
 | Dashboard summary | live |
 
 Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (13 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 124 tests pass on MariaDB 10.11 and SQLite.
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 131 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -141,13 +145,12 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-2. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-3. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-4. **HR & payroll**: employees, attendance, holidays, payroll.
-5. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-6. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-7. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+2. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+3. **HR & payroll**: employees, attendance, holidays, payroll.
+4. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+5. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+6. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Overdraw checks use the account's current balance, so an expense or transfer backdated to before the money arrived
@@ -180,8 +183,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 124 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 124 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 131 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 131 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

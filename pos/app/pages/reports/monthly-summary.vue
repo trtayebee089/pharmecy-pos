@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Printer, Download, TrendingUp, Receipt, Hand
 
 /** Legacy "Summary Report" per month: sales → net sales → gross profit → net profit, payments by method, daily table. */
 definePageMeta({ title: 'Monthly summary' })
-const api = useApi()
+const api = useApi('reports')
 
 interface Day { date: string; invoices: number; sales: number; returns: number; discounts: number; netSales: number; cogs: number; grossProfit: number; purchases: number; expenses: number; income: number; netProfit: number; cash: number; bkash: number; card: number; nagad: number }
 const now = new Date()
@@ -23,7 +23,7 @@ function shift(d: number) {
 async function load() {
   loading.value = true
   if (api.useMocks) { await mockDelay(450); days.value = (await import('~/mocks/reports-extra')).monthlySummary(ym.value.y, ym.value.m) }
-  else days.value = await api.get('/reports/monthly-summary', { year: ym.value.y, month: ym.value.m + 1 })
+  else days.value = await api.get('/reports/monthly-summary', { year: ym.value.y, month: ym.value.m + 1, warehouse_id: useAuthStore().warehouseId })
   loading.value = false
   await nextTick()
   revealStagger(root.value?.querySelectorAll('[data-reveal]') ?? [], { stagger: 0.05 })

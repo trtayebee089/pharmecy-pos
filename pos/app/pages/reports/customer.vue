@@ -8,7 +8,7 @@ import type { DateRange, ReportResult } from '~/types/domain'
  * report summarises every customer.
  */
 definePageMeta({ title: 'Customer report' })
-const api = useApi()
+const api = useApi('reports')
 const customerOptions = ref<{ value: string; label: string }[]>([])
 onMounted(async () => {
   const list = await useCustomersApi().list({ perPage: 500 })
@@ -16,7 +16,7 @@ onMounted(async () => {
 })
 
 async function load({ range, filters }: { range: DateRange; filters: Record<string, string> }): Promise<ReportResult> {
-  if (!api.useMocks) return api.get('/reports/customer', { ...range, ...filters })
+  if (!api.useMocks) return api.get('/reports/customer', { ...range, ...filters, warehouse_id: useAuthStore().warehouseId })
   await mockDelay(400)
   const m = await import('~/mocks/reports-extra')
   const { customers } = await import('~/mocks/seed')

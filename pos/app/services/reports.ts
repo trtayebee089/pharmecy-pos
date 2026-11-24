@@ -24,8 +24,9 @@ function byDay<T>(rows: T[], dateOf: (r: T) => string, value: (r: T) => number) 
 }
 
 export function useReportsApi() {
-  const api = useApi()
-  const real = (path: string, p: ReportParams) => api.get<ReportResult>(`/reports/${path}`, { ...p.range, ...p.filters })
+  const api = useApi('reports')
+  // Reports follow the warehouse selected in the header.
+  const real = (path: string, p: ReportParams) => api.get<ReportResult>(`/reports/${path}`, { ...p.range, ...p.filters, warehouse_id: useAuthStore().warehouseId })
 
   return {
     async profit(p: ReportParams): Promise<ReportResult> {
@@ -313,7 +314,7 @@ export function useReportsApi() {
 
     /** Filter option lists used by report pages. */
     async options(): Promise<{ manufacturers: string[]; forms: string[]; suppliers: string[] }> {
-      if (!api.useMocks) return api.get('/reports/options')
+      if (!api.useMocks) return api.get('/reports/options', { warehouse_id: useAuthStore().warehouseId })
       const { products, purchases } = await seed()
       return {
         manufacturers: [...new Set(products.map(x => x.manufacturer))].sort(),

@@ -4,10 +4,10 @@ import type { ReportResult } from '~/types/domain'
 
 // Reference implementation of the report template (UiReportPage).
 definePageMeta({ title: 'Sales report' })
-const api = useApi()
+const api = useApi('reports')
 
 async function load({ range, filters }: { range: { from: string; to: string }; filters: Record<string, string> }): Promise<ReportResult> {
-  if (!api.useMocks) return api.get('/reports/sales', { ...range, ...filters })
+  if (!api.useMocks) return api.get('/reports/sales', { ...range, ...filters, warehouse_id: useAuthStore().warehouseId })
   await mockDelay(450)
   const { sales } = await import('~/mocks/seed')
   const rows = sales

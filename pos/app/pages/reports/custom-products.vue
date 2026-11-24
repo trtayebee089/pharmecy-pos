@@ -3,10 +3,10 @@ import { Printer } from 'lucide-vue-next'
 import type { DateRange, ReportResult } from '~/types/domain'
 
 definePageMeta({ title: 'Custom product sales' })
-const api = useApi()
+const api = useApi('reports')
 
 async function load({ range, filters }: { range: DateRange; filters: Record<string, string> }): Promise<ReportResult> {
-  if (!api.useMocks) return api.get('/reports/custom-products', { ...range, ...filters })
+  if (!api.useMocks) return api.get('/reports/custom-products', { ...range, ...filters, warehouse_id: useAuthStore().warehouseId })
   await mockDelay(400)
   const all = (await import('~/mocks/reports-extra')).customProductRows()
   const rows = all.filter(r => !filters.product || r.productName === filters.product)
@@ -40,8 +40,9 @@ async function load({ range, filters }: { range: DateRange; filters: Record<stri
 }
 const productOptions = ref<{ value: string; label: string }[]>([])
 onMounted(async () => {
-  if (!api.useMocks) return
-  const names = [...new Set((await import('~/mocks/reports-extra')).customProductRows().map(r => r.productName))].sort()
+  const names = api.useMocks
+    ? [...new Set((await import('~/mocks/reports-extra')).customProductRows().map(r => r.productName))].sort()
+    : (await api.get<{ customItems: string[] }>('/reports/options', { warehouse_id: useAuthStore().warehouseId })).customItems
   productOptions.value = names.map(n => ({ value: n, label: n }))
 })
 function saleActions(r: Record<string, any>) {

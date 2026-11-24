@@ -3,7 +3,7 @@ import { Printer } from 'lucide-vue-next'
 import type { DateRange, ReportResult } from '~/types/domain'
 
 definePageMeta({ title: 'Biller report' })
-const api = useApi()
+const api = useApi('reports')
 const billerOptions = ref<{ value: string; label: string }[]>([])
 onMounted(async () => {
   if (api.useMocks) billerOptions.value = (await import('~/mocks/reports-extra')).billers.map(b => ({ value: String(b.id), label: b.name }))
@@ -11,7 +11,7 @@ onMounted(async () => {
 })
 
 async function load({ range, filters }: { range: DateRange; filters: Record<string, string> }): Promise<ReportResult> {
-  if (!api.useMocks) return api.get('/reports/billers', { ...range, ...filters })
+  if (!api.useMocks) return api.get('/reports/billers', { ...range, ...filters, warehouse_id: useAuthStore().warehouseId })
   await mockDelay(400)
   const m = await import('~/mocks/reports-extra')
   const rows = m.billerRows().filter(r => !filters.biller || String(r.billerId) === filters.biller)
