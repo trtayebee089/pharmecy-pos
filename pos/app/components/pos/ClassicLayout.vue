@@ -282,7 +282,10 @@ const actionBtn = 'flex h-12 min-w-[8.5rem] items-center justify-center gap-2 ro
                       <button type="button" class="grid h-full w-8 place-items-center text-slate-500 hover:text-ink" :aria-label="`Increase ${l.product.name}`" @click="step(l, 1)"><Plus class="size-3.5" /></button>
                     </div>
                   </td>
-                  <td class="px-3 text-right"><input v-model.number="l.discountPct" type="number" min="0" max="100" class="h-9 w-16 rounded-lg border border-slate-200 px-2 text-right tabular focus:border-brand-400 focus:outline-none" :aria-label="`Discount for ${l.product.name}`"></td>
+                  <td class="px-3 text-right">
+                    <input v-model.number="l.discountPct" type="number" min="0" max="100" class="h-9 w-16 rounded-lg border border-slate-200 px-2 text-right tabular focus:border-brand-400 focus:outline-none" :aria-label="`Discount for ${l.product.name}`">
+                    <span v-if="!l.custom && cart.groupPct > (Number(l.discountPct) || 0)" class="block text-[11px] font-semibold text-emerald-600">group {{ cart.groupPct }}%</span>
+                  </td>
                   <td class="px-3 text-right font-display text-[15px] font-extrabold tabular">{{ money(cart.lineTotal(l)) }}</td>
                   <td class="pr-3"><button type="button" class="rounded-lg p-2 text-slate-300 transition hover:bg-rose-50 hover:text-rose-600" :aria-label="`Remove ${l.product.name}`" @click="cart.remove(l.key)"><Trash2 class="size-4" /></button></td>
                 </tr>

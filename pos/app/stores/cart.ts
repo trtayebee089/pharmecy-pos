@@ -107,8 +107,14 @@ export const useCartStore = defineStore('cart', {
     lineGross(): (l: CartLine) => number {
       return l => Math.round(l.qty * this.unitOf(l).price * 100) / 100
     },
+    /** The customer's group discount (catalogue lines only). */
+    groupPct(): number { return this.customer?.isWalkIn ? 0 : (this.customer?.groupDiscountPct ?? 0) },
+    /** Discount that applies to a line: the larger of the manual and the group discount (the API applies the same rule). */
+    effectivePct(): (l: CartLine) => number {
+      return l => l.custom ? (Number(l.discountPct) || 0) : Math.max(Number(l.discountPct) || 0, this.groupPct)
+    },
     lineTotal(): (l: CartLine) => number {
-      return l => Math.round(this.lineGross(l) * (1 - l.discountPct / 100) * 100) / 100
+      return l => Math.round(this.lineGross(l) * (1 - this.effectivePct(l) / 100) * 100) / 100
     },
     subtotal(): number { return this.lines.reduce((s, l) => s + this.lineGross(l), 0) },
     lineDiscounts(): number { return this.lines.reduce((s, l) => s + (this.lineGross(l) - this.lineTotal(l)), 0) },

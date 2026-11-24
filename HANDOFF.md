@@ -62,6 +62,10 @@ Engineering decisions taken during the build (change only on purpose):
 - POS auth is Sanctum **SPA cookie** (no tokens in the browser); username login, 5 tries/min lockout.
 - Permissions live in `api/config/pos.php` and match the Nuxt menu; Admin passes every check.
 - Discount limits per role: Cashier 5 %, Manager 15 % (`role_limits`).
+- Customer group discount (owner decision, 25 Nov 2026): every catalogue line gets the group %; a manual line discount
+  replaces it only when larger, and only that larger manual part is checked against the role limit. The group % itself
+  applies in full (a manager set it). Not applied to custom items or walk-ins; stored on `sales.group_discount_pct`.
+  (Legacy treated the group % as a client-side price markup that compounded, KI-081.)
 - Walk-in customers cannot buy on credit; customer credit limits are enforced.
 - Voids: only while the sale's register session is open (or same day without a session) and before any return.
 - Returns: per sold batch, never more than sold − returned; refund includes the order-discount share; restock or write off.
@@ -102,7 +106,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (111 Pest tests passing)
+### Laravel API (`api/`) – live slices (115 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -122,8 +126,8 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Purchase orders: company report, forecast, drafts, convert to ordered purchase, drafts for all companies | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (11 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 111 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (12 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 115 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -145,8 +149,6 @@ Small open items:
   can differ from the API's day around midnight.
 - The inventory reorder suggestions screen (`useReorderApi`, `/reorder/*`) still runs on mocks; it overlaps with the
   purchase orders forecast and could reuse `PurchaseOrderPlanner`.
-- Customer group discount is stored but not yet applied at the counter (the groups page says it is automatic, capped by
-  the role limit). Needs a decision on how it combines with manual line and order discounts.
 - Due reminder SMS: the endpoint answers 503 until an SMS gateway is chosen and configured.
 - Transfers can only target warehouses the user is assigned to until a warehouse list endpoint exists (Admin module).
 - Voiding a sale return (`/sales/returns` row action) still runs on mocks; the API has no sale-return void yet.
@@ -170,8 +172,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 111 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 111 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 115 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 115 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

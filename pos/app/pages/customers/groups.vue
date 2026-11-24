@@ -18,14 +18,14 @@ const columns: CrudColumn[] = [
 ]
 const fields: FieldDef[] = [
   { key: 'name', label: 'Group name', type: 'text', required: true, span: 2, placeholder: 'e.g. Senior citizen' },
-  { key: 'discountPct', label: 'Discount %', type: 'number', required: true, hint: 'Applied automatically at the counter, within role limits' },
+  { key: 'discountPct', label: 'Discount %', type: 'number', required: true, hint: 'Applied to every catalogue line at the counter. A larger manual line discount replaces it (that part is checked against the cashier’s limit).' },
   { key: 'notes', label: 'Notes', type: 'textarea', span: 2, placeholder: 'Who qualifies and how it is verified' },
 ]
 </script>
 
 <template>
   <UiCrudPage
-    title="Customer groups" description="Price groups that give members an automatic discount. The API caps it by the cashier's role limit."
+    title="Customer groups" description="Groups that give members an automatic line discount at the counter. The larger of the group discount and a manual line discount applies; custom items are not discounted."
     :resource="resource" :columns="columns" :fields="fields" noun="Group" create-permission="customer_groups.manage" :row-actions="rowActions"
     :defaults="() => ({ name: '', discountPct: 0, members: 0, notes: '' })" :item-label="r => r.name"
   >

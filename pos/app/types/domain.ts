@@ -43,6 +43,8 @@ export interface Customer {
   name: string
   phone: string | null
   group: string | null
+  /** The group's automatic line discount (0 for walk-in / no group). The larger of this and a manual line discount applies. */
+  groupDiscountPct?: number
   dueBalance: number
   points: number
   membership: string | null

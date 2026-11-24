@@ -68,7 +68,8 @@ function step(d: number) {
       <div class="mt-2 flex items-center gap-2 text-[12px]">
         <span class="text-slate-500">Line discount</span>
         <input v-model.number="line.discountPct" type="number" min="0" max="100" class="h-7 w-16 rounded-md border border-slate-200 px-2 text-right tabular focus:border-brand-400 focus:outline-none">
-        <span class="text-slate-400">% (limit set per role by the API)</span>
+        <span v-if="!line.custom && cart.groupPct > (Number(line.discountPct) || 0)" class="font-semibold text-emerald-600">% · group {{ cart.groupPct }}% applies</span>
+        <span v-else class="text-slate-400">% (limit set per role by the API)</span>
       </div>
     </div>
   </div>
