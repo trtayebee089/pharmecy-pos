@@ -26,7 +26,7 @@ const fields: FieldDef[] = [
 <template>
   <UiCrudPage
     title="Customer groups" description="Price groups that give members an automatic discount. The API caps it by the cashier's role limit."
-    :resource="resource" :columns="columns" :fields="fields" noun="Group" create-permission="customers.manage" :row-actions="rowActions"
+    :resource="resource" :columns="columns" :fields="fields" noun="Group" create-permission="customer_groups.manage" :row-actions="rowActions"
     :defaults="() => ({ name: '', discountPct: 0, members: 0, notes: '' })" :item-label="r => r.name"
   >
     <template #cell-name="{ row }"><span class="font-semibold text-ink">{{ row.name }}</span></template>

@@ -7,11 +7,11 @@ import type { Campaign, CustomerGroup, CustomerProfile, DueCustomer, Member, Mem
 const peopleMocks = () => import('~/mocks/people')
 
 export function useCustomerGroupsResource() {
-  return useResource<CustomerGroup>('customer-groups', async () => (await peopleMocks()).groups)
+  return useResource<CustomerGroup>('customer-groups', async () => (await peopleMocks()).groups, 'customers')
 }
 
 export function usePeopleApi() {
-  const api = useApi()
+  const api = useApi('customers')
   return {
     async dueCustomers(): Promise<DueCustomer[]> {
       if (api.useMocks) { await mockDelay(); return (await peopleMocks()).dueCustomers() }

@@ -81,6 +81,10 @@ Engineering decisions taken during the build (change only on purpose):
 - Catalog: products are never deleted (deactivate); a unit used on a sale or purchase keeps its factor and cannot be
   removed; prices are versioned per price list (retail, wholesale) and changing one needs `products.price`; catalog
   masters used by products are deactivated, not deleted. Duplicated products start inactive.
+- Customers: due collections are allocated to the customer's open invoices (each at most its due); unallocated money
+  only covers debt that is not on an invoice. A sale with a later due collection cannot be voided (use a return).
+  Customer groups carry discounts, so they need the new `customer_groups.manage` permission (Manager and Admin), not
+  the cashier's `customers.manage`. Customers who owe money cannot be deactivated.
 
 ## 4. What is done
 
@@ -94,7 +98,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (89 Pest tests passing)
+### Laravel API (`api/`) – live slices (100 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -109,10 +113,11 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Purchase returns: post (reduce due or refund), list, void | live |
 | Inventory: stock overview, batches, adjustments, stock counts, transfers | live |
 | Catalog writes: products (units, prices, barcodes), deactivate, duplicate, CSV import; generics, manufacturers, dosage forms, categories | live |
+| Customers: profile, edit, deactivate, groups, due list, open invoices, due collection | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (8 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 89 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (9 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 100 tests pass on MariaDB 10.11 and SQLite.
 
 In `pos/.env` the live domains are:
 `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory`
@@ -120,19 +125,21 @@ In `pos/.env` the live domains are:
 
 ## 5. What needs to be built (suggested order)
 
-1. **Customers**: groups, due collection (`/customers/due`, open invoices, payments), customer detail.
-2. **Held sales / drafts** on the server (currently browser-only).
-3. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
-4. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
-5. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
-6. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-7. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-8. **HR & payroll**: employees, attendance, holidays, payroll.
-9. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-10. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-11. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Held sales / drafts** on the server (currently browser-only).
+2. **Purchase orders module** (legacy quantity-alert): companies report, forecast, drafts, AI runs (`pos/app/services/purchase-orders.ts`).
+3. **Finance**: accounts, money transfers, expenses, income, account statement, balance sheet.
+4. **Reports**: sales, profit, stock & valuation, expiry, purchases, monthly summary, customer, biller, custom products, supplier, payments, cashier.
+5. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
+6. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+7. **HR & payroll**: employees, attendance, holidays, payroll.
+8. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+9. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+10. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
+- Customer group discount is stored but not yet applied at the counter (the groups page says it is automatic, capped by
+  the role limit). Needs a decision on how it combines with manual line and order discounts.
+- Due reminder SMS: the endpoint answers 503 until an SMS gateway is chosen and configured.
 - Transfers can only target warehouses the user is assigned to until a warehouse list endpoint exists (Admin module).
 - Voiding a sale return (`/sales/returns` row action) still runs on mocks; the API has no sale-return void yet.
 - Register page always opens register id 1 (`pos/app/pages/finance/registers.vue`); the API has `GET /cash-registers` for a picker.
@@ -155,8 +162,8 @@ composer install
 cp .env.example .env           # MySQL by default; fill DB_PASSWORD. APP_TIMEZONE=Asia/Dhaka is already set
 php artisan key:generate
 php artisan migrate --seed --seeder=DemoSeeder   # demo catalogue, stock, users, registers
-php vendor/bin/pest                              # expect 89 passing (in-memory SQLite)
-php vendor/bin/pest -c phpunit.mysql.xml         # expect 89 passing on MySQL (uses redpharma_pos_test)
+php vendor/bin/pest                              # expect 100 passing (in-memory SQLite)
+php vendor/bin/pest -c phpunit.mysql.xml         # expect 100 passing on MySQL (uses redpharma_pos_test)
 php artisan serve --port=8000                    # http://localhost:8000
 
 # POS (second terminal)

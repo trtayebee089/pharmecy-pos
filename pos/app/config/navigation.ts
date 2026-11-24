@@ -80,7 +80,7 @@ export const navigation: NavGroup[] = [
     label: 'People', icon: Users,
     children: [
       { label: 'Customers', to: '/customers', permission: 'customers.view', ready: true, legacy: 'People › Customer List' },
-      { label: 'Customer groups', to: '/customers/groups', permission: 'customers.manage', ready: true },
+      { label: 'Customer groups', to: '/customers/groups', permission: 'customer_groups.manage', ready: true },
       { label: 'Due collection', to: '/customers/due', permission: 'payments.collect', ready: true, legacy: 'Reports › Customer Due' },
       { label: 'Suppliers', to: '/suppliers', permission: 'suppliers.view', ready: true, legacy: 'People › Supplier List' },
     ],

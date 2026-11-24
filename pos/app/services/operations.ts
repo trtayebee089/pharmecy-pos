@@ -188,6 +188,7 @@ export function useRowActionsApi() {
   const purchasesApi = useApi('purchases')
   const inventoryApi = useApi('inventory')
   const catalogApi = useApi('catalog')
+  const customersApi = useApi('customers')
   const key = () => crypto.randomUUID()
   async function mockWrite<T>(fn?: () => T | Promise<T>): Promise<T | undefined> {
     await mockDelay(450)
@@ -253,7 +254,7 @@ export function useRowActionsApi() {
     },
     /** Profile fields only; balances, points and membership come from ledgers and cannot be edited here. */
     async updateCustomer(id: number, input: { name: string; phone: string | null; group: string | null }) {
-      if (api.useMocks) {
+      if (customersApi.useMocks) {
         await mockWrite(async () => {
           const { customers } = await seed()
           if (input.phone && customers.some(x => x.id !== id && x.phone === input.phone)) throw new ApiError('The given data was invalid.', 422, { phone: ['Another customer already uses this phone.'] })
@@ -262,14 +263,14 @@ export function useRowActionsApi() {
         })
         return
       }
-      return api.put(`/customers/${id}`, input)
+      return customersApi.put(`/customers/${id}`, input)
     },
     async deactivateCustomer(id: number) {
-      if (api.useMocks) {
+      if (customersApi.useMocks) {
         await mockWrite(async () => { const { customers } = await seed(); const i = customers.findIndex(x => x.id === id); if (i >= 0) customers.splice(i, 1) })
         return
       }
-      return api.post(`/customers/${id}/deactivate`, {}, key())
+      return customersApi.post(`/customers/${id}/deactivate`, {}, key())
     },
   }
 }
