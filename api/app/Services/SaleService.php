@@ -35,6 +35,7 @@ class SaleService
         private StockLedger $stock,
         private DocumentNumbers $numbers,
         private DiscountLimits $limits,
+        private RegisterService $registers,
     ) {}
 
     /** @param  array<string, mixed>  $data  validated request */
@@ -77,6 +78,7 @@ class SaleService
         }
 
         return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due) {
+            $session = $this->registers->current($user, $warehouse->id);
             $sale = Sale::create([
                 'ulid' => (string) Str::ulid(),
                 'number' => $this->numbers->next('sale', $warehouse),
@@ -84,6 +86,7 @@ class SaleService
                 'warehouse_id' => $warehouse->id,
                 'customer_id' => $customer->id,
                 'cashier_id' => $user->id,
+                'session_id' => $session?->id,
                 'status' => 'completed',
                 'sale_date' => now(),
                 'subtotal' => self::money($subtotal),
@@ -284,6 +287,7 @@ class SaleService
                 'direction' => 'in', 'party_type' => 'customer', 'party_id' => $customer->id,
                 'payment_method_id' => $p['method']->id, 'account_id' => $p['method']->account_id,
                 'amount' => self::money($p['amount']), 'reference' => $p['reference'], 'paid_at' => now(),
+                'session_id' => $sale->session_id,
                 'created_by' => $user->id,
             ]);
             PaymentAllocation::create([

@@ -5,6 +5,7 @@ use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\PurchaseController;
+use App\Http\Controllers\Pos\RegisterController;
 use App\Http\Controllers\Pos\SaleController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,8 +35,19 @@ Route::prefix('pos/v1')->group(function () {
         Route::post('customers', [CustomerController::class, 'store'])->middleware('can:customers.manage');
 
         Route::get('sales', [SaleController::class, 'index'])->middleware('can:sales.view');
-        Route::get('sales/{sale}', [SaleController::class, 'show'])->middleware('can:sales.view');
+        Route::get('sales/returns', [SaleController::class, 'returns'])->middleware('can:returns.view');
+        Route::get('sales/{sale}', [SaleController::class, 'show'])->middleware('can:sales.view')->whereNumber('sale');
         Route::post('sales', [SaleController::class, 'store'])->middleware(['can:pos.sell', 'idempotent']);
+        Route::post('sales/{sale}/void', [SaleController::class, 'void'])->middleware('can:sales.void');
+        Route::post('sales/{sale}/returns', [SaleController::class, 'storeReturn'])->middleware(['can:returns.create', 'idempotent']);
+
+        Route::middleware('can:pos.sell')->prefix('cash-registers')->group(function () {
+            Route::get('/', [RegisterController::class, 'registers']);
+            Route::get('sessions', [RegisterController::class, 'sessions']);
+            Route::post('sessions', [RegisterController::class, 'open']);
+            Route::post('sessions/{session}/movements', [RegisterController::class, 'movement'])->middleware('idempotent');
+            Route::post('sessions/{session}/close', [RegisterController::class, 'close']);
+        });
 
         Route::post('purchases', [PurchaseController::class, 'store'])->middleware(['can:purchases.create', 'idempotent']);
     });

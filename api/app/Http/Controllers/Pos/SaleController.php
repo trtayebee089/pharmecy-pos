@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Pos;
 
 use App\Http\Controllers\Controller;
 use App\Models\Sale;
+use App\Models\SaleReturn;
+use App\Services\SaleReversalService;
 use App\Services\SaleService;
 use App\Support\Present;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class SaleController extends Controller
 {
@@ -35,7 +38,54 @@ class SaleController extends Controller
     {
         abort_unless($request->user()->canAccessWarehouse($sale->warehouse_id), 404);
 
-        return response()->json(Present::saleReceipt($sale->load('items.batches.batch', 'customer')));
+        return response()->json(Present::saleDetail($sale));
+    }
+
+    public function void(Request $request, Sale $sale, SaleReversalService $reversals): JsonResponse
+    {
+        abort_unless($request->user()->canAccessWarehouse($sale->warehouse_id), 404);
+        $data = $request->validate(['reason' => ['required', 'string', 'min:3', 'max:255']]);
+
+        return response()->json(Present::saleDetail($reversals->void($request->user(), $sale, trim($data['reason']))->fresh()));
+    }
+
+    public function storeReturn(Request $request, Sale $sale, SaleReversalService $reversals): JsonResponse
+    {
+        abort_unless($request->user()->canAccessWarehouse($sale->warehouse_id), 404);
+        $data = $request->validate([
+            'items' => ['required', 'array', 'min:1', 'max:200'],
+            'items.*.saleItemBatchId' => ['required', 'integer'],
+            'items.*.qtyBase' => ['required', 'integer', 'min:0'],
+            'items.*.restock' => ['required', 'boolean'],
+            'refundMethod' => ['required', 'in:cash,bkash,credit'],
+            'reason' => ['required', 'string', 'min:3', 'max:255'],
+        ]);
+        $items = array_values(array_filter($data['items'], fn ($i) => $i['qtyBase'] > 0));
+        if ($items === []) {
+            throw ValidationException::withMessages(['items' => 'Choose at least one item to return.']);
+        }
+
+        $return = $reversals->createReturn($request->user(), $sale, $items, $data['refundMethod'], trim($data['reason']));
+
+        return response()->json(Present::saleReturn($return), 201);
+    }
+
+    public function returns(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'page' => ['nullable', 'integer', 'min:1'], 'perPage' => ['nullable', 'integer', 'min:1', 'max:200'],
+            'search' => ['nullable', 'string', 'max:100'], 'refundMethod' => ['nullable', 'in:cash,bkash,credit'],
+        ]);
+        $user = $request->user();
+        $query = SaleReturn::query()->with('items.batch', 'items.saleItem', 'sale', 'customer', 'creator')
+            ->when(! $user->isAdmin(), fn ($q) => $q->whereIn('warehouse_id', $user->warehouses()->pluck('warehouses.id')))
+            ->when($data['refundMethod'] ?? null, fn ($q, $m) => $q->where('refund_method', $m))
+            ->when($data['search'] ?? null, fn ($q, $s) => $q->where(fn ($q) => $q->where('number', 'like', "%$s%")->orWhere('reason', 'like', "%$s%")
+                ->orWhereHas('sale', fn ($x) => $x->where('number', 'like', "%$s%"))->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%$s%"))))
+            ->orderByDesc('id');
+        $page = $query->paginate($data['perPage'] ?? 25, ['*'], 'page', $data['page'] ?? 1);
+
+        return response()->json(Present::paginated($page, collect($page->items())->map(fn ($r) => Present::saleReturn($r))->all()));
     }
 
     public function store(Request $request, SaleService $sales): JsonResponse

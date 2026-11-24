@@ -12,11 +12,14 @@ talks to `/api/pos/v1` with Sanctum SPA cookie auth. The design is in
 | Catalog | `GET catalog/products/search`, `GET catalog/products`, `GET catalog/products/{id}` | Units with current retail price, sellable batches in FEFO order, sellable stock |
 | Customers | `GET customers`, `GET customers/lookup`, `POST customers` | Unique normalised BD mobile number, due balance from the ledger |
 | Sales | `POST sales` (Idempotency-Key), `GET sales`, `GET sales/{id}` | Server pricing, role discount limits, FEFO allocation under lock, expired stock never sold, payments, account and customer ledgers |
+| Voids | `POST sales/{id}/void` | Whole sale, reason required, only while its register session is open (or same day without a session) and before any return; stock, payments and ledger reversed, invoice kept as void |
+| Returns | `POST sales/{id}/returns` (Idempotency-Key), `GET sales/returns` | Per sold batch, never more than sold minus returned; refund includes the order-discount share; restock to the same batch or write off; refund as cash, bKash or customer credit |
+| Cash register | `GET cash-registers`, `GET/POST cash-registers/sessions`, `POST sessions/{id}/movements` (Idempotency-Key), `POST sessions/{id}/close` | One open session per register and per cashier; sales, payments and refunds attach to the cashier's open session; expected cash = float + cash sales − cash refunds + cash in − cash out |
 | Purchases | `POST purchases` (Idempotency-Key) | `received`: batches + stock movements at landed cost, supplier ledger, optional payment and retail price update; `ordered`: purchase order only |
 | Dashboard | `GET dashboard/summary` | Live figures from sales, ledgers and stock |
 
-Not yet built (the POS still uses its mock layer for these): returns and voids,
-register sessions, adjustments/transfers/counts, suppliers and the other admin
+Not yet built (the POS still uses its mock layer for these):
+adjustments/transfers/counts, suppliers and the other admin
 modules, reports, online orders, loyalty, accounting and HR.
 
 ## Local development (Windows)
@@ -38,7 +41,7 @@ The API dev server runs from the launch config `redpharma-api`
 `DatabaseSeeder` only creates reference data (roles, permissions, payment
 methods, price lists, the walk-in customer).
 
-In the POS `.env`, `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard`
+In the POS `.env`, `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers`
 sends those domains to this API while the rest of the UI stays on mocks.
 
 ## Rules the code relies on

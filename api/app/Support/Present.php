@@ -2,15 +2,19 @@
 
 namespace App\Support;
 
+use App\Models\CashRegisterSession;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\SaleReturn;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Pricing;
+use App\Services\RegisterService;
 use App\Services\StockLedger;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -129,6 +133,76 @@ class Present
                     'batchNo' => $b->batch?->batch_no, 'expiryDate' => $b->batch?->expiry_date?->toDateString(), 'qtyBase' => $b->qty_base,
                 ])->all(),
             ])->all(),
+        ];
+    }
+
+    /** SaleDetail: the sale page, with per-batch lines for returns. */
+    public static function saleDetail(Sale $s): array
+    {
+        $s->loadMissing('items.batches.batch', 'items.unit', 'customer', 'cashier');
+        $payments = DB::table('payments')->join('payment_allocations', 'payment_allocations.payment_id', '=', 'payments.id')
+            ->join('payment_methods', 'payment_methods.id', '=', 'payments.payment_method_id')
+            ->where(['payment_allocations.allocatable_type' => 'sale', 'payment_allocations.allocatable_id' => $s->id])
+            ->where('payments.status', 'posted')
+            ->get(['payment_methods.name', 'payment_allocations.amount', 'payments.reference', 'payments.paid_at']);
+
+        return self::saleSummary($s) + [
+            'warehouse' => Warehouse::whereKey($s->warehouse_id)->value('name'),
+            'customerPhone' => $s->customer?->phone,
+            'subtotal' => (float) $s->subtotal,
+            'discountTotal' => round((float) $s->line_discount_total + (float) $s->order_discount_total, 2),
+            'lines' => $s->items->map(fn ($i) => [
+                'id' => $i->id, 'productName' => $i->description, 'unitLabel' => $i->unit?->label ?? 'Item',
+                'qty' => (float) $i->qty, 'qtyBase' => $i->qty_base, 'unitPrice' => (float) $i->unit_price,
+                'discount' => (float) $i->discount_total, 'lineTotal' => (float) $i->line_total,
+                'batches' => $i->batches->map(fn ($b) => [
+                    'saleItemBatchId' => $b->id, 'batchNo' => $b->batch?->batch_no, 'expiryDate' => $b->batch?->expiry_date?->toDateString(),
+                    'qtyBase' => $b->qty_base, 'returnedQtyBase' => $b->returned_qty_base,
+                ])->all(),
+            ])->all(),
+            'payments' => $payments->map(fn ($p) => [
+                'method' => $p->name, 'amount' => (float) $p->amount, 'reference' => $p->reference, 'paidAt' => Carbon::parse($p->paid_at)->toIso8601String(),
+            ])->all(),
+            'returns' => SaleReturn::where('sale_id', $s->id)->orderBy('id')->get()
+                ->map(fn ($r) => ['number' => $r->number, 'date' => $r->created_at->toIso8601String(), 'total' => (float) $r->total])->all(),
+        ];
+    }
+
+    public static function saleReturn(SaleReturn $r): array
+    {
+        $r->loadMissing('items.batch', 'items.saleItem', 'sale', 'customer', 'creator');
+
+        return [
+            'id' => $r->id, 'number' => $r->number, 'date' => $r->created_at->toIso8601String(),
+            'saleId' => $r->sale_id, 'saleNumber' => $r->sale?->number, 'customer' => $r->customer?->name,
+            'items' => $r->items->count(), 'refundMethod' => $r->refund_method, 'total' => (float) $r->total,
+            'restockedQty' => $r->restocked_qty_base, 'writtenOffQty' => $r->written_off_qty_base,
+            'reason' => $r->reason, 'createdBy' => $r->creator?->name,
+            'lines' => $r->items->map(fn ($i) => [
+                'productName' => $i->saleItem?->description, 'batchNo' => $i->batch?->batch_no,
+                'expiryDate' => $i->batch?->expiry_date?->toDateString(), 'qtyBase' => $i->qty_base,
+                'unitPrice' => (float) $i->unit_refund, 'lineTotal' => (float) $i->line_total, 'restock' => $i->restock,
+            ])->all(),
+        ];
+    }
+
+    public static function registerSession(CashRegisterSession $s): array
+    {
+        $s->loadMissing('register', 'opener');
+        $f = app(RegisterService::class)->figures($s);
+        $closed = $s->status === 'closed';
+
+        return [
+            'id' => $s->id, 'register' => $s->register?->name, 'status' => $s->status,
+            'openedBy' => $s->opener?->name, 'openedAt' => $s->opened_at->toIso8601String(),
+            'openingFloat' => (float) $s->opening_float,
+            'cashSales' => $f['cashSales'], 'cashRefunds' => $f['cashRefunds'], 'cashIn' => $f['cashIn'], 'cashOut' => $f['cashOut'],
+            // A closed session keeps the expected figure it was closed against.
+            'expectedCash' => $closed ? (float) $s->expected_cash : $f['expectedCash'],
+            'countedCash' => $closed ? (float) $s->counted_cash : null,
+            'difference' => $closed ? (float) $s->difference : null,
+            'closedAt' => $s->closed_at?->toIso8601String(),
+            'nonCash' => $f['nonCash'],
         ];
     }
 

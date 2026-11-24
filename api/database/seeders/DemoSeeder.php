@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Batch;
+use App\Models\CashRegister;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\DosageForm;
@@ -105,6 +106,11 @@ class DemoSeeder extends Seeder
 
         $dhk = Warehouse::updateOrCreate(['code' => 'DHK1'], ['name' => 'Red Pharma · Dhanmondi', 'type' => 'store']);
         $utr = Warehouse::updateOrCreate(['code' => 'UTR1'], ['name' => 'Red Pharma · Uttara', 'type' => 'store']);
+        foreach ([$dhk, $utr] as $wh) {
+            foreach (['Counter 1', 'Counter 2'] as $counter) {
+                CashRegister::firstOrCreate(['warehouse_id' => $wh->id, 'name' => $counter]);
+            }
+        }
 
         $users = [['admin', 'Admin User', 'Admin'], ['cashier', 'Counter Cashier', 'Cashier'], ['store', 'Store Keeper', 'Inventory']];
         foreach ($users as [$username, $name, $role]) {
