@@ -130,7 +130,12 @@ function exportCsv() {
       </template>
       <template #cell-zone="{ row }"><span class="text-slate-600">{{ row.zone }}</span></template>
       <template #cell-items="{ row }"><span class="tabular">{{ row.items }}</span></template>
-      <template #cell-codAmount="{ row }"><span class="font-semibold tabular">{{ money(row.codAmount) }}</span></template>
+      <template #cell-codAmount="{ row }">
+        <span class="font-semibold tabular">{{ money(row.codAmount) }}</span>
+        <span v-if="row.paymentStatus === 'pending'" class="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-amber-800">Awaiting payment</span>
+        <span v-else-if="row.paymentStatus === 'paid'" class="ml-1.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-800">Paid online</span>
+        <span v-else-if="row.paymentStatus === 'refund_due'" class="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-rose-700">Refund due</span>
+      </template>
       <template #cell-rider="{ row }">
         <span v-if="row.riderName" class="inline-flex items-center gap-2"><span class="grid size-6 place-items-center rounded-full bg-brand-100 text-[10px] font-bold text-brand-700">{{ initials(row.riderName) }}</span><span class="text-sm">{{ row.riderName }}</span></span>
         <span v-else class="text-slate-400">—</span>

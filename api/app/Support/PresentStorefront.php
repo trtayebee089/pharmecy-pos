@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\OnlineOrder;
+use App\Services\OnlineOrders;
 use Illuminate\Support\Carbon;
 
 /**
@@ -30,7 +31,8 @@ class PresentStorefront
                 'status' => $h->status, 'label' => self::LABELS[$h->status] ?? $h->status, 'note' => $forTracking ? null : $h->note,
                 'at' => Carbon::parse($h->created_at)->toIso8601String(),
             ])->values()->all(),
-            'grand_total' => (float) $o->grand_total, 'cod_amount' => round((float) $o->grand_total - $pointsValue, 2),
+            'grand_total' => (float) $o->grand_total, 'cod_amount' => OnlineOrders::codAmount($o),
+            'payment_method' => $o->payment_method ?? 'cod', 'payment_status' => $o->payment_status ?? 'cod', 'paid_online' => (float) $o->paid_online,
         ];
         if ($forTracking) {
             return $base;
@@ -44,7 +46,6 @@ class PresentStorefront
             ])->values()->all(),
             'subtotal' => (float) $o->subtotal, 'discount_pct' => (float) $o->discount_pct, 'discount_total' => (float) $o->discount_total,
             'shipping' => (float) $o->shipping, 'points_redeemed' => (int) $o->points_redeemed, 'points_value' => $pointsValue,
-            'payment_method' => 'cod',
             'delivery' => ['phone' => $o->phone, 'address' => $o->address, 'division' => $o->division, 'district' => $o->district, 'thana' => $o->thana],
             'rider' => $o->rider ? ['name' => $o->rider->name] : null,
             'cancel_reason' => $o->cancel_reason, 'note' => $o->note,

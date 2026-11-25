@@ -28,9 +28,21 @@
             </select>
           </label>
           <p v-if="zonesError" class="md:col-span-2 text-sm text-red-600">{{ zonesError }}</p>
-          <div class="text-sm font-bold text-slate-700">Payment
-            <p class="mt-2 rounded-2xl bg-slate-50 px-4 py-3 font-normal">Cash on delivery</p>
-          </div>
+          <fieldset class="md:col-span-2 text-sm font-bold text-slate-700">
+            <legend>Payment</legend>
+            <div class="mt-2 grid gap-2 sm:grid-cols-3">
+              <label
+                v-for="option in site.payments"
+                :key="option.code"
+                class="flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 font-semibold transition"
+                :class="paymentMethod === option.code ? 'border-primary-500 bg-primary-50 text-primary-800' : 'border-slate-200 bg-white hover:border-slate-300'"
+              >
+                <input v-model="paymentMethod" type="radio" name="payment" :value="option.code" class="h-4 w-4 accent-primary-600" />
+                {{ option.label }}
+              </label>
+            </div>
+            <p v-if="paymentMethod !== 'cod'" class="mt-2 text-xs font-normal text-slate-500">You will pay on the next page; the order is sent to the pharmacy once the payment is complete.</p>
+          </fieldset>
           <label v-if="auth.isAuthenticated && cart.rewardPoints" class="text-sm font-bold text-slate-700">Reward points to use
             <input v-model.number="points" type="number" min="0" class="mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 outline-none focus:ring-2 focus:ring-primary-500" />
           </label>
@@ -56,11 +68,17 @@ import ErrorState from '../components/common/ErrorState.vue'
 import CartSummary from './partials/CartSummary.vue'
 import { useAuthStore } from '../stores/authStore'
 import { useCartStore } from '../stores/cartStore'
+import { useSiteStore } from '../stores/siteStore'
 import { orderService } from '../services/orderService'
 import { tracking } from '../composables/useTracking'
 
 const cart = useCartStore()
 const auth = useAuthStore()
+const site = useSiteStore()
+const paymentMethod = ref('cod')
+watch(() => site.payments, (list) => {
+  if (!list.some((p) => p.code === paymentMethod.value)) paymentMethod.value = list[0]?.code || 'cod'
+}, { immediate: true })
 const router = useRouter()
 const submitting = ref(false)
 const error = ref('')
@@ -101,15 +119,20 @@ async function submit() {
     const result = await orderService.checkout({
       customer: { name: form.name, phone: form.phone, email: form.email || null, address: form.address },
       zone_id: selectedZone.value.id,
-      payment_method: 'cod',
+      payment_method: paymentMethod.value,
       notes: form.notes || null,
       items: cart.items.map((item) => ({ product_id: item.product.id, qty: item.quantity })),
       reward_points: auth.isAuthenticated ? Number(points.value || 0) : 0,
       // The same event id goes to the browser Pixel and the server's Conversions API (counted once).
       tracking: tracking.serverContext(attemptKey),
     }, attemptKey)
-    sessionStorage.setItem('redpharma_last_order', JSON.stringify({ ...result.order, is_new_customer: result.is_new_customer, password_setup: result.password_setup }))
+    sessionStorage.setItem('redpharma_last_order', JSON.stringify({ ...result.order, is_new_customer: result.is_new_customer, password_setup: result.password_setup, payment_error: result.payment?.error || null }))
     cart.clear()
+    // Online payment: off to the gateway, which brings the customer back to the confirmation page.
+    if (result.payment?.redirect_url) {
+      window.location.assign(result.payment.redirect_url)
+      return
+    }
     router.push(`/order-confirmation/${result.order.number}`)
   } catch (exception) {
     const first = Object.values(exception.errors || {})[0]

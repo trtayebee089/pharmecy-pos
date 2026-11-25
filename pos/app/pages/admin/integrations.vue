@@ -306,6 +306,7 @@ async function copy(text: string) {
         <UiSection title="Shop details" description="Shown in the website header, footer and messages" :icon="Globe">
           <div class="space-y-4">
             <UiInput v-model="d.storefront.siteName" label="Shop name" :error="err('siteName')" />
+            <UiInput v-model="d.storefront.websiteUrl" label="Website address" placeholder="https://redpharmabd.com" hint="Customers return here after paying online" :error="err('websiteUrl')" />
             <div class="grid gap-4 sm:grid-cols-2">
               <UiInput v-model="d.storefront.phone" label="Hotline" inputmode="tel" />
               <UiInput v-model="d.storefront.whatsapp" label="WhatsApp" inputmode="tel" />

@@ -10,6 +10,7 @@ use App\Models\Customer;
 use App\Models\OnlineOrder;
 use App\Models\OnlineOrderHistory;
 use App\Models\OnlineOrderLine;
+use App\Models\OnlinePayment;
 use App\Models\PartyLedgerEntry;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
@@ -48,6 +49,8 @@ use Illuminate\Validation\ValidationException;
  */
 class OnlineOrders
 {
+    public const ONLINE_METHODS = ['sslcommerz', 'bkash'];
+
     public const NEXT = [
         'pending' => ['confirmed', 'cancelled'],
         'confirmed' => ['packed', 'cancelled'],
@@ -175,8 +178,10 @@ class OnlineOrders
         $discount = $subtotal - $afterDiscount;
         $shipping = $zone->free_shipping_min !== null && $afterDiscount >= SaleService::paisa($zone->free_shipping_min) ? 0 : SaleService::paisa($zone->rate);
         [$points, $pointsPaisa] = $loyalty ? $this->pointsToRedeem($customer, (int) ($data['redeemPoints'] ?? 0), $afterDiscount) : [0, 0];
+        // Paid through SSLCommerz or bKash before staff confirm it (see OnlinePayments); otherwise cash on delivery.
+        $online = in_array($data['paymentMethod'] ?? 'cod', self::ONLINE_METHODS, true);
 
-        return DB::transaction(function () use ($user, $data, $warehouse, $zone, $customer, $lines, $subtotal, $shipping, $pct, $discount, $afterDiscount, $points, $pointsPaisa) {
+        return DB::transaction(function () use ($user, $data, $warehouse, $zone, $customer, $lines, $subtotal, $shipping, $pct, $discount, $afterDiscount, $points, $pointsPaisa, $online) {
             $order = OnlineOrder::create([
                 'number' => $this->numbers->next('online_order', $warehouse),
                 'tracking_code' => $this->trackingCode(),
@@ -186,6 +191,7 @@ class OnlineOrders
                 'phone' => $customer->phone ?? $data['phone'], 'address' => $data['address'],
                 'zone_id' => $zone->id, 'division' => $zone->division, 'district' => $zone->district, 'thana' => $zone->thana,
                 'status' => 'pending', 'subtotal' => SaleService::money($subtotal),
+                'payment_method' => $online ? $data['paymentMethod'] : 'cod', 'payment_status' => $online ? 'pending' : 'cod',
                 'discount_pct' => $pct, 'discount_total' => SaleService::money($discount), 'shipping' => SaleService::money($shipping),
                 'grand_total' => SaleService::money($afterDiscount + $shipping), // before points; COD = grand − points value
                 'points_redeemed' => $points, 'points_value' => SaleService::money($pointsPaisa),
@@ -203,7 +209,7 @@ class OnlineOrders
             if ($points > 0) {
                 $this->rewards->debit($customer->id, 'redeem', $points, ['online_order', $order->id], $order->number, $user?->id, (float) SaleService::money($pointsPaisa));
             }
-            $this->history($order, 'pending', 'Order placed by '.($order->channel === 'phone' ? 'phone' : $order->channel), $user);
+            $this->history($order, 'pending', 'Order placed by '.($order->channel === 'phone' ? 'phone' : $order->channel).($online ? ', waiting for payment by '.$data['paymentMethod'] : ''), $user);
 
             return $order;
         });
@@ -219,6 +225,9 @@ class OnlineOrders
                 throw ValidationException::withMessages(['status' => in_array($order->status, ['delivered', 'cancelled'], true)
                     ? 'This order is already closed.'
                     : "An order that is {$order->status} cannot be marked {$to}."]);
+            }
+            if ($to === 'confirmed' && $order->payment_status === 'pending') {
+                throw ValidationException::withMessages(['status' => 'Waiting for the online payment. Confirm it once paid, or ask the customer to switch to cash on delivery.']);
             }
 
             match ($to) {
@@ -251,6 +260,18 @@ class OnlineOrders
     }
 
     /** Cash still with the rider (collected on delivery minus handed over). */
+    /** Cash the rider collects: grand total less reward points and anything paid online. */
+    public static function codAmount(OnlineOrder $o): float
+    {
+        return SaleService::money(max(0, SaleService::paisa($o->grand_total) - SaleService::paisa($o->points_value) - SaleService::paisa($o->paid_online))) + 0;
+    }
+
+    /** What an online payment must cover: the total less reward points. */
+    public static function payable(OnlineOrder $o): float
+    {
+        return SaleService::money(max(0, SaleService::paisa($o->grand_total) - SaleService::paisa($o->points_value))) + 0;
+    }
+
     public static function cashHeld(int $riderId): float
     {
         $rows = RiderCashEntry::where('rider_id', $riderId)->groupBy('type')->pluck(DB::raw('SUM(amount)'), 'type');
@@ -347,6 +368,27 @@ class OnlineOrders
             $due = $grand - $pointsPaisa;
             $sale->update(['paid_total' => $money, 'due_total' => SaleService::money($due), 'payment_status' => $due > 0 ? 'partial' : 'paid']);
         }
+        // Paid online (SSLCommerz / bKash): booked to that method's account; nothing left for the rider.
+        $onlinePaisa = SaleService::paisa($order->paid_online);
+        if ($onlinePaisa > 0) {
+            $method = PaymentMethod::where('code', $order->payment_method)->firstOrFail();
+            $money = SaleService::money($onlinePaisa);
+            $txn = OnlinePayment::where(['online_order_id' => $order->id, 'status' => 'paid'])->latest('id')->value('transaction_id');
+            $payment = Payment::create([
+                'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('payment', Warehouse::findOrFail($order->warehouse_id)),
+                'direction' => 'in', 'party_type' => 'customer', 'party_id' => $order->customer_id,
+                'payment_method_id' => $method->id, 'account_id' => $method->account_id, 'amount' => $money, 'paid_at' => now(),
+                'reference' => $txn, 'note' => 'Paid online · '.$order->number, 'created_by' => $user->id,
+            ]);
+            PaymentAllocation::create(['payment_id' => $payment->id, 'allocatable_type' => 'sale', 'allocatable_id' => $sale->id, 'amount' => $money]);
+            PartyLedgerEntry::create([
+                'party_type' => 'customer', 'party_id' => $order->customer_id, 'entry_date' => now()->toDateString(), 'type' => 'payment',
+                'debit' => 0, 'credit' => $money, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number.' online', 'created_by' => $user->id,
+            ]);
+            $paid = SaleService::paisa($sale->fresh()->paid_total) + $onlinePaisa;
+            $due = max(0, $grand - $paid);
+            $sale->update(['paid_total' => SaleService::money($paid), 'due_total' => SaleService::money($due), 'payment_status' => $due > 0 ? 'partial' : 'paid']);
+        }
         $order->update(['sale_id' => $sale->id]);
     }
 
@@ -390,7 +432,8 @@ class OnlineOrders
         } elseif ($order->points_redeemed > 0) {
             $this->rewards->credit($order->customer_id, 'reverse', (int) $order->points_redeemed, ['online_order', $order->id], 'Cancelled '.$order->number, $user->id);
         }
-        $order->update(['cancel_reason' => trim($note)]);
+        // Money paid online goes back through the gateway's merchant panel; the order shows it is owed.
+        $order->update(['cancel_reason' => trim($note)] + ($order->payment_status === 'paid' ? ['payment_status' => 'refund_due'] : []));
     }
 
     private function assertRider(OnlineOrder $order): void
@@ -427,7 +470,7 @@ class OnlineOrders
         return $c;
     }
 
-    private function history(OnlineOrder $order, string $status, ?string $note, ?User $user): void
+    public function history(OnlineOrder $order, string $status, ?string $note, ?User $user): void
     {
         OnlineOrderHistory::create(['online_order_id' => $order->id, 'status' => $status, 'note' => $note, 'user_id' => $user?->id, 'created_at' => now()]);
     }

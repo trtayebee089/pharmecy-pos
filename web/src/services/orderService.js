@@ -22,6 +22,13 @@ export const orderService = {
   async track(code) {
     return unwrap(await api.get(`/v1/tracking/${encodeURIComponent(code.trim())}`))
   },
+  /** Start or retry an online payment: { redirect_url }. Works for guests (tracking code). */
+  async pay(trackingCode, gateway) {
+    return unwrap(await api.post('/v1/payments/start', { tracking_code: trackingCode, gateway }))
+  },
+  async payOnDelivery(trackingCode) {
+    return unwrap(await api.post('/v1/payments/cod', { tracking_code: trackingCode }))
+  },
   async zones() {
     return unwrap(await api.get('/v1/shipping-zones'))
   },

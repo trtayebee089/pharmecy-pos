@@ -70,6 +70,9 @@ class DatabaseSeeder extends Seeder
         foreach ($methods as [$code, $name, $account, $ref]) {
             PaymentMethod::updateOrCreate(['code' => $code], ['name' => $name, 'account_id' => $account, 'requires_reference' => $ref]);
         }
+        // Online card / mobile banking through SSLCommerz (bKash checkout books to the bKash method above).
+        $ssl = Account::firstOrCreate(['code' => 'SSLCZ'], ['name' => 'SSLCommerz merchant', 'type' => 'bank']);
+        PaymentMethod::firstOrCreate(['code' => 'sslcommerz'], ['name' => 'SSLCommerz', 'account_id' => $ssl->id, 'requires_reference' => true]);
         // Reward points as a tender: no money account, the reward ledger carries it.
         PaymentMethod::updateOrCreate(['code' => 'points'], ['name' => 'Reward points', 'account_id' => null, 'requires_reference' => false]);
 

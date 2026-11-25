@@ -27,7 +27,7 @@ export interface IntegrationGroups {
     defaultWeightKg: number; clientSecretSet: boolean; passwordSet: boolean; webhookSecretSet: boolean
   }
   storefront: {
-    siteName: string; phone: string; whatsapp: string; email: string; address: string; facebookUrl: string; instagramUrl: string; youtubeUrl: string
+    siteName: string; websiteUrl: string; phone: string; whatsapp: string; email: string; address: string; facebookUrl: string; instagramUrl: string; youtubeUrl: string
     metaTitle: string; metaDescription: string; announcement: string; codEnabled: boolean
   }
 }

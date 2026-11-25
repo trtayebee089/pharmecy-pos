@@ -122,8 +122,12 @@ async function assign() {
         <dl class="mt-3 space-y-1.5 text-sm">
           <div class="flex justify-between text-slate-500"><dt>Subtotal</dt><dd class="tabular">{{ money(order.subtotal) }}</dd></div>
           <div class="flex justify-between text-slate-500"><dt>Delivery ({{ order.zone }})</dt><dd class="tabular">{{ order.shipping ? money(order.shipping) : 'Free' }}</dd></div>
+          <div v-if="order.pointsValue" class="flex justify-between text-slate-500"><dt>Reward points</dt><dd class="tabular">−{{ money(order.pointsValue) }}</dd></div>
+          <div v-if="order.paidOnline" class="flex justify-between text-emerald-700"><dt>Paid online ({{ order.paymentMethod === 'bkash' ? 'bKash' : 'SSLCommerz' }})</dt><dd class="tabular">−{{ money(order.paidOnline) }}</dd></div>
           <div class="flex justify-between border-t border-slate-100 pt-2 font-display text-lg font-extrabold"><dt>Cash on delivery</dt><dd class="tabular">{{ money(order.codAmount) }}</dd></div>
         </dl>
+        <p v-if="order.paymentStatus === 'pending'" class="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-800">Waiting for the customer's online payment ({{ order.paymentMethod === 'bkash' ? 'bKash' : 'SSLCommerz' }}). Confirm it once paid, or after the customer switches to cash on delivery.</p>
+        <p v-else-if="order.paymentStatus === 'refund_due'" class="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-[13px] text-rose-700">Paid online but cancelled: refund {{ money(order.paidOnline) }} from the {{ order.paymentMethod === 'bkash' ? 'bKash' : 'SSLCommerz' }} merchant panel.</p>
       </div>
 
       <div v-if="!closed" data-stagger class="rounded-2xl bg-slate-50 p-4">

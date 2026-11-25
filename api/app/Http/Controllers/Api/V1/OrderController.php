@@ -9,7 +9,9 @@ use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\ShippingZone;
 use App\Services\ConversionTracker;
+use App\Services\Integrations;
 use App\Services\OnlineOrders;
+use App\Services\OnlinePayments;
 use App\Services\Storefront;
 use App\Support\PresentStorefront;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -50,7 +52,7 @@ class OrderController extends V1Controller
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:10000'],
-            'payment_method' => ['nullable', 'in:cod,cash_on_delivery'],
+            'payment_method' => ['nullable', 'in:cod,cash_on_delivery,sslcommerz,bkash'],
             'notes' => ['nullable', 'string', 'max:500'],
             'reward_points' => ['nullable', 'integer', 'min:0'],
             // Browser ids for server-side conversion tracking (all optional).
@@ -91,8 +93,19 @@ class OrderController extends V1Controller
         $tracked = $order->fresh();
         defer(fn () => app(ConversionTracker::class)->purchase($tracked, $ctx));
 
+        // Online payment: the order exists either way; the customer is sent to the gateway (or can retry / pay cash).
+        $payment = null;
+        if ($order->payment_status === 'pending') {
+            try {
+                $payment = ['gateway' => $order->payment_method, 'redirect_url' => app(OnlinePayments::class)->start($order, $order->payment_method), 'error' => null];
+            } catch (ValidationException $e) {
+                $payment = ['gateway' => $order->payment_method, 'redirect_url' => null, 'error' => collect($e->errors())->flatten()->first()];
+            }
+        }
+
         return $this->ok([
             'order' => PresentStorefront::order($order->fresh()) + ['event_id' => ConversionTracker::eventId($order, $ctx['event_id'] ?? null)],
+            'payment' => $payment,
             'is_new_customer' => $isNew,
             'password_setup' => $isNew && $order->customer?->email ? 'Use "Forgot password" with the email you gave to create a password and see your orders.' : null,
         ], 'Order placed. We will call to confirm.', 201);
@@ -106,7 +119,7 @@ class OrderController extends V1Controller
                 'phone' => $phone, 'name' => data_get($data, 'customer.name') ?: $customer?->name,
                 'address' => data_get($data, 'customer.address'), 'zoneId' => $this->zone($data)->id,
                 'lines' => $this->lines($data['items']), 'note' => $data['notes'] ?? null,
-                'redeemPoints' => (int) ($data['reward_points'] ?? 0), 'clientKey' => $clientKey,
+                'redeemPoints' => (int) ($data['reward_points'] ?? 0), 'clientKey' => $clientKey, 'paymentMethod' => $this->method($data),
             ]);
             // A brand-new guest may leave an email: it lets them create a password later ("forgot password").
             if ($isNew && ($email = data_get($data, 'customer.email')) && ! Customer::whereRaw('LOWER(email) = ?', [mb_strtolower($email)])->exists()) {
@@ -208,6 +221,19 @@ class OrderController extends V1Controller
 
             return ['productId' => (int) $i['product_id'], 'unitId' => $u->id, 'qty' => (int) $i['qty']];
         })->all();
+    }
+
+    /** cod, sslcommerz or bkash, refused when switched off in Administration › Integrations. */
+    private function method(array $data): string
+    {
+        $m = ($data['payment_method'] ?? 'cod') === 'cash_on_delivery' ? 'cod' : ($data['payment_method'] ?? 'cod');
+        $i = app(Integrations::class);
+        $available = $m === 'cod' ? ($i->public('storefront')['codEnabled'] ?? true) : $i->enabled($m);
+        if (! $available) {
+            throw ValidationException::withMessages(['payment_method' => 'This payment method is not available. Choose another one.']);
+        }
+
+        return $m;
     }
 
     private function zone(array $data): ShippingZone

@@ -120,7 +120,7 @@ class IntegrationController extends Controller
                 'defaultWeightKg' => ['required', 'numeric', 'min:0.1', 'max:50'], 'clientSecret' => $secret, 'password' => $secret, 'webhookSecret' => $secret,
             ],
             'storefront' => [
-                'siteName' => ['required', 'string', 'max:80'], 'phone' => ['nullable', 'string', 'max:30'], 'whatsapp' => ['nullable', 'string', 'max:30'],
+                'siteName' => ['required', 'string', 'max:80'], 'websiteUrl' => ['nullable', 'url', 'max:190'], 'phone' => ['nullable', 'string', 'max:30'], 'whatsapp' => ['nullable', 'string', 'max:30'],
                 'email' => ['nullable', 'email', 'max:120'], 'address' => ['nullable', 'string', 'max:255'],
                 'facebookUrl' => ['nullable', 'url', 'max:255'], 'instagramUrl' => ['nullable', 'url', 'max:255'], 'youtubeUrl' => ['nullable', 'url', 'max:255'],
                 'metaTitle' => ['nullable', 'string', 'max:70'], 'metaDescription' => ['nullable', 'string', 'max:170'],

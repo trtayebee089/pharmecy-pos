@@ -236,7 +236,10 @@ class OnlineOrderController extends Controller
             'division' => $o->division, 'district' => $o->district, 'thana' => $o->thana,
             'zone' => trim($o->thana.', '.$o->district, ', '), 'zoneId' => $o->zone_id,
             'items' => $o->lines->count(), 'subtotal' => (float) $o->subtotal, 'shipping' => (float) $o->shipping,
-            'codAmount' => (float) $o->grand_total, // cash to collect on delivery (all orders are COD)
+            // Cash the rider collects: the total less reward points and anything paid online.
+            'codAmount' => OnlineOrders::codAmount($o),
+            'pointsValue' => (float) $o->points_value, 'paymentMethod' => $o->payment_method, 'paymentStatus' => $o->payment_status,
+            'paidOnline' => (float) $o->paid_online,
             'grandTotal' => (float) $o->grand_total, 'saleId' => $o->sale_id,
             'riderId' => $o->rider_id, 'riderName' => $o->rider?->name,
             'lines' => $o->lines->map(fn ($l) => [

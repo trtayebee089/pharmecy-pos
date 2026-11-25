@@ -63,7 +63,7 @@ class Integrations
         ],
         'storefront' => [
             'defaults' => [
-                'siteName' => 'Red Pharma', 'phone' => '', 'whatsapp' => '', 'email' => '', 'address' => '',
+                'siteName' => 'Red Pharma', 'websiteUrl' => '', 'phone' => '', 'whatsapp' => '', 'email' => '', 'address' => '',
                 'facebookUrl' => '', 'instagramUrl' => '', 'youtubeUrl' => '', 'metaTitle' => '', 'metaDescription' => '',
                 'announcement' => '', 'codEnabled' => true,
             ],
@@ -103,6 +103,14 @@ class Integrations
         }
 
         return $raw;
+    }
+
+    /** The shop website (payment returns, feed links): Website tab, else the feed's, else FRONTEND_URL / APP_URL. */
+    public function websiteUrl(): string
+    {
+        $url = $this->raw('storefront')['websiteUrl'] ?: $this->raw('feed')['siteUrl'] ?: env('FRONTEND_URL') ?: config('app.url');
+
+        return rtrim((string) $url, '/');
     }
 
     public function enabled(string $group): bool

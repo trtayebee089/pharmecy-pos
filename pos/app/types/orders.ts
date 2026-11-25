@@ -70,6 +70,11 @@ export interface OnlineOrder {
   subtotal: number
   shipping: number
   codAmount: number
+  /** Live API: reward points used, and online payment (SSLCommerz / bKash). */
+  pointsValue?: number
+  paymentMethod?: 'cod' | 'sslcommerz' | 'bkash'
+  paymentStatus?: 'cod' | 'pending' | 'paid' | 'refund_due'
+  paidOnline?: number
   riderId: number | null
   riderName: string | null
   lines: OrderLine[]
