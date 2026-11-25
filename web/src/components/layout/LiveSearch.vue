@@ -129,6 +129,7 @@ import { Pill, Search, X } from 'lucide-vue-next'
 import { productService } from '../../services/productService'
 import { useDebounce } from '../../composables/useDebounce'
 import { formatPrice } from '../../utils/formatPrice'
+import { tracking } from '../../composables/useTracking'
 
 const props = defineProps({
   variant: { type: String, default: 'bar' },
@@ -169,6 +170,7 @@ watch(debounced, async (value) => {
     const response = await productService.search(value)
     if (ticket !== requestId) return
     results.value = response.data.slice(0, 6)
+    if (value.length >= 3) tracking.search(value)
   } finally {
     if (ticket === requestId) loading.value = false
   }

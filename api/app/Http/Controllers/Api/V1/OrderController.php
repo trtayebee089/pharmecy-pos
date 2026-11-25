@@ -8,6 +8,7 @@ use App\Models\OnlineOrder;
 use App\Models\Product;
 use App\Models\ProductUnit;
 use App\Models\ShippingZone;
+use App\Services\ConversionTracker;
 use App\Services\OnlineOrders;
 use App\Services\Storefront;
 use App\Support\PresentStorefront;
@@ -17,6 +18,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+
+use function Illuminate\Support\defer;
 
 /**
  * Checkout, order history, tracking and reorder for the website and app.
@@ -50,6 +53,10 @@ class OrderController extends V1Controller
             'payment_method' => ['nullable', 'in:cod,cash_on_delivery'],
             'notes' => ['nullable', 'string', 'max:500'],
             'reward_points' => ['nullable', 'integer', 'min:0'],
+            // Browser ids for server-side conversion tracking (all optional).
+            'tracking' => ['nullable', 'array'], 'tracking.event_id' => ['nullable', 'string', 'max:64'],
+            'tracking.fbp' => ['nullable', 'string', 'max:255'], 'tracking.fbc' => ['nullable', 'string', 'max:255'],
+            'tracking.ga_client_id' => ['nullable', 'string', 'max:64'], 'tracking.page_url' => ['nullable', 'string', 'max:500'],
         ]);
         $phone = $customer?->phone ?? CustomerController::normalizePhone((string) data_get($data, 'customer.phone'));
         if (! $phone) {
@@ -79,8 +86,14 @@ class OrderController extends V1Controller
             return $this->ok(['order' => PresentStorefront::order($existing), 'is_new_customer' => false], 'Order already placed.', 200);
         }
 
+        // Server-side purchase events go out after the response (Facebook CAPI, GA4), with the browser's event id.
+        $ctx = ($data['tracking'] ?? []) + ['ip' => $request->ip(), 'user_agent' => (string) $request->userAgent()];
+        $tracked = $order->fresh();
+        defer(fn () => app(ConversionTracker::class)->purchase($tracked, $ctx));
+
         return $this->ok([
-            'order' => PresentStorefront::order($order->fresh()), 'is_new_customer' => $isNew,
+            'order' => PresentStorefront::order($order->fresh()) + ['event_id' => ConversionTracker::eventId($order, $ctx['event_id'] ?? null)],
+            'is_new_customer' => $isNew,
             'password_setup' => $isNew && $order->customer?->email ? 'Use "Forgot password" with the email you gave to create a password and see your orders.' : null,
         ], 'Order placed. We will call to confirm.', 201);
     }

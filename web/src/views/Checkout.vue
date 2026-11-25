@@ -57,6 +57,7 @@ import CartSummary from './partials/CartSummary.vue'
 import { useAuthStore } from '../stores/authStore'
 import { useCartStore } from '../stores/cartStore'
 import { orderService } from '../services/orderService'
+import { tracking } from '../composables/useTracking'
 
 const cart = useCartStore()
 const auth = useAuthStore()
@@ -83,6 +84,7 @@ watch(selectedZone, (zone) => cart.setZone(zone))
 watch(() => [form.name, form.phone, form.address, form.zoneId, form.notes, points.value, cart.count], () => { attemptKey = orderService.newKey() })
 
 onMounted(async () => {
+  tracking.beginCheckout(cart.items)
   try {
     zones.value = await orderService.zones()
     if (cart.zone && !zones.value.some((z) => z.id === cart.zone.id)) cart.setZone(null)
@@ -103,6 +105,8 @@ async function submit() {
       notes: form.notes || null,
       items: cart.items.map((item) => ({ product_id: item.product.id, qty: item.quantity })),
       reward_points: auth.isAuthenticated ? Number(points.value || 0) : 0,
+      // The same event id goes to the browser Pixel and the server's Conversions API (counted once).
+      tracking: tracking.serverContext(attemptKey),
     }, attemptKey)
     sessionStorage.setItem('redpharma_last_order', JSON.stringify({ ...result.order, is_new_customer: result.is_new_customer, password_setup: result.password_setup }))
     cart.clear()

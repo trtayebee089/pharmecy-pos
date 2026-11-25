@@ -27,6 +27,8 @@
 </template>
 
 <script setup>
+import { onMounted } from 'vue'
+import { tracking } from '../composables/useTracking'
 import Breadcrumb from '../components/common/Breadcrumb.vue'
 import EmptyState from '../components/common/EmptyState.vue'
 import QuantitySelector from '../components/common/QuantitySelector.vue'
@@ -35,4 +37,5 @@ import { formatPrice } from '../utils/formatPrice'
 import CartSummary from './partials/CartSummary.vue'
 
 const cart = useCartStore()
+onMounted(() => { if (cart.items.length) tracking.viewCart(cart.items) })
 </script>

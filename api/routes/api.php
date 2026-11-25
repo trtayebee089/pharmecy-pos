@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Pos\AdminController;
 use App\Http\Controllers\Pos\AuthController;
+use App\Http\Controllers\Pos\BannerController;
 use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CatalogMasterController;
 use App\Http\Controllers\Pos\CustomerAccountController;
@@ -32,7 +33,7 @@ use Illuminate\Support\Facades\Route;
  * /api routes stay frozen in the old system.
  */
 Route::prefix('pos/v1')->group(function () {
-    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
+    Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:staff-login');
 
     // password.fresh: a user with an admin-set temporary password can only reach /me, /me/password, /me/profile and logout.
     Route::middleware(['auth:sanctum', 'staff', 'password.fresh'])->group(function () {
@@ -76,8 +77,16 @@ Route::prefix('pos/v1')->group(function () {
         Route::prefix('admin/integrations')->middleware('can:settings.manage')->group(function () {
             Route::get('/', [IntegrationController::class, 'index']);
             Route::put('{group}', [IntegrationController::class, 'save'])->where('group', '[a-z]+');
-            Route::post('mail/test', [IntegrationController::class, 'testMail'])->middleware('throttle:10,1');
-            Route::post('sms/test', [IntegrationController::class, 'testSms'])->middleware('throttle:10,1');
+            Route::post('mail/test', [IntegrationController::class, 'testMail'])->middleware('throttle:integration-tests');
+            Route::post('sms/test', [IntegrationController::class, 'testSms'])->middleware('throttle:integration-tests');
+        });
+        // Website home page banners (images are multipart, so updates are POSTs).
+        Route::prefix('admin/banners')->middleware('can:settings.manage')->group(function () {
+            Route::get('/', [BannerController::class, 'index']);
+            Route::post('/', [BannerController::class, 'store']);
+            Route::post('reorder', [BannerController::class, 'reorder']);
+            Route::post('{banner}', [BannerController::class, 'update'])->whereNumber('banner');
+            Route::delete('{banner}', [BannerController::class, 'destroy'])->whereNumber('banner');
         });
 
         Route::get('dashboard/summary', [DashboardController::class, 'summary'])->middleware('can:dashboard.view');

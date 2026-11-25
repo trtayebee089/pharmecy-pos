@@ -25,7 +25,9 @@
 
 <script setup>
 import { CheckCircle } from 'lucide-vue-next'
+import { onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { tracking } from '../composables/useTracking'
 import { formatPrice } from '../utils/formatPrice'
 
 const route = useRoute()
@@ -36,4 +38,11 @@ try {
 } catch {
   order = null
 }
+
+// Purchase is reported once per order, even if this page is reloaded.
+onMounted(() => {
+  if (!order || order.tracked) return
+  tracking.purchase(order, order.event_id)
+  try { sessionStorage.setItem('redpharma_last_order', JSON.stringify({ ...order, tracked: true })) } catch { /* storage blocked */ }
+})
 </script>

@@ -35,6 +35,7 @@ import { useRouter } from 'vue-router'
 import AuthShell from './partials/AuthShell.vue'
 import ErrorState from '../../components/common/ErrorState.vue'
 import { useAuthStore } from '../../stores/authStore'
+import { tracking } from '../../composables/useTracking'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -49,6 +50,7 @@ async function submit() {
   Object.keys(errors).forEach((key) => delete errors[key])
   try {
     await auth.register({ ...form, email: form.email || null })
+    tracking.signUp()
     router.push('/account/profile')
   } catch (exception) {
     Object.assign(errors, exception.errors || {})

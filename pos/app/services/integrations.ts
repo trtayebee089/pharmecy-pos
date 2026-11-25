@@ -67,3 +67,42 @@ export function useIntegrationsApi() {
 /** Secrets typed on the Integrations page ('group.name' → value) and the ones to remove. */
 export interface SecretDrafts { typed: Record<string, string>; clear: Record<string, boolean> }
 export const SECRET_DRAFTS: InjectionKey<SecretDrafts> = Symbol('secret-drafts')
+
+// ---------------------------------------------------------------- website banners
+
+export interface Banner {
+  id: number; placement: 'hero' | 'tile'; title: string; subtitle: string | null; button_text: string | null; link_url: string | null
+  image: string; mobile_image: string | null; sort_order: number; is_active: boolean; starts_on: string | null; ends_on: string | null
+}
+
+export interface BannerForm {
+  placement: 'hero' | 'tile'; title: string; subtitle: string; button_text: string; link_url: string
+  is_active: boolean; starts_on: string; ends_on: string; image: File | null; mobile_image: File | null; remove_mobile_image: boolean
+}
+
+export function useBannersApi() {
+  const api = useApi('admin')
+  const form = (f: BannerForm) => {
+    const fd = new FormData()
+    for (const [k, v] of Object.entries(f)) {
+      if (v instanceof File) fd.append(k, v)
+      else if (typeof v === 'boolean') fd.append(k, v ? '1' : '0')
+      else if (v !== null && v !== '') fd.append(k, String(v))
+    }
+    return fd
+  }
+  return {
+    list(): Promise<{ banners: Banner[]; tileSlots: number }> {
+      return api.get('/admin/banners')
+    },
+    save(f: BannerForm, id?: number): Promise<Banner> {
+      return api.post(id ? `/admin/banners/${id}` : '/admin/banners', form(f))
+    },
+    remove(id: number): Promise<void> {
+      return api.del(`/admin/banners/${id}`)
+    },
+    reorder(ids: number[]): Promise<{ banners: Banner[]; tileSlots: number }> {
+      return api.post('/admin/banners/reorder', { ids })
+    },
+  }
+}

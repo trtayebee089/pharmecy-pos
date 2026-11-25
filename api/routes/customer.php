@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\CatalogController;
+use App\Http\Controllers\Api\V1\FeedController;
 use App\Http\Controllers\Api\V1\LegacyAppController as Legacy;
 use App\Http\Controllers\Api\V1\LoyaltyController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\SiteController;
 use App\Http\Middleware\ForceJson;
 use Illuminate\Support\Facades\Route;
 
@@ -13,7 +15,7 @@ use Illuminate\Support\Facades\Route;
  * (Sanctum, ability `customer`), never the staff session. Envelope
  * {success, message, data, meta}. Breaking changes go to /api/v2.
  */
-Route::prefix('v1')->middleware([ForceJson::class, 'throttle:120,1'])->group(function () {
+Route::prefix('v1')->middleware([ForceJson::class, 'throttle:customer-api'])->group(function () {
     // Catalogue (public)
     Route::get('categories', [CatalogController::class, 'categories']);
     Route::get('categories/{slug}', [CatalogController::class, 'category']);
@@ -23,10 +25,11 @@ Route::prefix('v1')->middleware([ForceJson::class, 'throttle:120,1'])->group(fun
     Route::get('products/suggestions', [CatalogController::class, 'suggestions']);
     Route::get('products/{slug}', [CatalogController::class, 'product']);
     Route::get('shipping-zones', [CatalogController::class, 'zones']);
+    Route::get('site-config', [SiteController::class, 'config']);
 
     // Account
     Route::prefix('customer')->group(function () {
-        Route::middleware('throttle:20,1')->group(function () {
+        Route::middleware('throttle:customer-auth')->group(function () {
             Route::post('register', [AccountController::class, 'register']);
             Route::post('login', [AccountController::class, 'login']);
             Route::post('forgot-password', [AccountController::class, 'forgotPassword']);
@@ -52,8 +55,8 @@ Route::prefix('v1')->middleware([ForceJson::class, 'throttle:120,1'])->group(fun
     });
 
     // Orders: checkout works signed in or as a guest; history is the owner's only.
-    Route::post('checkout', [OrderController::class, 'checkout'])->middleware('throttle:10,1');
-    Route::get('tracking/{code}', [OrderController::class, 'track'])->middleware('throttle:30,1');
+    Route::post('checkout', [OrderController::class, 'checkout'])->middleware('throttle:checkout');
+    Route::get('tracking/{code}', [OrderController::class, 'track'])->middleware('throttle:order-tracking');
     Route::middleware(['auth:sanctum', 'customer'])->group(function () {
         Route::get('orders', [OrderController::class, 'index']);
         Route::get('orders/{number}', [OrderController::class, 'show']);
@@ -66,7 +69,7 @@ Route::prefix('v1')->middleware([ForceJson::class, 'throttle:120,1'])->group(fun
  * /v1 with the old response shapes (LegacyAppController). Remove when old
  * installs have aged out.
  */
-Route::middleware([ForceJson::class, 'throttle:120,1'])->group(function () {
+Route::middleware([ForceJson::class, 'throttle:customer-api'])->group(function () {
     Route::get('categories', [CatalogController::class, 'categories']);
     Route::get('categories/{slug}', [Legacy::class, 'category']);
     Route::get('products/featured', [CatalogController::class, 'featured']);
@@ -75,10 +78,10 @@ Route::middleware([ForceJson::class, 'throttle:120,1'])->group(function () {
     Route::get('products/{slug}', [Legacy::class, 'product']);
     Route::get('search/{q}', [Legacy::class, 'search']);
     Route::get('shipping-zones', [CatalogController::class, 'zones']);
-    Route::post('checkout', [Legacy::class, 'checkout'])->middleware('throttle:10,1');
+    Route::post('checkout', [Legacy::class, 'checkout'])->middleware('throttle:checkout');
 
     Route::prefix('customer')->group(function () {
-        Route::middleware('throttle:20,1')->group(function () {
+        Route::middleware('throttle:customer-auth')->group(function () {
             Route::post('login', [Legacy::class, 'login']);
             Route::post('register', [Legacy::class, 'register']);
             Route::post('forget-password', [AccountController::class, 'forgotPassword']);
@@ -99,4 +102,10 @@ Route::middleware([ForceJson::class, 'throttle:120,1'])->group(function () {
         Route::get('reward/transactions', [LoyaltyController::class, 'transactions']);
         Route::post('reward/redeem', [LoyaltyController::class, 'quote']);
     });
+});
+
+// Product catalogue feeds for Facebook / Google Merchant Center (Administration › Integrations › Tracking & feed).
+Route::middleware('throttle:feeds')->group(function () {
+    Route::get('feeds/products.xml', [FeedController::class, 'xml']);
+    Route::get('feeds/products.csv', [FeedController::class, 'csv']);
 });

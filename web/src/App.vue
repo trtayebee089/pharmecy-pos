@@ -55,7 +55,10 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { nextTick, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useSiteStore } from './stores/siteStore'
+import { tracking } from './composables/useTracking'
 import { Check, Info, X } from 'lucide-vue-next'
 import AppHeader from './components/layout/AppHeader.vue'
 import Footer from './components/layout/Footer.vue'
@@ -66,8 +69,27 @@ import { useAuthStore } from './stores/authStore'
 
 const ui = useUiStore()
 const auth = useAuthStore()
+const site = useSiteStore()
+const route = useRoute()
+const router = useRouter()
 
-onMounted(() => {
+/** Search title and description from the POS (Integrations › Website), when set. */
+function applyMeta(shop) {
+  if (shop.metaTitle) document.title = shop.metaTitle
+  if (shop.metaDescription) {
+    let tag = document.querySelector('meta[name="description"]')
+    if (!tag) { tag = document.createElement('meta'); tag.name = 'description'; document.head.appendChild(tag) }
+    tag.content = shop.metaDescription
+  }
+}
+
+onMounted(async () => {
   window.addEventListener('redpharma:unauthorized', () => auth.logout())
+  await site.load()
+  applyMeta(site.shop)
+  tracking.init(site.tracking)
+  await router.isReady()
+  tracking.pageView(route.fullPath, document.title)
+  router.afterEach((to, from) => { if (to.fullPath !== from.fullPath) nextTick(() => tracking.pageView(to.fullPath, document.title)) })
 })
 </script>

@@ -148,6 +148,7 @@ export const navigation: NavGroup[] = [
       { label: 'Reward points', to: '/admin/reward-points', permission: 'settings.manage', ready: true, legacy: 'Settings › Reward Point Setting' },
       { label: 'General settings', to: '/admin/settings', permission: 'settings.manage', ready: true, legacy: 'Settings › General Setting' },
       { label: 'Integrations', to: '/admin/integrations', permission: 'settings.manage', ready: true, legacy: 'Settings › Mail / SMS / Payment Gateway Setting' },
+      { label: 'Website banners', to: '/admin/banners', permission: 'settings.manage', ready: true, legacy: 'Settings › Slider' },
     ],
   },
 ]

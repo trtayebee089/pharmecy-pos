@@ -63,6 +63,7 @@ import { productService } from '../services/productService'
 import { useCartStore } from '../stores/cartStore'
 import { formatPrice } from '../utils/formatPrice'
 import { useRecentlyViewedStore } from '../stores/recentlyViewedStore'
+import { tracking } from '../composables/useTracking'
 
 const route = useRoute()
 const router = useRouter()
@@ -82,6 +83,7 @@ async function load() {
     return
   }
   recentlyViewed.record(product.value)
+  tracking.viewItem(product.value)
   const response = await productService.list({ category: product.value.category_slug, per_page: 12 })
   related.value = response.data.filter((item) => item.id !== product.value.id).slice(0, 6)
   loading.value = false

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { useUiStore } from './uiStore'
+import { tracking } from '../composables/useTracking'
 
 const STORAGE_KEY = 'redpharma_guest_cart'
 
@@ -62,19 +63,27 @@ export const useCartStore = defineStore('cart', {
     add(product, quantity = 1) {
       const existing = this.items.find((item) => item.product.id === product.id)
       const max = product.stock || 999
+      const before = existing?.quantity || 0
       if (existing) existing.quantity = Math.min(existing.quantity + quantity, max)
       else this.items.push({ id: `${product.id}`, product, quantity: Math.min(quantity, max) })
       this.persist()
+      const added = this.quantityFor(product.id) - before
+      if (added > 0) tracking.addToCart(product, added)
       useUiStore().toast('Added to cart')
     },
     update(productId, quantity) {
       if (quantity < 1) return this.remove(productId)
       const item = this.items.find((entry) => entry.product.id === productId)
       if (!item) return
+      const before = item.quantity
       item.quantity = Math.min(quantity, item.product.stock || 999)
+      if (item.quantity > before) tracking.addToCart(item.product, item.quantity - before)
+      else if (item.quantity < before) tracking.removeFromCart(item.product, before - item.quantity)
       this.persist()
     },
     remove(productId) {
+      const gone = this.items.find((item) => item.product.id === productId)
+      if (gone) tracking.removeFromCart(gone.product, gone.quantity)
       this.items = this.items.filter((item) => item.product.id !== productId)
       this.persist()
       useUiStore().toast('Removed from cart', 'info')

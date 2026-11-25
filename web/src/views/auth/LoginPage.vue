@@ -19,6 +19,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AuthShell from './partials/AuthShell.vue'
 import ErrorState from '../../components/common/ErrorState.vue'
 import { useAuthStore } from '../../stores/authStore'
+import { tracking } from '../../composables/useTracking'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -30,6 +31,7 @@ async function submit() {
   error.value = ''
   try {
     await auth.login(form)
+    tracking.login()
     router.push(route.query.redirect || '/account/profile')
   } catch (exception) {
     error.value = exception.message
