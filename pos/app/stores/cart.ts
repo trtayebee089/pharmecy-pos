@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import type { Customer, PaymentLine, Product } from '~/types/domain'
 import type { HeldSaleSummary } from '~/types/orders'
+import type { RewardPointConfig } from '~/services/settings'
 
 /** POST /sales/held/{id}/resume */
 interface ResumedHeldSale {
@@ -80,6 +81,8 @@ export const useCartStore = defineStore('cart', {
     orderDiscount: 0, // amount in BDT
     held: [] as HeldCart[],
     lastReceipt: null as ReceiptSnapshot | null,
+    /** Reward rules (points at checkout, membership discount mode); loaded by the counter. */
+    rewardRules: null as RewardPointConfig | null,
   }),
   getters: {
     unitOf: () => (l: CartLine) => l.product.units.find(u => u.id === l.unitId) ?? l.product.units[0]!,
@@ -109,9 +112,20 @@ export const useCartStore = defineStore('cart', {
     },
     /** The customer's group discount (catalogue lines only). */
     groupPct(): number { return this.customer?.isWalkIn ? 0 : (this.customer?.groupDiscountPct ?? 0) },
-    /** Discount that applies to a line: the larger of the manual and the group discount (the API applies the same rule). */
+    /**
+     * Automatic catalogue-line discount: the group % combined with the membership % per the admin's
+     * mode (off = group only, larger = the bigger one, stack = both). Same rule as the API.
+     */
+    autoPct(): number {
+      const member = this.customer?.isWalkIn ? 0 : (this.customer?.membershipDiscountPct ?? 0)
+      const mode = this.rewardRules?.membershipDiscountMode ?? 'off'
+      if (mode === 'larger') return Math.max(this.groupPct, member)
+      if (mode === 'stack') return Math.round(100 * (1 - (1 - this.groupPct / 100) * (1 - member / 100)) * 10000) / 10000
+      return this.groupPct
+    },
+    /** Discount that applies to a line: the larger of the manual and the automatic discount (the API applies the same rule). */
     effectivePct(): (l: CartLine) => number {
-      return l => l.custom ? (Number(l.discountPct) || 0) : Math.max(Number(l.discountPct) || 0, this.groupPct)
+      return l => l.custom ? (Number(l.discountPct) || 0) : Math.max(Number(l.discountPct) || 0, this.autoPct)
     },
     lineTotal(): (l: CartLine) => number {
       return l => Math.round(this.lineGross(l) * (1 - this.effectivePct(l) / 100) * 100) / 100
@@ -123,6 +137,12 @@ export const useCartStore = defineStore('cart', {
     hasShortage(): boolean { return this.lines.some(l => this.allocation(l).short > 0) },
   },
   actions: {
+    /** Loads the reward rules once per session; the counter works without them (no points, group discount only). */
+    async loadRewardRules(force = false) {
+      if (this.rewardRules && !force) return
+      try { this.rewardRules = await useSettingsApi().rewards() }
+      catch { this.rewardRules = null }
+    },
     add(product: Product, unitId?: number): 'added' | 'merged' | 'no-stock' {
       if (product.stockBase <= 0) return 'no-stock'
       const unit = unitId ?? (product.units.find(u => u.isSaleDefault) ?? product.units[0]!).id

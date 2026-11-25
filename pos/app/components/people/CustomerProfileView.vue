@@ -16,7 +16,7 @@ watch(tab, async () => {
   await nextTick()
   revealStagger(root.value?.querySelectorAll('[data-row]') ?? [], { y: 6, stagger: 0.02, duration: 0.3 })
 })
-const entryTone = { opening: 'neutral', invoice: 'info', payment: 'success', return: 'violet', refund: 'warning', adjustment: 'neutral', earn: 'success', redeem: 'brand', expire: 'danger', adjust: 'warning', reverse: 'neutral' } as const
+const entryTone = { opening: 'neutral', invoice: 'info', payment: 'success', return: 'violet', refund: 'warning', adjustment: 'neutral', earn: 'success', redeem: 'brand', expire: 'danger', adjust: 'warning', reverse: 'neutral', membership: 'brand', void: 'neutral' } as const
 </script>
 
 <template>

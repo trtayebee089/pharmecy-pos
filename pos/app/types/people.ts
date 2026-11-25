@@ -14,7 +14,7 @@ export interface DueCustomer {
   lastPaymentAt: string | null
 }
 
-export interface LedgerEntry { date: string; type: 'opening' | 'invoice' | 'payment' | 'return' | 'refund' | 'adjustment'; ref: string; debit: number; credit: number; balance: number }
+export interface LedgerEntry { date: string; type: 'opening' | 'invoice' | 'payment' | 'return' | 'refund' | 'adjustment' | 'membership' | 'void'; ref: string; debit: number; credit: number; balance: number }
 
 export interface CustomerProfile {
   id: number

@@ -39,7 +39,7 @@ export function usePeopleApi() {
 }
 
 export function useLoyaltyApi() {
-  const api = useApi()
+  const api = useApi('loyalty')
   return {
     async wallets(): Promise<RewardWallet[]> {
       if (api.useMocks) { await mockDelay(); return (await peopleMocks()).wallets() }
@@ -54,7 +54,7 @@ export function useLoyaltyApi() {
       if (api.useMocks) { await mockDelay(500); return }
       return api.post(`/loyalty/wallets/${customerId}/adjustments`, { points, reason }, idempotencyKey)
     },
-    campaigns: useResource<Campaign>('loyalty/campaigns', async () => (await peopleMocks()).campaigns),
+    campaigns: useResource<Campaign>('loyalty/campaigns', async () => (await peopleMocks()).campaigns, 'loyalty'),
     async plans(): Promise<MembershipPlan[]> {
       if (api.useMocks) { await mockDelay(); return structuredClone((await peopleMocks()).plans) }
       return api.get('/loyalty/membership-plans')

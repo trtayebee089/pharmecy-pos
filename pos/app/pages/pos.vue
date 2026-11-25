@@ -19,6 +19,8 @@ definePageMeta({
   }],
 })
 const layout = useState<'grid' | 'classic'>('pos-layout', () => 'grid')
+// Reward rules drive the membership discount preview and points at checkout; refreshed each time the counter opens.
+onMounted(() => useCartStore().loadRewardRules(true))
 </script>
 
 <template>

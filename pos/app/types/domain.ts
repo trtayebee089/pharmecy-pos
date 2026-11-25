@@ -45,6 +45,8 @@ export interface Customer {
   group: string | null
   /** The group's automatic line discount (0 for walk-in / no group). The larger of this and a manual line discount applies. */
   groupDiscountPct?: number
+  /** Active membership plan discount; combined with the group % per the reward settings mode. */
+  membershipDiscountPct?: number
   dueBalance: number
   points: number
   membership: string | null
@@ -115,7 +117,7 @@ export interface DashboardSummary {
 }
 
 export interface PaymentLine {
-  method: 'cash' | 'card' | 'bkash' | 'nagad' | 'rocket' | 'customer_credit'
+  method: 'cash' | 'card' | 'bkash' | 'nagad' | 'rocket' | 'points' | 'customer_credit'
   amount: number
   reference?: string
 }

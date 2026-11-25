@@ -53,6 +53,9 @@ export interface RewardPointConfig {
   pointValue: number // ৳ value of 1 point when redeemed
   minRedeemPoints: number
   maxRedeemPercent: number // max % of an invoice payable with points
+  minRedeemSaleAmount: number // minimum invoice total before points can be used
+  /** off = website only (legacy), larger = larger of group and membership %, stack = both */
+  membershipDiscountMode: 'off' | 'larger' | 'stack'
   excludeDiscountedItems: boolean
 }
 
@@ -85,7 +88,7 @@ const posDefaults = (): PosConfig => ({
 })
 const rewardDefaults = (): RewardPointConfig => ({
   active: true, soldAmountPerPoint: 100, minimumSoldAmount: 200, expiryDuration: 12, expiryType: 'Month',
-  pointValue: 1, minRedeemPoints: 50, maxRedeemPercent: 50, excludeDiscountedItems: false,
+  pointValue: 1, minRedeemPoints: 50, maxRedeemPercent: 50, excludeDiscountedItems: false, minRedeemSaleAmount: 0, membershipDiscountMode: 'off',
 })
 
 export function useSettingsApi() {
@@ -111,10 +114,12 @@ export function useSettingsApi() {
       return api.post(`/settings/printers/${printerId}/test`)
     },
     async rewards(): Promise<RewardPointConfig> {
+      const api = useApi('loyalty') // reward rules are served live with the loyalty domain
       if (api.useMocks) { await mockDelay(300); rewardStore.value ??= rewardDefaults(); return plainClone(rewardStore.value) }
       return api.get('/settings/reward-points')
     },
     async saveRewards(c: RewardPointConfig): Promise<void> {
+      const api = useApi('loyalty')
       if (api.useMocks) { await mockDelay(500); rewardStore.value = plainClone(c); return }
       return api.put('/settings/reward-points', c)
     },

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Save, Coins, Gift, CalendarClock, Calculator } from 'lucide-vue-next'
+import { Save, Coins, Gift, CalendarClock, Calculator, Crown } from 'lucide-vue-next'
 import type { RewardPointConfig } from '~/services/settings'
 
 /** Legacy "Reward Point Setting" (setting/reward-point-setting) plus redemption rules used at the counter. */
@@ -26,7 +26,7 @@ const earned = computed(() => {
 })
 const balance = ref(320)
 const redeemable = computed(() => {
-  if (!c.value?.active || balance.value < c.value.minRedeemPoints) return 0
+  if (!c.value?.active || balance.value < c.value.minRedeemPoints || invoice.value < (c.value.minRedeemSaleAmount || 0)) return 0
   const maxByInvoice = Math.floor((invoice.value * c.value.maxRedeemPercent / 100) / Math.max(c.value.pointValue, 0.01))
   return Math.min(balance.value, maxByInvoice)
 })
@@ -80,12 +80,21 @@ async function save() {
         </UiSection>
 
         <UiSection title="Redemption" description="How points pay at the counter" :icon="Gift">
-          <div class="grid gap-4 sm:grid-cols-3">
+          <div class="grid gap-4 sm:grid-cols-2">
             <UiInput v-model.number="c.pointValue" type="number" label="Value of 1 point (৳)" :error="errors.value" />
-            <UiInput v-model.number="c.minRedeemPoints" type="number" label="Minimum points to redeem" />
+            <UiInput v-model.number="c.minRedeemPoints" type="number" label="Minimum points to redeem" hint="The customer needs at least this balance" />
+            <UiInput v-model.number="c.minRedeemSaleAmount" type="number" label="Minimum invoice to use points (৳)" hint="0 = any invoice" />
             <UiInput v-model.number="c.maxRedeemPercent" type="number" label="Max % of invoice" :error="errors.maxPct" />
           </div>
           <p class="mt-3 text-[12.5px] text-slate-500">Effective reward rate: <strong class="text-ink">{{ effectiveRate.toFixed(2) }}%</strong> of spend returned as points value.</p>
+        </UiSection>
+
+        <UiSection title="Membership discount at the counter" description="Legacy applied membership discounts on the website only" :icon="Crown">
+          <UiSelect
+            v-model="c.membershipDiscountMode" label="When a member also has a customer group discount"
+            :options="[{ value: 'off', label: 'Off: group discount only (website keeps membership)' }, { value: 'larger', label: 'Larger of group or membership discount' }, { value: 'stack', label: 'Both: membership on top of group discount' }]"
+          />
+          <p class="mt-3 text-[12.5px] text-slate-500">A manual line discount still replaces the automatic one only when it is larger, and only that larger part counts against the cashier's discount limit.</p>
         </UiSection>
       </div>
 
@@ -106,6 +115,7 @@ async function save() {
             <p class="label">Can redeem on this invoice</p>
             <p class="mt-1 font-display text-2xl font-extrabold tabular">{{ num(redeemable) }} pts · {{ money(redeemable * c.pointValue) }}</p>
             <p v-if="balance < c.minRedeemPoints" class="text-xs text-amber-600">Below the {{ c.minRedeemPoints }}-point minimum</p>
+            <p v-else-if="invoice < (c.minRedeemSaleAmount || 0)" class="text-xs text-amber-600">Invoice below the {{ money(c.minRedeemSaleAmount) }} minimum for points</p>
           </div>
         </div>
       </div>
