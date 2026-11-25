@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -38,7 +39,7 @@ class Storefront
             ->when($f['category'] ?? null, fn ($q, $slug) => $q->whereIn('products.category_id', $this->categoryIds((string) $slug)))
             ->when(trim((string) ($f['search'] ?? $f['q'] ?? '')), fn ($q, $s) => $this->search($q, $s))
             ->when(filter_var($f['prescription_required'] ?? false, FILTER_VALIDATE_BOOLEAN), fn ($q) => $q->where('products.requires_prescription', true))
-            ->when(filter_var($f['in_stock'] ?? false, FILTER_VALIDATE_BOOLEAN), fn ($q) => $q->whereRaw('COALESCE(stock.qty, 0) > 0'));
+            ->when(filter_var($f['in_stock'] ?? false, FILTER_VALIDATE_BOOLEAN), fn ($q) => $this->inStock($q));
         if (preg_match('/^(\d+)-(\d+)$/', (string) ($f['price'] ?? ''), $m)) {
             $q->whereBetween('piece.price', [(float) $m[1], (float) $m[2]]);
         }
@@ -46,7 +47,7 @@ class Storefront
             'newest' => $q->orderByDesc('products.id'),
             'price_asc' => $q->orderBy('piece.price'),
             'price_desc' => $q->orderByDesc('piece.price'),
-            default => $q->orderByDesc(DB::raw('COALESCE(sold.qty, 0)'))->orderBy('products.name'),
+            default => $q->orderByDesc(DB::raw('COALESCE(sold.units_sold, 0)'))->orderBy('products.name'),
         };
         // No promotions exist yet: "discounted" filters to nothing rather than ignoring the request.
         if (filter_var($f['discounted'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
@@ -61,13 +62,13 @@ class Storefront
     /** @return array<int, array> */
     public function featured(int $limit = 12): array
     {
-        return $this->present($this->base()->whereRaw('COALESCE(stock.qty, 0) > 0')->orderByDesc('products.id')->limit($limit)->get(['products.*']));
+        return $this->present($this->inStock($this->base())->orderByDesc('products.id')->limit($limit)->get(['products.*']));
     }
 
     /** @return array<int, array> */
     public function bestSelling(int $limit = 12): array
     {
-        return $this->present($this->base()->orderByDesc(DB::raw('COALESCE(sold.qty, 0)'))->orderBy('products.name')->limit($limit)->get(['products.*']));
+        return $this->present($this->base()->orderByDesc(DB::raw('COALESCE(sold.units_sold, 0)'))->orderBy('products.name')->limit($limit)->get(['products.*']));
     }
 
     /** @return array<int, array{name: string, slug: string}> */
@@ -158,27 +159,59 @@ class Storefront
         return $p->slug ?: (string) $p->id;
     }
 
-    /** Active products with their piece price, online stock and units sold (for sorting). */
+    /**
+     * Active products with their piece price, and units sold for "popular".
+     * Stock is not joined here: joining the stock totals of every product made
+     * the listing take minutes on real data (MariaDB). present() reads the
+     * stock of the page's products, and inStock() filters with an indexed check.
+     */
     private function base(): Builder
     {
-        $wh = $this->warehouseId();
-        $today = now()->toDateString();
+        $this->ensurePopularity();
         $listId = $this->pricing->defaultListId();
         $piece = DB::table('product_units as u')->join('product_prices as pp', 'pp.product_unit_id', '=', 'u.id')
             ->where('u.factor', 1)->where('pp.price_list_id', $listId)->where('pp.effective_from', '<=', now())
             ->where(fn ($q) => $q->whereNull('pp.effective_to')->orWhere('pp.effective_to', '>', now()))
             ->groupBy('u.product_id')->selectRaw('u.product_id, MAX(pp.price) AS price');
-        $stock = DB::table('stock_balances as sb')->join('batches as b', 'b.id', '=', 'sb.batch_id')
-            ->where('sb.warehouse_id', $wh)->where('sb.qty_base', '>', 0)->where('b.status', 'active')
-            ->where(fn ($q) => $q->where('b.expiry_date', '>=', $today)->orWhere(fn ($q) => $q->whereNull('b.expiry_date')->where('b.is_legacy_opening', true)))
-            ->groupBy('sb.product_id')->selectRaw('sb.product_id, SUM(sb.qty_base) AS qty');
-        $sold = DB::table('sale_items')->where('line_type', 'product')->groupBy('product_id')->selectRaw('product_id, SUM(qty_base) AS qty');
 
         // Only products with a retail price for one piece can be sold online.
         return Product::query()->where('products.is_active', true)
             ->joinSub($piece, 'piece', 'piece.product_id', '=', 'products.id')
-            ->leftJoinSub($stock, 'stock', 'stock.product_id', '=', 'products.id')
-            ->leftJoinSub($sold, 'sold', 'sold.product_id', '=', 'products.id');
+            ->leftJoin('product_sales_stats as sold', 'sold.product_id', '=', 'products.id');
+    }
+
+    /** Products with sellable stock (active, not expired) at the online branch. */
+    private function inStock(Builder $q): Builder
+    {
+        $wh = $this->warehouseId();
+        $today = now()->toDateString();
+
+        return $q->whereExists(fn ($s) => $s->from('stock_balances as sb')->join('batches as b', 'b.id', '=', 'sb.batch_id')
+            ->whereColumn('sb.product_id', 'products.id')->where('sb.warehouse_id', $wh)->where('sb.qty_base', '>', 0)->where('b.status', 'active')
+            ->where(fn ($w) => $w->where('b.expiry_date', '>=', $today)->orWhere(fn ($w) => $w->whereNull('b.expiry_date')->where('b.is_legacy_opening', true)))
+            ->selectRaw('1'));
+    }
+
+    /** Rebuilds units sold per product (completed sales). Scheduled hourly; also run on first use. */
+    public function refreshPopularity(): void
+    {
+        DB::transaction(function () {
+            DB::table('product_sales_stats')->delete();
+            DB::statement("INSERT INTO product_sales_stats (product_id, units_sold)
+                SELECT si.product_id, SUM(si.qty_base) FROM sale_items si JOIN sales s ON s.id = si.sale_id
+                WHERE si.line_type = 'product' AND si.product_id IS NOT NULL AND s.status = 'completed'
+                GROUP BY si.product_id");
+        });
+        Cache::put('storefront.popularity.at', now()->toIso8601String(), now()->addHour());
+    }
+
+    private function ensurePopularity(): void
+    {
+        if (Cache::has('storefront.popularity.at')) {
+            return;
+        }
+        // One request rebuilds it; others keep showing the previous figures meanwhile.
+        Cache::lock('storefront.popularity.refresh', 120)->get(fn () => $this->refreshPopularity());
     }
 
     private function search(Builder $q, string $term): Builder

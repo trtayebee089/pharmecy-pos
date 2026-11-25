@@ -23,7 +23,8 @@
             class="grid h-9 w-9 overflow-hidden shrink-0 place-items-center rounded-lg bg-gradient-to-br ring-1 ring-slate-900/5 transition duration-200 group-hover:scale-105"
             :class="tintFor(category)"
           >
-            <img :src="category.image" class="h-9 w-9" :stroke-width="1.8" />
+            <img v-if="category.image && !failed[category.slug]" :src="category.image" :alt="''" class="h-9 w-9 object-cover" @error="failed[category.slug] = true" />
+            <component :is="iconFor(category.name)" v-else class="h-[18px] w-[18px]" :stroke-width="1.8" />
           </span>
           <span class="min-w-0 flex-1">
             <span
@@ -73,5 +74,7 @@ const filtered = computed(() => {
 })
 
 const iconFor = (name) => categoryIcon(name)
+/** Categories whose picture failed to load fall back to their icon. */
+const failed = ref({})
 const tintFor = (category) => categoryTint(category.slug || category.name)
 </script>

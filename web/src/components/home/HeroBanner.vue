@@ -106,6 +106,7 @@
               :src="showcase.image"
               :alt="showcase.name"
               class="hidden h-48 max-w-[34%] object-contain drop-shadow-xl lg:block xl:h-56"
+              @error="$event.target.style.display = 'none'"
             />
           </div>
         </div>

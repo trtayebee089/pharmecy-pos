@@ -5,11 +5,12 @@
     <RouterLink class="block" :to="`/product/${product.slug}`" :aria-label="product.name">
       <div class="relative aspect-square overflow-hidden bg-white">
         <img
-          v-if="product.image"
+          v-if="product.image && !imageFailed"
           :src="product.image"
           :alt="product.name"
           loading="lazy"
           decoding="async"
+          @error="imageFailed = true"
           class="h-full w-full object-contain p-3 transition duration-500 ease-premium group-hover:scale-[1.08]"
         />
         <span v-else class="absolute inset-0 grid place-items-center bg-slate-50/70">
@@ -102,7 +103,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Pill, ShoppingBag } from 'lucide-vue-next'
 import { useCartStore } from '../../stores/cartStore'
 import { formatPrice } from '../../utils/formatPrice'
@@ -114,6 +115,9 @@ const props = defineProps({
 })
 
 const cart = useCartStore()
+/** A missing or broken picture shows the placeholder instead of a broken image. */
+const imageFailed = ref(false)
+watch(() => props.product.image, () => { imageFailed.value = false })
 const cartQty = computed(() => cart.quantityFor(props.product.id))
 const lowStock = computed(() => props.product.stock > 0 && props.product.stock <= 10)
 

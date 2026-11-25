@@ -8,7 +8,7 @@
     <div v-else class="mt-6 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
       <section class="rounded-[2rem] bg-white p-6 shadow-soft">
         <div class="grid aspect-square place-items-center rounded-3xl bg-gradient-to-br from-primary-50 via-white to-sky-50">
-          <img v-if="product.image" :src="product.image" :alt="product.name" class="h-full w-full object-contain p-6" />
+          <img v-if="product.image && !imageFailed" :src="product.image" :alt="product.name" class="h-full w-full object-contain p-6" @error="imageFailed = true" />
           <div v-else class="grid h-32 w-32 place-items-center rounded-[2rem] bg-white text-4xl font-black text-primary-700 shadow-soft">Rx</div>
         </div>
       </section>
@@ -70,6 +70,9 @@ const router = useRouter()
 const cart = useCartStore()
 const recentlyViewed = useRecentlyViewedStore()
 const product = ref({})
+/** A missing picture (e.g. legacy images not copied yet) shows the Rx placeholder. */
+const imageFailed = ref(false)
+watch(() => product.value.image, () => { imageFailed.value = false })
 const related = ref([])
 const quantity = ref(1)
 const loading = ref(true)
