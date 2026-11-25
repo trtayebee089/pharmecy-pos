@@ -134,9 +134,11 @@ async function post() {
         <div v-for="(l, i) in lines" :key="l.key" class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_100px_110px_36px]">
           <div><p class="text-sm font-semibold">{{ l.product.name }} <span class="font-medium text-slate-500">{{ l.product.strength }}</span></p><p class="text-xs text-slate-500">{{ l.product.manufacturer }}</p></div>
           <div>
-            <select v-model="l.batchId" class="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-[13px] focus:border-brand-400 focus:outline-none" aria-label="Batch" @change="changeBatch(l)">
-              <option v-for="b in orderedBatches(l.product)" :key="b.batchId" :value="b.batchId">{{ daysUntil(b.expiryDate) < 0 ? '⚠ EXPIRED · ' : '' }}{{ b.batchNo }} · exp {{ date(b.expiryDate, { month: 'short', year: '2-digit' }) }} · {{ b.qtyBase }} pcs</option>
-            </select>
+            <UiSelect
+              v-model="l.batchId" size="sm" aria-label="Batch"
+              :options="orderedBatches(l.product).map(b => ({ value: b.batchId, label: `${daysUntil(b.expiryDate) < 0 ? '⚠ EXPIRED · ' : ''}${b.batchNo} · exp ${date(b.expiryDate, { month: 'short', year: '2-digit' })} · ${b.qtyBase} pcs` }))"
+              @change="changeBatch(l)"
+            />
             <p v-if="expiryState(batchOf(l).expiryDate) === 'expired'" class="mt-1 flex items-center gap-1 text-[11px] font-semibold text-rose-600"><CalendarX class="size-3" />Expired batch</p>
             <p v-else-if="expiryState(batchOf(l).expiryDate) !== 'ok'" class="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-600"><AlertTriangle class="size-3" />Expires in {{ daysUntil(batchOf(l).expiryDate) }} days</p>
           </div>

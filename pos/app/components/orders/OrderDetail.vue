@@ -243,18 +243,9 @@ async function assign() {
           <p class="label mb-2 flex items-center gap-1.5"><Truck class="size-3.5" />Send to courier</p>
           <UiSegmented v-model="courier" :options="courierOptions" />
           <div v-if="courier === 'pathao'" class="mt-3 grid gap-2">
-            <select v-model="pathao.cityId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" aria-label="Pathao city" @change="loadZones">
-              <option :value="null" disabled>City</option>
-              <option v-for="c in pathaoCities" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
-            <select v-model="pathao.zoneId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" :disabled="!pathao.cityId" aria-label="Pathao zone" @change="loadAreas">
-              <option :value="null" disabled>Zone</option>
-              <option v-for="z in pathaoZones" :key="z.id" :value="z.id">{{ z.name }}</option>
-            </select>
-            <select v-model="pathao.areaId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" :disabled="!pathao.zoneId" aria-label="Pathao area">
-              <option :value="null">Area (optional)</option>
-              <option v-for="a in pathaoAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
-            </select>
+            <UiSelect v-model="pathao.cityId" placeholder="City" aria-label="Pathao city" :options="pathaoCities.map(c => ({ value: c.id, label: c.name }))" @change="loadZones" />
+            <UiSelect v-model="pathao.zoneId" placeholder="Zone" aria-label="Pathao zone" :disabled="!pathao.cityId" :options="pathaoZones.map(z => ({ value: z.id, label: z.name }))" @change="loadAreas" />
+            <UiSelect v-model="pathao.areaId" placeholder="Area (optional)" aria-label="Pathao area" :disabled="!pathao.zoneId" :options="[{ value: null, label: 'No area' }, ...pathaoAreas.map(a => ({ value: a.id, label: a.name }))]" />
           </div>
           <input v-model="courierNote" maxlength="250" placeholder="Note for the courier (optional)" class="mt-3 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-brand-400 focus:outline-none" aria-label="Note for the courier">
           <p class="mt-3 text-xs text-slate-500">The courier collects {{ money(order.codAmount) }}.</p>
@@ -265,10 +256,7 @@ async function assign() {
           <p class="label mb-2 flex items-center gap-1.5"><Bike class="size-3.5" />Rider</p>
           <p v-if="order.riderName" class="mb-2 text-sm">Assigned: <span class="font-semibold">{{ order.riderName }}</span></p>
           <div class="flex gap-2">
-            <select v-model="riderId" class="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-brand-400 focus:outline-none" aria-label="Rider">
-              <option :value="null" disabled>Choose a rider</option>
-              <option v-for="r in activeRiders" :key="r.id" :value="r.id">{{ r.name }} · {{ r.assignedOrders }} active</option>
-            </select>
+            <UiSelect v-model="riderId" class="min-w-0 flex-1" placeholder="Choose a rider" aria-label="Rider" :options="activeRiders.map(r => ({ value: r.id, label: r.name, hint: `${r.assignedOrders} active orders · ${r.phone}` }))" />
             <UiButton :disabled="!riderId || riderId === order.riderId || busy" @click="assign">{{ order.riderId ? 'Change' : 'Assign' }}</UiButton>
           </div>
         </section>

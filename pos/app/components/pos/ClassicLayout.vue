@@ -168,15 +168,11 @@ const actionBtn = 'flex h-12 min-w-[8.5rem] items-center justify-center gap-2 ro
         </div>
         <label class="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
           <span class="block text-[10.5px] font-semibold text-slate-500">Warehouse</span>
-          <select v-model="auth.warehouseId" class="w-full bg-transparent text-sm font-semibold text-brand-800 focus:outline-none">
-            <option v-for="w in auth.user?.warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-          </select>
+          <UiSelect v-model="auth.warehouseId" variant="bare" aria-label="Warehouse" :options="(auth.user?.warehouses ?? []).map(w => ({ value: w.id, label: w.name }))" />
         </label>
         <label class="rounded-xl border border-slate-200 bg-white px-3 py-1.5">
           <span class="block text-[10.5px] font-semibold text-slate-500">Biller</span>
-          <select v-model="billerId" class="w-full bg-transparent text-sm font-semibold text-brand-800 focus:outline-none">
-            <option v-for="b in billers" :key="b.id" :value="b.id">{{ b.name }}</option>
-          </select>
+          <UiSelect v-model="billerId" variant="bare" aria-label="Biller" :options="billers.map(b => ({ value: b.id, label: b.name }))" />
         </label>
         <div class="flex items-stretch gap-2">
           <button type="button" class="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-left transition hover:border-brand-300" @click="customerOpen = true">
@@ -270,9 +266,7 @@ const actionBtn = 'flex h-12 min-w-[8.5rem] items-center justify-center gap-2 ro
                   </td>
                   <td class="px-3 text-slate-600">{{ l.product.manufacturer }}</td>
                   <td class="px-3">
-                    <select v-model="l.unitId" :disabled="!!l.custom" class="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px] font-semibold focus:border-brand-400 focus:outline-none disabled:bg-slate-50" :aria-label="`Unit for ${l.product.name}`">
-                      <option v-for="u in l.product.units" :key="u.id" :value="u.id">{{ u.label }}</option>
-                    </select>
+                    <UiSelect v-model="l.unitId" size="sm" class="w-32" :disabled="!!l.custom" :aria-label="`Unit for ${l.product.name}`" :options="l.product.units.map(u => ({ value: u.id, label: u.label }))" />
                   </td>
                   <td class="px-3 text-right tabular">{{ money(cart.unitOf(l).price) }}</td>
                   <td class="px-3">

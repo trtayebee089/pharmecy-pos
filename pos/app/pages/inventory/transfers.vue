@@ -163,9 +163,10 @@ async function send() {
       <div v-if="draft.length" class="mt-4 space-y-2">
         <div v-for="(d, i) in draft" :key="d.key" class="grid grid-cols-[minmax(0,1fr)] items-center gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1.5fr)_110px_36px]">
           <div><p class="text-sm font-semibold">{{ d.product.name }} <span class="font-medium text-slate-500">{{ d.product.strength }}</span></p><p class="text-xs text-slate-500">{{ d.product.manufacturer }}</p></div>
-          <select v-model="d.batchId" class="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px] focus:border-brand-400 focus:outline-none" aria-label="Batch">
-            <option v-for="b in sellable(d.product)" :key="b.batchId" :value="b.batchId">{{ b.batchNo }} · exp {{ date(b.expiryDate, { month: 'short', year: '2-digit' }) }} · {{ b.qtyBase }} pcs</option>
-          </select>
+          <UiSelect
+            v-model="d.batchId" size="sm" aria-label="Batch"
+            :options="sellable(d.product).map(b => ({ value: b.batchId, label: `${b.batchNo} · exp ${date(b.expiryDate, { month: 'short', year: '2-digit' })} · ${b.qtyBase} pcs` }))"
+          />
           <div>
             <input v-model.number="d.qty" type="number" min="1" class="h-9 w-full rounded-lg border px-2 text-right font-semibold tabular focus:outline-none" :class="lineError(d) ? 'border-rose-300 bg-rose-50' : 'border-slate-200 focus:border-brand-400'" aria-label="Pieces to transfer">
             <p v-if="lineError(d)" class="mt-1 text-[11px] font-semibold text-rose-600">{{ lineError(d) }}</p>

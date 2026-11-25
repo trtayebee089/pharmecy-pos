@@ -210,9 +210,7 @@ function another() { done.value = null; orderId.value = null; fromDraft.value = 
                     </div>
                   </td>
                   <td class="px-2 py-3">
-                    <select v-model="l.unitId" class="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px] font-semibold focus:border-brand-400 focus:outline-none">
-                      <option v-for="u in l.product.units" :key="u.id" :value="u.id">{{ u.label }}</option>
-                    </select>
+                    <UiSelect v-model="l.unitId" size="sm" class="w-32" aria-label="Unit" :options="l.product.units.map(u => ({ value: u.id, label: u.label }))" />
                   </td>
                   <td class="px-2 py-3"><input v-model.number="l.qty" type="number" min="1" class="h-9 w-16 rounded-lg border px-2 text-right tabular focus:outline-none" :class="errors[`${l.key}.qty`] ? 'border-rose-300' : 'border-slate-200 focus:border-brand-400'"></td>
                   <td class="px-2 py-3"><input v-model.number="l.freeQty" type="number" min="0" class="h-9 w-14 rounded-lg border border-slate-200 px-2 text-right tabular focus:border-brand-400 focus:outline-none"></td>
@@ -248,9 +246,7 @@ function another() { done.value = null; orderId.value = null; fromDraft.value = 
             <div class="flex items-center justify-between text-slate-500"><span>Other charges</span><input v-model.number="header.otherCharges" type="number" min="0" class="h-8 w-24 rounded-lg border border-slate-200 px-2 text-right tabular focus:border-brand-400 focus:outline-none"></div>
             <div class="border-t border-dashed border-slate-200 pt-3">
               <div class="flex items-center justify-between gap-2">
-                <select v-model="header.paymentMethod" class="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[13px] font-semibold focus:outline-none">
-                  <option value="cash">Paid cash</option><option value="bank">Paid bank</option><option value="bkash">Paid bKash</option>
-                </select>
+                <UiSelect v-model="header.paymentMethod" size="sm" class="w-36" aria-label="Paid by" :options="[{ value: 'cash', label: 'Paid cash' }, { value: 'bank', label: 'Paid bank' }, { value: 'bkash', label: 'Paid bKash' }]" />
                 <input v-model.number="header.paidAmount" type="number" min="0" class="h-8 w-28 rounded-lg border px-2 text-right tabular focus:outline-none" :class="errors.paid ? 'border-rose-300' : 'border-slate-200 focus:border-brand-400'">
               </div>
               <button type="button" class="mt-1.5 text-xs font-semibold text-brand-700 hover:underline" @click="header.paidAmount = grand">Pay in full</button>

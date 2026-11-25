@@ -41,9 +41,7 @@ function step(d: number) {
     </div>
 
     <div class="mt-2.5 flex items-center gap-2">
-      <select v-model="line.unitId" class="h-8 rounded-lg border border-slate-200 bg-white px-2 text-[12.5px] font-semibold text-slate-700 focus:border-brand-400 focus:outline-none" aria-label="Unit">
-        <option v-for="u in line.product.units" :key="u.id" :value="u.id">{{ u.label }} · {{ money(u.price, false) }}</option>
-      </select>
+      <UiSelect v-model="line.unitId" size="sm" class="w-40" aria-label="Unit" :options="line.product.units.map(u => ({ value: u.id, label: `${u.label} · ${money(u.price, false)}` }))" />
       <div class="flex h-8 items-center rounded-lg border border-slate-200 bg-white">
         <button class="grid h-full w-8 place-items-center text-slate-500 hover:text-ink" aria-label="Decrease" @click="step(-1)"><Minus class="size-3.5" /></button>
         <input v-model.number="line.qty" type="number" min="1" class="h-full w-10 border-x border-slate-200 text-center text-sm font-bold tabular focus:outline-none" aria-label="Quantity">

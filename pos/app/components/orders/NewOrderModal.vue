@@ -119,9 +119,7 @@ async function place() {
                 <p class="truncate text-sm font-semibold text-ink">{{ l.product.name }} <span class="font-normal text-slate-500">{{ l.product.strength }}</span></p>
                 <p class="text-xs text-slate-500 tabular">{{ num(l.product.stockBase) }} pcs in stock</p>
               </div>
-              <select v-model="l.unitId" class="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm" aria-label="Unit">
-                <option v-for="u in l.product.units" :key="u.id" :value="u.id">{{ u.label }} · {{ money(u.price) }}</option>
-              </select>
+              <UiSelect v-model="l.unitId" size="sm" class="w-44" aria-label="Unit" :options="l.product.units.map(u => ({ value: u.id, label: `${u.label} · ${money(u.price)}` }))" />
               <input v-model.number="l.qty" type="number" min="1" class="h-9 w-20 rounded-lg border border-slate-200 px-2 text-right text-sm tabular" aria-label="Quantity">
               <span class="w-24 text-right text-sm font-semibold tabular">{{ money(lineTotal(l)) }}</span>
               <button class="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Remove line" @click="lines.splice(i, 1)"><Trash2 class="size-4" /></button>

@@ -134,9 +134,7 @@ async function save() {
             </div>
             <div v-for="(u, i) in form.units" :key="i" data-unit-row class="grid grid-cols-2 items-end gap-2 rounded-2xl border border-slate-200 p-2 md:grid-cols-[110px_80px_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)_56px_56px_36px] md:items-center">
               <label class="min-w-0"><span class="mb-1 block text-[11px] font-semibold text-slate-500 md:hidden">Unit</span>
-                <select v-model="u.code" class="h-10 w-full min-w-0 rounded-xl border border-slate-200 bg-white px-2 text-sm font-semibold focus:border-brand-400 focus:outline-none">
-                  <option v-for="c in unitCodes" :key="c.value" :value="c.value">{{ c.label }}</option>
-                </select>
+                <UiSelect v-model="u.code" :options="unitCodes" aria-label="Unit" />
               </label>
               <label class="min-w-0"><span class="mb-1 block text-[11px] font-semibold text-slate-500 md:hidden">Pieces per unit</span>
                 <input v-model.number="u.factor" type="number" min="1" :disabled="u.factor === 1 && i === 0" class="h-10 w-full min-w-0 rounded-xl border border-slate-200 px-3 text-sm tabular focus:border-brand-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400">

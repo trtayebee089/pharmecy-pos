@@ -164,10 +164,7 @@ const catFields = computed<FieldDef[]>(() => [
         <div class="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
           <div class="w-full sm:w-72"><UiInput v-model="q" :icon="Search" placeholder="Number, category, note…" /></div>
           <UiSegmented v-model="status" :options="[{ value: 'posted', label: 'Posted' }, { value: 'void', label: 'Void' }, { value: 'all', label: 'All' }]" />
-          <select v-model="category" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-brand-400 focus:outline-none" aria-label="Category filter">
-            <option value="">All categories</option>
-            <option v-for="c in categories" :key="c.id" :value="c.name">{{ c.parent ? `${c.parent} › ` : '' }}{{ c.name }}</option>
-          </select>
+          <UiSelect v-model="category" class="w-56" aria-label="Category filter" :options="[{ value: '', label: 'All categories' }, ...categories.map(c => ({ value: c.name, label: c.parent ? `${c.parent} › ${c.name}` : c.name }))]" />
         </div>
         <div class="overflow-x-auto">
           <table class="w-full min-w-[760px] text-sm">

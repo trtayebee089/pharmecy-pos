@@ -79,13 +79,10 @@ function exportCsv() {
 
     <div class="card mb-5 flex flex-wrap items-center gap-3 p-3">
       <UiDateRange v-model="range" />
-      <select
-        v-for="f in filters" :key="f.key" v-model="filterValues[f.key]"
-        class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 focus:border-brand-400 focus:outline-none" :aria-label="f.label"
-      >
-        <option value="">All {{ f.label.toLowerCase() }}</option>
-        <option v-for="o in f.options" :key="o.value" :value="o.value">{{ o.label }}</option>
-      </select>
+      <UiSelect
+        v-for="f in filters" :key="f.key" v-model="filterValues[f.key]" class="w-52" :aria-label="f.label"
+        :options="[{ value: '', label: `All ${f.label.toLowerCase()}` }, ...f.options.map(o => ({ value: o.value, label: o.label }))]"
+      />
       <span v-if="loading" class="ml-auto text-xs text-slate-400">Updating…</span>
     </div>
 

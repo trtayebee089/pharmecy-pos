@@ -153,9 +153,10 @@ async function post() {
       <div v-if="lines.length" class="mt-4 space-y-2">
         <div v-for="(l, i) in lines" :key="l.key" class="grid items-center gap-3 rounded-2xl border border-slate-200 p-3 md:grid-cols-[1.4fr_1.4fr_auto_110px_110px_36px]">
           <div><p class="text-sm font-semibold">{{ l.product.name }} <span class="font-medium text-slate-500">{{ l.product.strength }}</span></p><p class="text-xs text-slate-500">{{ l.product.manufacturer }}</p></div>
-          <select v-model="l.batchId" class="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px] focus:border-brand-400 focus:outline-none" aria-label="Batch">
-            <option v-for="b in l.product.batches" :key="b.batchId" :value="b.batchId">{{ b.batchNo }} · exp {{ date(b.expiryDate, { month: 'short', year: '2-digit' }) }}{{ daysUntil(b.expiryDate) < 0 ? ' (expired)' : '' }} · {{ b.qtyBase }} pcs</option>
-          </select>
+          <UiSelect
+            v-model="l.batchId" size="sm" class="w-60" aria-label="Batch"
+            :options="l.product.batches.map(b => ({ value: b.batchId, label: `${b.batchNo} · exp ${date(b.expiryDate, { month: 'short', year: '2-digit' })}${daysUntil(b.expiryDate) < 0 ? ' (expired)' : ''} · ${b.qtyBase} pcs` }))"
+          />
           <div class="flex rounded-lg bg-slate-100 p-0.5">
             <button type="button" class="flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-semibold" :class="l.direction === 'out' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'" :disabled="reason !== 'correction'" @click="l.direction = 'out'"><Minus class="size-3" />Out</button>
             <button type="button" class="flex h-8 items-center gap-1 rounded-md px-2.5 text-xs font-semibold" :class="l.direction === 'in' ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'" :disabled="reason !== 'correction'" @click="l.direction = 'in'"><Plus class="size-3" />In</button>

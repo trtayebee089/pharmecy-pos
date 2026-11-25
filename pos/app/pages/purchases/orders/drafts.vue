@@ -51,10 +51,7 @@ const totals = computed(() => ({ pcs: rows.value.reduce((s, d) => s + d.orderQty
 
     <div class="card mb-5 flex flex-wrap items-center gap-3 p-3">
       <UiDateRange v-model="range" />
-      <select v-model="companyId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium focus:border-brand-400 focus:outline-none" aria-label="Company">
-        <option value="">All companies</option>
-        <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-      </select>
+      <UiSelect v-model="companyId" class="w-64" aria-label="Company" :options="[{ value: '', label: 'All companies' }, ...companies.map(c => ({ value: c.id, label: c.name }))]" />
       <UiSegmented v-model="status" :options="[{ value: 'draft', label: 'Open' }, { value: 'converted', label: 'Ordered' }, { value: 'all', label: 'All' }]" />
     </div>
 

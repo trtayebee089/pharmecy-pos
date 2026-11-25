@@ -148,11 +148,10 @@ onKeyStroke('Enter', (e) => {
     <div v-else class="grid gap-6 md:grid-cols-[1fr_.9fr]">
       <div class="space-y-3">
         <div v-for="(p, i) in payments" :key="i" class="flex items-center gap-2 rounded-2xl border border-slate-200 p-2 pl-3">
-          <select v-model="p.method" class="h-10 rounded-lg bg-transparent text-sm font-semibold focus:outline-none">
-            <option v-for="m in methods" :key="m.code" :value="m.code">{{ m.label }}</option>
-            <option value="points" :disabled="!!pointsBlocked">Reward points</option>
-            <option value="customer_credit" :disabled="walkIn">Customer credit</option>
-          </select>
+          <UiSelect
+            v-model="p.method" variant="bare" class="w-36 shrink-0" aria-label="Payment method"
+            :options="[...methods.map(m => ({ value: m.code, label: m.label })), { value: 'points', label: 'Reward points', disabled: !!pointsBlocked }, { value: 'customer_credit', label: 'Customer credit', disabled: walkIn }]"
+          />
           <input v-model.number="p.amount" type="number" min="0" step="0.01" class="h-10 min-w-0 flex-1 rounded-xl bg-slate-50 px-3 text-right font-display text-lg font-bold tabular focus:bg-white focus:ring-2 focus:ring-brand-300 focus:outline-none" :autofocus="i === 0">
           <input v-if="p.method !== 'cash' && p.method !== 'points' && p.method !== 'customer_credit'" v-model="p.reference" placeholder="Txn / ref" class="h-10 w-28 rounded-xl bg-slate-50 px-3 text-sm focus:outline-none">
           <button v-if="payments.length > 1" class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" aria-label="Remove payment" @click="payments.splice(i, 1)"><X class="size-4" /></button>

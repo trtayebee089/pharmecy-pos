@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { Wand2, RefreshCw, Save, ListChecks, Sparkles, Building2, Loader2, CheckCircle2 } from 'lucide-vue-next'
+import { Wand2, RefreshCw, Save, ListChecks, Sparkles, Loader2, CheckCircle2 } from 'lucide-vue-next'
 import type { Company, OrderRow, AiRun } from '~/types/purchase-orders'
 import type { DateRange } from '~/types/domain'
 
@@ -129,12 +129,7 @@ async function generateAll() {
         </div>
         <div>
           <p class="mb-1.5 text-[13px] font-medium text-slate-700">Company</p>
-          <div class="relative">
-            <Building2 class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-            <select v-model="companyId" class="h-10 w-full appearance-none rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm font-semibold focus:border-brand-400 focus:outline-none" aria-label="Company">
-              <option v-for="c in filteredCompanies" :key="c.id" :value="c.id">{{ c.name }} ({{ c.products }})</option>
-            </select>
-          </div>
+          <UiSelect v-model="companyId" aria-label="Company" search-placeholder="Search companies…" :options="filteredCompanies.map(c => ({ value: c.id, label: c.name, hint: `${c.products} products` }))" />
         </div>
         <div class="flex flex-wrap gap-2 lg:justify-end">
           <UiButton :icon="RefreshCw" :loading="forecastLoading" :disabled="!rows.length" @click="loadForecast(true)">Refresh AI forecast</UiButton>

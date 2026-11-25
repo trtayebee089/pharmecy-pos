@@ -61,9 +61,7 @@ function print() {
                 <p class="text-sm font-semibold">{{ l.product.name }} <span class="font-medium text-slate-500">{{ l.product.strength }}</span></p>
                 <p class="font-mono text-xs text-slate-500">{{ code(l) }}</p>
               </div>
-              <select v-model="l.unitId" class="h-9 rounded-lg border border-slate-200 bg-white px-2 text-[13px] font-semibold focus:border-brand-400 focus:outline-none" aria-label="Unit">
-                <option v-for="u in l.product.units" :key="u.id" :value="u.id">{{ u.label }} · {{ money(u.price, false) }}</option>
-              </select>
+              <UiSelect v-model="l.unitId" size="sm" class="w-44" aria-label="Unit" :options="l.product.units.map(u => ({ value: u.id, label: `${u.label} · ${money(u.price, false)}` }))" />
               <div class="flex h-9 items-center rounded-lg border border-slate-200 bg-white">
                 <button class="grid h-full w-8 place-items-center text-slate-500 hover:text-ink" aria-label="Fewer copies" @click="l.copies = Math.max(1, l.copies - 1)"><Minus class="size-3.5" /></button>
                 <input v-model.number="l.copies" type="number" min="1" max="200" class="h-full w-12 border-x border-slate-200 text-center text-sm font-bold tabular focus:outline-none" aria-label="Copies">
