@@ -131,6 +131,19 @@ class DemoSeeder extends Seeder
             Rider::firstOrCreate(['phone' => $phone], ['name' => $name, 'status' => 'active']);
         }
 
+        // HR: departments, designations and three staff (demo only, fictional people).
+        $counter = \App\Models\Department::firstOrCreate(['name' => 'Counter']);
+        $store = \App\Models\Department::firstOrCreate(['name' => 'Store']);
+        $pharmacist = \App\Models\Designation::firstOrCreate(['department_id' => $counter->id, 'name' => 'Pharmacist']);
+        $cashierDesig = \App\Models\Designation::firstOrCreate(['department_id' => $counter->id, 'name' => 'Cashier']);
+        $keeper = \App\Models\Designation::firstOrCreate(['department_id' => $store->id, 'name' => 'Store keeper']);
+        foreach ([['EMP-001', 'Sabbir Hasan', $counter, $pharmacist, 32000], ['EMP-002', 'Moushumi Akter', $counter, $cashierDesig, 22000], ['EMP-003', 'Rakib Uddin', $store, $keeper, 18000]] as $i => [$code, $name, $dept, $desig, $basic]) {
+            \App\Models\Employee::firstOrCreate(['code' => $code], [
+                'name' => $name, 'phone' => '0171200000'.($i + 1), 'department_id' => $dept->id, 'designation_id' => $desig->id,
+                'join_date' => '2025-01-15', 'basic_salary' => $basic, 'warehouse_id' => $dhk->id,
+            ]);
+        }
+
         if (Product::exists()) {
             return; // catalogue and stock already seeded
         }

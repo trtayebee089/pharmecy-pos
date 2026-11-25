@@ -206,6 +206,10 @@ class Finance
             if ($e->status !== 'posted') {
                 throw ValidationException::withMessages(['entry' => 'This entry is already void.']);
             }
+            if ($e->source_type === 'payroll_run') {
+                // Its cash left with the payslips; voiding it alone would double-count the money.
+                throw ValidationException::withMessages(['entry' => 'This salary expense belongs to a paid payroll run and cannot be voided on its own.']);
+            }
             $paisa = SaleService::paisa($e->amount);
             if ($e->kind === 'income') {
                 $this->mustCover(Account::lockForUpdate()->findOrFail($e->account_id), $paisa, 'entry');
@@ -248,6 +252,13 @@ class Finance
             ['label' => 'Inventory at batch cost', 'amount' => round($stock, 2), 'note' => 'Stock history to this date, expired batches excluded'],
             ['label' => 'Customer receivables', 'amount' => round($receivable, 2), 'note' => 'Customer ledger balances'],
         ];
+        // Salary advances given and not yet recovered by the date: money staff owe the business.
+        $staffAdvances = (float) DB::table('salary_advances')->where('status', '!=', 'void')->whereDate('given_at', '<=', $asOf)->sum('amount')
+            - (float) DB::table('advance_recoveries')->join('salary_advances', 'salary_advances.id', '=', 'advance_recoveries.salary_advance_id')
+                ->where('salary_advances.status', '!=', 'void')->whereDate('advance_recoveries.created_at', '<=', $asOf)->sum('advance_recoveries.amount');
+        if ($staffAdvances > 0) {
+            $assets[] = ['label' => 'Staff salary advances', 'amount' => round($staffAdvances, 2), 'note' => 'Advances not yet recovered'];
+        }
         if ($supplierAdvance > 0) {
             $assets[] = ['label' => 'Supplier advances and credits', 'amount' => round($supplierAdvance, 2), 'note' => 'Returns and payments beyond invoices'];
         }

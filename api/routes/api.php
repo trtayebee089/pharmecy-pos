@@ -9,6 +9,7 @@ use App\Http\Controllers\Pos\CustomerGroupController;
 use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\FinanceController;
 use App\Http\Controllers\Pos\HeldSaleController;
+use App\Http\Controllers\Pos\HrController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\LoyaltyController;
 use App\Http\Controllers\Pos\OnlineOrderController;
@@ -37,6 +38,51 @@ Route::prefix('pos/v1')->group(function () {
         Route::put('me/password', [AuthController::class, 'changePassword']);
 
         Route::get('dashboard/summary', [DashboardController::class, 'summary'])->middleware('can:dashboard.view');
+
+        // HR & payroll. Registered before the finance group so finance/accounts/payout is not taken for an account id.
+        Route::get('finance/accounts/payout', [HrController::class, 'payoutAccounts'])->middleware('can:hr.payroll');
+        Route::prefix('hr')->group(function () {
+            Route::middleware('can:hr.view')->group(function () {
+                Route::get('employees', [HrController::class, 'employees']);
+                Route::get('employees/{employee}', [HrController::class, 'employee'])->whereNumber('employee');
+                Route::get('departments', [HrController::class, 'departments']);
+                Route::get('designations', [HrController::class, 'designations']);
+                Route::get('holidays', [HrController::class, 'holidays']);
+                Route::get('settings', [HrController::class, 'settings']);
+            });
+            Route::middleware('can:hr.manage')->group(function () {
+                Route::post('employees', [HrController::class, 'saveEmployee']);
+                Route::put('employees/{employee}', [HrController::class, 'saveEmployee']);
+                Route::post('departments', [HrController::class, 'saveDepartment']);
+                Route::put('departments/{department}', [HrController::class, 'saveDepartment']);
+                Route::delete('departments/{department}', [HrController::class, 'deleteDepartment']);
+                Route::post('designations', [HrController::class, 'saveDesignation']);
+                Route::put('designations/{designation}', [HrController::class, 'saveDesignation']);
+                Route::delete('designations/{designation}', [HrController::class, 'deleteDesignation']);
+                Route::post('holidays', [HrController::class, 'saveHoliday']);
+                Route::put('holidays/{holiday}', [HrController::class, 'saveHoliday']);
+                Route::delete('holidays/{holiday}', [HrController::class, 'deleteHoliday']);
+            });
+            Route::middleware('can:hr.attendance')->group(function () {
+                Route::get('attendance', [HrController::class, 'attendanceDay']);
+                Route::get('attendance/month', [HrController::class, 'attendanceMonth']);
+                Route::post('attendance', [HrController::class, 'saveAttendance'])->middleware('idempotent');
+            });
+            Route::middleware('can:hr.payroll')->group(function () {
+                Route::put('settings', [HrController::class, 'saveSettings']);
+                Route::get('payroll-runs', [HrController::class, 'runs']);
+                Route::get('payroll-runs/{run}', [HrController::class, 'showRun'])->whereNumber('run');
+                Route::post('payroll-runs', [HrController::class, 'createRun'])->middleware('idempotent');
+                Route::post('payroll-runs/{run}/approve', [HrController::class, 'approveRun']);
+                Route::post('payroll-runs/{run}/pay', [HrController::class, 'payRun'])->middleware('idempotent');
+                Route::delete('payroll-runs/{run}', [HrController::class, 'deleteRun']);
+                Route::put('payroll-runs/{run}/payslips/{payslip}', [HrController::class, 'updatePayslip']);
+                Route::get('salary-advances', [HrController::class, 'advances']);
+                Route::post('salary-advances', [HrController::class, 'giveAdvance'])->middleware('idempotent');
+                Route::post('salary-advances/{advance}/recoveries', [HrController::class, 'recoverAdvance'])->middleware('idempotent');
+                Route::post('salary-advances/{advance}/void', [HrController::class, 'voidAdvance']);
+            });
+        });
 
         // Loyalty: wallets, campaigns, membership plans and members; reward point settings.
         Route::prefix('loyalty')->group(function () {
