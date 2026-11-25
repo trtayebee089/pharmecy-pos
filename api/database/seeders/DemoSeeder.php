@@ -6,7 +6,10 @@ use App\Models\Batch;
 use App\Models\CashRegister;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Models\Department;
+use App\Models\Designation;
 use App\Models\DosageForm;
+use App\Models\Employee;
 use App\Models\Generic;
 use App\Models\Manufacturer;
 use App\Models\PriceList;
@@ -132,13 +135,13 @@ class DemoSeeder extends Seeder
         }
 
         // HR: departments, designations and three staff (demo only, fictional people).
-        $counter = \App\Models\Department::firstOrCreate(['name' => 'Counter']);
-        $store = \App\Models\Department::firstOrCreate(['name' => 'Store']);
-        $pharmacist = \App\Models\Designation::firstOrCreate(['department_id' => $counter->id, 'name' => 'Pharmacist']);
-        $cashierDesig = \App\Models\Designation::firstOrCreate(['department_id' => $counter->id, 'name' => 'Cashier']);
-        $keeper = \App\Models\Designation::firstOrCreate(['department_id' => $store->id, 'name' => 'Store keeper']);
+        $counter = Department::firstOrCreate(['name' => 'Counter']);
+        $store = Department::firstOrCreate(['name' => 'Store']);
+        $pharmacist = Designation::firstOrCreate(['department_id' => $counter->id, 'name' => 'Pharmacist']);
+        $cashierDesig = Designation::firstOrCreate(['department_id' => $counter->id, 'name' => 'Cashier']);
+        $keeper = Designation::firstOrCreate(['department_id' => $store->id, 'name' => 'Store keeper']);
         foreach ([['EMP-001', 'Sabbir Hasan', $counter, $pharmacist, 32000], ['EMP-002', 'Moushumi Akter', $counter, $cashierDesig, 22000], ['EMP-003', 'Rakib Uddin', $store, $keeper, 18000]] as $i => [$code, $name, $dept, $desig, $basic]) {
-            \App\Models\Employee::firstOrCreate(['code' => $code], [
+            Employee::firstOrCreate(['code' => $code], [
                 'name' => $name, 'phone' => '0171200000'.($i + 1), 'department_id' => $dept->id, 'designation_id' => $desig->id,
                 'join_date' => '2025-01-15', 'basic_salary' => $basic, 'warehouse_id' => $dhk->id,
             ]);

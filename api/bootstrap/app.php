@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\Idempotent;
+use App\Http\Middleware\PasswordFresh;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA: requests from SANCTUM_STATEFUL_DOMAINS get session + CSRF.
         $middleware->statefulApi();
-        $middleware->alias(['idempotent' => Idempotent::class]);
+        $middleware->alias(['idempotent' => Idempotent::class, 'password.fresh' => PasswordFresh::class]);
         // An API has no login page: unauthenticated requests get 401 JSON.
         $middleware->redirectGuestsTo(fn () => null);
     })

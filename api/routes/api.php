@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Pos\AdminController;
 use App\Http\Controllers\Pos\AuthController;
 use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CatalogMasterController;
@@ -32,10 +33,43 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('pos/v1')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    // password.fresh: a user with an admin-set temporary password can only reach /me, /me/password, /me/profile and logout.
+    Route::middleware(['auth:sanctum', 'password.fresh'])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
         Route::put('me/password', [AuthController::class, 'changePassword']);
+        Route::get('me/profile', [AuthController::class, 'profile']);
+        Route::put('me/profile', [AuthController::class, 'saveProfile']);
+
+        // Administration (Admins: roles.manage; owner decision 25 Nov 2026).
+        Route::prefix('admin')->group(function () {
+            Route::get('users', [AdminController::class, 'users'])->middleware('can:users.view');
+            Route::get('roles', [AdminController::class, 'roles'])->middleware('can:users.view');
+            Route::middleware('can:roles.manage')->group(function () {
+                Route::post('users', [AdminController::class, 'createUser'])->middleware('idempotent');
+                Route::put('users/{user}', [AdminController::class, 'updateUser']);
+                Route::post('users/{user}/enable', [AdminController::class, 'enable']);
+                Route::post('users/{user}/disable', [AdminController::class, 'disable']);
+                Route::post('users/{user}/password-reset', [AdminController::class, 'resetPassword']);
+                Route::post('roles', [AdminController::class, 'createRole'])->middleware('idempotent');
+                Route::put('roles/{role}', [AdminController::class, 'saveRole']);
+                Route::put('roles/{role}/details', [AdminController::class, 'roleDetails']);
+                Route::delete('roles/{role}', [AdminController::class, 'deleteRole']);
+            });
+            // Branch list and general settings are read by every screen; only their managers change them.
+            Route::get('warehouses', [AdminController::class, 'warehouses']);
+            Route::get('warehouses/{warehouse}', [AdminController::class, 'warehouse'])->whereNumber('warehouse');
+            Route::middleware('can:warehouses.manage')->group(function () {
+                Route::post('warehouses', [AdminController::class, 'saveWarehouse']);
+                Route::put('warehouses/{warehouse}', [AdminController::class, 'saveWarehouse']);
+                Route::delete('warehouses/{warehouse}', [AdminController::class, 'deleteWarehouse']);
+            });
+            Route::get('settings/pos', [AdminController::class, 'generalSettings']);
+            Route::put('settings/pos', [AdminController::class, 'saveGeneralSettings'])->middleware('can:settings.manage');
+        });
+        Route::get('settings/pos', [AdminController::class, 'posSettings']);
+        Route::put('settings/pos', [AdminController::class, 'savePosSettings'])->middleware('can:settings.manage');
+        Route::post('settings/printers/{printer}/test', [AdminController::class, 'testPrint'])->middleware('can:settings.manage')->whereNumber('printer');
 
         Route::get('dashboard/summary', [DashboardController::class, 'summary'])->middleware('can:dashboard.view');
 

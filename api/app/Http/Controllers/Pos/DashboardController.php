@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Pos;
 
 use App\Http\Controllers\Controller;
+use App\Services\AppSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -64,7 +65,7 @@ class DashboardController extends Controller
         $stock = DB::table('stock_balances')->join('batches', 'batches.id', '=', 'stock_balances.batch_id')
             ->where('stock_balances.warehouse_id', $wh)->where('stock_balances.qty_base', '>', 0);
         $todayStr = $today->toDateString();
-        $nearExpiry = (clone $stock)->whereBetween('batches.expiry_date', [$todayStr, $today->copy()->addDays(config('pos.near_expiry_days'))->toDateString()])->count();
+        $nearExpiry = (clone $stock)->whereBetween('batches.expiry_date', [$todayStr, $today->copy()->addDays(app(AppSettings::class)->general('nearExpiryDays'))->toDateString()])->count();
         $expired = (clone $stock)->where('batches.expiry_date', '<', $todayStr)->count();
         $lowStock = DB::table('products')->where('products.is_active', true)->whereNull('products.deleted_at')->where('reorder_level_base', '>', 0)
             ->whereRaw('reorder_level_base >= (SELECT COALESCE(SUM(sb.qty_base),0) FROM stock_balances sb JOIN batches b ON b.id = sb.batch_id WHERE sb.product_id = products.id AND sb.warehouse_id = ? AND (b.expiry_date IS NULL OR b.expiry_date >= ?))', [$wh, $todayStr])

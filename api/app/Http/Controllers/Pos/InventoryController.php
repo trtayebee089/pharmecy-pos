@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Pos;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
+use App\Services\AppSettings;
 use App\Support\Present;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -118,7 +119,7 @@ class InventoryController extends Controller
     private function productsWithStock(int $wh)
     {
         $today = now()->toDateString();
-        $soon = now()->addDays((int) config('pos.near_expiry_days', 90))->toDateString();
+        $soon = now()->addDays((int) app(AppSettings::class)->general('nearExpiryDays'))->toDateString();
         $sellable = "b.status = 'active' AND (b.expiry_date >= ? OR (b.expiry_date IS NULL AND b.is_legacy_opening = 1))";
 
         $agg = DB::table('stock_balances as sb')->join('batches as b', 'b.id', '=', 'sb.batch_id')

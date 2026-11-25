@@ -166,6 +166,10 @@ class SaleService
             throw ValidationException::withMessages(['orderDiscount' => "Order discount is above your limit of {$limit['order']}%."]);
         }
         $grand = $afterLines - $orderDiscount;
+        // Cash rounding (General settings: 0.50 or 1 taka; 0 = off). The difference is kept on the sale.
+        $step = app(AppSettings::class)->roundingPaisa();
+        $rounding = $step > 0 ? (int) (round($grand / $step) * $step) - $grand : 0;
+        $grand += $rounding;
 
         [$payments, $applied, $change] = $this->settlePayments($data['payments'] ?? [], $grand);
         $pointsRedeemed = $this->pointsToRedeem($customer, $payments, $grand);
@@ -182,7 +186,7 @@ class SaleService
             }
         }
 
-        return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due, $groupPct, $memberPct, $pointsRedeemed, $pointsPaisa, $pointsEarned) {
+        return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due, $groupPct, $memberPct, $pointsRedeemed, $pointsPaisa, $pointsEarned, $rounding) {
             $session = $this->registers->current($user, $warehouse->id);
             $sale = Sale::create([
                 'ulid' => (string) Str::ulid(),
@@ -202,6 +206,7 @@ class SaleService
                 'points_redeemed' => $pointsRedeemed,
                 'points_value' => self::money($pointsPaisa),
                 'points_earned' => $pointsEarned,
+                'rounding' => self::money($rounding),
                 'grand_total' => self::money($grand),
                 'paid_total' => self::money($applied),
                 'change_total' => self::money($change),
@@ -243,6 +248,7 @@ class SaleService
                         'warehouse_id' => $warehouse->id, 'product_id' => $line['product']->id, 'batch_id' => $balance->batch_id,
                         'qty_base' => -$part['qty'], 'type' => 'sale', 'unit_cost' => $unitCost,
                         'source_type' => 'sale', 'source_id' => $sale->id, 'source_line_id' => $item->id, 'created_by' => $user->id,
+                        'allow_negative' => $part['negative'] ?? false,
                     ]);
                     $lineCost += $part['qty'] * $unitCost;
                 }

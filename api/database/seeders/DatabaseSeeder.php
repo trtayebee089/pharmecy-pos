@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\MembershipPlan;
 use App\Models\PaymentMethod;
 use App\Models\PriceList;
+use App\Models\Setting;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\Models\Permission;
@@ -30,17 +31,28 @@ class DatabaseSeeder extends Seeder
             Permission::findOrCreate($name, 'web');
         }
         Role::findOrCreate('Admin', 'web');
+        // Default permissions: a new role gets its full default set; an existing role only gets permissions that
+        // are new since the last run, so an admin's changes in Administration › Roles are never undone.
+        $known = (array) (Setting::where(['scope' => 'global', 'scope_id' => 0, 'key' => 'permissions_seeded'])->value('value') ?? []);
         foreach (config('pos.roles') as $role => $perms) {
             $granted = isset($perms['*except']) ? array_values(array_diff($all, $perms['*except'])) : $perms;
-            Role::findOrCreate($role, 'web')->syncPermissions($granted);
+            $existing = Role::where(['name' => $role, 'guard_name' => 'web'])->first();
+            if (! $existing) {
+                Role::create(['name' => $role, 'guard_name' => 'web'])->syncPermissions($granted);
+            } elseif ($new = array_values(array_diff($granted, $known))) {
+                $existing->givePermissionTo($new);
+            }
         }
+        Setting::updateOrCreate(['scope' => 'global', 'scope_id' => 0, 'key' => 'permissions_seeded'], ['value' => $all]);
 
+        // Default discount limits, only where a role has none yet.
         $limits = ['Manager' => [15, 15, true], 'Cashier' => [5, 5, false], 'Inventory' => [0, 0, false]];
         foreach ($limits as $role => [$line, $order, $override]) {
-            DB::table('role_limits')->updateOrInsert(
-                ['role_id' => Role::findByName($role, 'web')->id],
-                ['max_line_discount_pct' => $line, 'max_order_discount_pct' => $order, 'can_override_batch' => $override, 'updated_at' => now(), 'created_at' => now()],
-            );
+            $roleId = Role::findByName($role, 'web')->id;
+            if (! DB::table('role_limits')->where('role_id', $roleId)->exists()) {
+                DB::table('role_limits')->insert(['role_id' => $roleId, 'max_line_discount_pct' => $line, 'max_order_discount_pct' => $order,
+                    'can_override_batch' => $override, 'updated_at' => now(), 'created_at' => now()]);
+            }
         }
 
         PriceList::updateOrCreate(['code' => 'retail'], ['name' => 'Retail', 'is_default' => true]);

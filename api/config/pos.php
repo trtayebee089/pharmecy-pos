@@ -37,6 +37,26 @@ return [
         ],
     ],
 
-    // Days ahead that count as "near expiry" in dashboards.
-    'near_expiry_days' => 90,
+    // Administration › Roles: every permission above, grouped and labelled. Keep in step with 'permissions'.
+    'permission_groups' => [
+        'Dashboard' => ['dashboard.view' => 'View dashboard'],
+        'POS' => ['pos.sell' => 'Sell at the counter', 'pos.custom_item' => 'Sell custom (non-catalogue) items', 'pos.override_batch' => 'Choose a batch instead of FEFO'],
+        'Sales' => ['sales.view' => 'View sales', 'sales.void' => 'Void a sale (same session)', 'returns.view' => 'View returns', 'returns.create' => 'Process returns and refunds'],
+        'Products' => ['products.view' => 'View products', 'products.create' => 'Create products', 'products.edit' => 'Edit products', 'products.price' => 'Change selling prices',
+            'products.print_barcode' => 'Print barcode labels', 'catalog.manage' => 'Manage generics, manufacturers, forms, categories'],
+        'Inventory' => ['inventory.view' => 'View stock and batches', 'inventory.adjust' => 'Post adjustments', 'inventory.count' => 'Stock counts', 'inventory.transfer' => 'Transfers', 'reorder.manage' => 'Reorder and purchase-order drafts'],
+        'Purchases' => ['purchases.view' => 'View purchases', 'purchases.create' => 'Receive and order purchases', 'purchase_returns.view' => 'View purchase returns', 'purchase_returns.create' => 'Post and void purchase returns'],
+        'People' => ['customers.view' => 'View customers', 'customers.manage' => 'Manage customers', 'customer_groups.manage' => 'Manage customer groups and discounts',
+            'payments.collect' => 'Collect customer dues', 'suppliers.view' => 'View suppliers', 'suppliers.manage' => 'Manage suppliers', 'payments.pay_supplier' => 'Pay suppliers'],
+        'Online orders' => ['orders.view' => 'View online orders', 'orders.fulfil' => 'Place and fulfil orders', 'riders.manage' => 'Manage riders and COD cash', 'zones.manage' => 'Manage shipping zones'],
+        'Loyalty' => ['loyalty.view' => 'View rewards and memberships', 'loyalty.manage' => 'Adjust points, plans and members'],
+        'Finance' => ['registers.view' => 'Cash registers', 'accounts.view' => 'Accounts', 'accounts.transfer' => 'Money transfers', 'expenses.view' => 'Expenses', 'income.view' => 'Income', 'accounts.reports' => 'Balance sheet'],
+        'HR' => ['hr.view' => 'View employees', 'hr.manage' => 'Manage employees and holidays', 'hr.attendance' => 'Attendance', 'hr.payroll' => 'Payroll and salary advances'],
+        'Reports' => ['reports.sales' => 'Sales', 'reports.profit' => 'Profit and loss', 'reports.stock' => 'Stock and expiry', 'reports.purchases' => 'Purchases',
+            'reports.customers' => 'Customers', 'reports.suppliers' => 'Suppliers', 'reports.payments' => 'Payments', 'reports.users' => 'Cashiers and registers'],
+        'Administration' => ['users.view' => 'View users', 'roles.manage' => 'Users, roles and permissions', 'warehouses.manage' => 'Warehouses', 'settings.manage' => 'Settings'],
+    ],
+
+    // Roles that cannot be renamed, edited or deleted.
+    'system_roles' => ['Admin'],
 ];

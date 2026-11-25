@@ -115,7 +115,7 @@ class OnlineOrders
             $lines[] = ['unit' => $unit, 'qty' => (float) $l['qty'], 'qtyBase' => (int) round($qtyBase), 'price' => $prices->get($unit->id), 'total' => (int) round($priceP * (float) $l['qty'])];
             $need[$unit->product_id] = ($need[$unit->product_id] ?? 0) + (int) round($qtyBase);
         }
-        foreach ($need as $productId => $qty) {
+        foreach (app(AppSettings::class)->general('allowNegativeStock') ? [] : $need as $productId => $qty) {
             $available = (int) StockLedger::sellableQuery($warehouse->id, $productId)->sum('stock_balances.qty_base');
             if ($available < $qty) {
                 $name = $units->firstWhere('product_id', $productId)->product->name;
@@ -255,6 +255,7 @@ class OnlineOrders
                     'warehouse_id' => $order->warehouse_id, 'product_id' => $l->product_id, 'batch_id' => $b->batch_id,
                     'qty_base' => -$part['qty'], 'type' => 'sale', 'unit_cost' => $unitCost,
                     'source_type' => 'sale', 'source_id' => $sale->id, 'source_line_id' => $item->id, 'created_by' => $user->id,
+                    'allow_negative' => $part['negative'] ?? false,
                 ]);
                 $lineCost += $part['qty'] * $unitCost;
             }
