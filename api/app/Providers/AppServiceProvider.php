@@ -40,6 +40,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('customer-api', fn (Request $r) => Limit::perMinute(180)->by($r->ip()));
         RateLimiter::for('customer-auth', fn (Request $r) => Limit::perMinute(20)->by($r->ip()));
         RateLimiter::for('checkout', fn (Request $r) => Limit::perMinute(10)->by($r->ip()));
+        RateLimiter::for('medicine-requests', fn (Request $r) => Limit::perMinute(5)->by($r->ip()));
         RateLimiter::for('order-tracking', fn (Request $r) => Limit::perMinute(30)->by($r->ip()));
         RateLimiter::for('feeds', fn (Request $r) => Limit::perMinute(30)->by($r->ip()));
         RateLimiter::for('staff-login', fn (Request $r) => Limit::perMinute(20)->by($r->ip()));

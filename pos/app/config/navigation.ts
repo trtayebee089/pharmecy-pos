@@ -42,6 +42,7 @@ export const navigation: NavGroup[] = [
       { label: 'Held sales', to: '/sales/held', permission: 'sales.view', ready: true },
       { label: 'Sale returns', to: '/sales/returns', permission: 'returns.view', ready: true, legacy: 'Return › Sale' },
       { label: 'Online orders', to: '/orders', permission: 'orders.view', ready: true, badge: 'onlineOrders', legacy: 'Online Orders' },
+      { label: 'Medicine requests', to: '/orders/requests', permission: 'orders.view', ready: true, legacy: 'Website › Request order' },
     ],
   },
   {

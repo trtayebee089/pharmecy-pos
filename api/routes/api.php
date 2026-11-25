@@ -16,6 +16,7 @@ use App\Http\Controllers\Pos\HrController;
 use App\Http\Controllers\Pos\IntegrationController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\LoyaltyController;
+use App\Http\Controllers\Pos\MedicineRequestController;
 use App\Http\Controllers\Pos\OnlineOrderController;
 use App\Http\Controllers\Pos\ProductController;
 use App\Http\Controllers\Pos\PurchaseController;
@@ -165,6 +166,8 @@ Route::prefix('pos/v1')->group(function () {
             Route::get('orders', [OnlineOrderController::class, 'index']);
             Route::get('orders/settings', [OnlineOrderController::class, 'settings']);
             Route::get('orders/{order}', [OnlineOrderController::class, 'show'])->whereNumber('order');
+            Route::get('orders/requests', [MedicineRequestController::class, 'index']);
+            Route::get('orders/requests/{medicineRequest}/files/{index}', [MedicineRequestController::class, 'fileUrl'])->whereNumber(['medicineRequest', 'index']);
             Route::get('delivery/riders', [OnlineOrderController::class, 'riders']);
             Route::get('delivery/riders/{rider}', [OnlineOrderController::class, 'riderShow'])->whereNumber('rider');
             Route::get('delivery/riders/{rider}/cash', [OnlineOrderController::class, 'riderCash']);
@@ -175,6 +178,8 @@ Route::prefix('pos/v1')->group(function () {
             Route::post('orders', [OnlineOrderController::class, 'store'])->middleware('idempotent');
             Route::post('orders/{order}/status', [OnlineOrderController::class, 'status'])->middleware('idempotent');
             Route::post('orders/{order}/rider', [OnlineOrderController::class, 'rider'])->middleware('idempotent');
+            // Medicine requests from the website (with prescription files)
+            Route::put('orders/requests/{medicineRequest}', [MedicineRequestController::class, 'update'])->whereNumber('medicineRequest');
             // Steadfast / Pathao
             Route::get('orders/couriers', [CourierController::class, 'available']);
             Route::get('orders/couriers/pathao/places', [CourierController::class, 'pathaoPlaces']);
@@ -369,6 +374,7 @@ Route::prefix('pos/v1')->group(function () {
 
     // Opened directly in the browser: protected by a 5-minute signature instead of the session.
     Route::get('finance/attachments/{entry}', [FinanceController::class, 'downloadAttachment'])->middleware('signed')->name('finance.attachment');
+    Route::get('medicine-requests/{medicineRequest}/files/{index}', [MedicineRequestController::class, 'file'])->middleware('signed')->whereNumber(['medicineRequest', 'index'])->name('medicine-request.file');
 });
 
 // Customer channel (website and app): /api/v1/* and the legacy paths installed apps still call.

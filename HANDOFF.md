@@ -18,7 +18,7 @@ cd api
 php artisan migrate                        # 4 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders), 101600 (HR & payroll), 101700 (role descriptions)
 php artisan db:seed                        # DatabaseSeeder: adds the "points" payment method and the three
                                            # membership plans (Silver/Gold/Platinum) INACTIVE with 0 discount
-php vendor/bin/pest                        # expect 232 passing (also on MySQL: -c phpunit.mysql.xml)
+php vendor/bin/pest                        # expect 234 passing (also on MySQL: -c phpunit.mysql.xml)
 php artisan db:seed --class=DemoSeeder     # dev only: 5 Dhaka shipping zones, 2 riders, 2 departments, 3 employees
 ```
 
@@ -52,7 +52,7 @@ and **Website banners** (wide rotating main banner + three tiles, the owner's la
 php artisan migrate` (4 additive migrations `2026_11_26_1000..1003`: sms_messages, storefront_banners, online_payments
 + payment columns, courier columns + Pathao ids on zones), `php artisan db:seed` (adds the SSLCommerz and Courier COD
 accounts/methods; the migrations add them too on an existing database), `php artisan storage:link` (banner images),
-`php vendor/bin/pest` → 232. Details: `api/README.md` "Integrations".
+`php vendor/bin/pest` → 234 (one more migration `2026_11_26_100400`, medicine requests). Details: `api/README.md` "Integrations".
 
 **Next task:** §5 item 1, **data migration** (ETL per `docs/rebuild/data-migration-plan.md`). Before going live with the
 customer channel: fill Administration › Integrations (SMTP for reset codes, SMS, website address, gateways in sandbox
@@ -252,7 +252,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (232 Pest tests passing)
+### Laravel API (`api/`) – live slices (234 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -304,11 +304,14 @@ Small open items:
   orders are done in the gateway panel (the order shows "refund due"). Purchase tracking fires when the order is placed,
   also for online orders not yet paid. Products without an image are rejected by Facebook catalogues. Courier COD sits on
   "Courier COD receivable" until a money transfer records the payout. The POS "SMS after sale" switch is stored but not
-  wired (order-update SMS is). The website "Request a medicine" form still has no API.
+  wired (order-update SMS is).
+- Medicine requests (26 Nov): the website's "Request a medicine" page uploads up to 5 prescription photos / PDFs
+  (`POST v1/medicine-requests`, private disk); staff handle them in Online orders › Medicine requests (signed 5-minute
+  file links). Requests are not yet turned into orders automatically (staff place a phone order) and the checkout has no
+  upload of its own (prescription items point customers to this page).
 - Customer channel: online orders **earn** no reward points yet (redeeming works); reset codes need SMTP set in
   Administration › Integrations (or `MAIL_*`); account-removal requests are stored (`account_removal_requests`) but the POS has no screen to
-  handle them; the website's "Request a medicine" form and prescription upload have no API (the form still only shows
-  a toast); the website needs its origin added to `CORS_ALLOWED_ORIGINS` when it is served from another domain.
+  handle them; the website needs its origin added to `CORS_ALLOWED_ORIGINS` when it is served from another domain.
 - Android app (`app/`): the source still calls the legacy paths (served by the API); only checkout was touched (sends
   the delivery area and `Accept`, no 5 % guest discount, safe rate parsing). Unbuilt and untested here — build and
   test on a phone before release. Moving it to `/api/v1` and adding the current password to "change password" is

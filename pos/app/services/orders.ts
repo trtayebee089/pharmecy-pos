@@ -133,3 +133,28 @@ export function useRidersResource() {
 export function useZonesResource() {
   return useResource<ShippingZone>('delivery/zones', async () => (await ordersMock()).zones, 'orders')
 }
+
+// ---------------------------------------------------------------- medicine requests (website)
+
+export interface MedicineRequest {
+  id: number; number: string; name: string; phone: string; address: string | null; medicines: string
+  status: 'new' | 'contacted' | 'ordered' | 'closed'; staffNote: string | null; customerId: number | null
+  files: { index: number; name: string; mime: string; size: number }[]
+  createdAt: string; handledBy: string | null; handledAt: string | null
+}
+
+export function useMedicineRequestsApi() {
+  const api = useApi('orders')
+  return {
+    list(status = 'all'): Promise<{ requests: MedicineRequest[]; counts: Record<string, number> }> {
+      return api.get('/orders/requests', { status })
+    },
+    update(id: number, status: MedicineRequest['status'], staffNote: string | null): Promise<MedicineRequest> {
+      return api.put(`/orders/requests/${id}`, { status, staff_note: staffNote })
+    },
+    /** A 5-minute signed link to one prescription file. */
+    async fileUrl(id: number, index: number): Promise<string> {
+      return (await api.get<{ url: string }>(`/orders/requests/${id}/files/${index}`)).url
+    },
+  }
+}

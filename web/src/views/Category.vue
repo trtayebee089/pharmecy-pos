@@ -15,7 +15,7 @@
       <div class="hidden lg:block">
         <FilterPanel @apply="applyFilters" />
       </div>
-      <ProductGrid :products="products" :loading="loading" />
+      <ProductGrid :products="products" :loading="loading" :columns="4" :skeletons="8" />
     </div>
     <div v-if="meta.current_page < meta.last_page" class="mt-8 text-center">
       <button type="button" class="rounded-full bg-primary-600 px-6 py-3 font-bold text-white" @click="loadMore">Load more</button>

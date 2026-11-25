@@ -6,6 +6,16 @@ function idempotencyKey() {
 }
 
 export const orderService = {
+  /** "Request a medicine": fields + up to 5 prescription photos / PDFs. `onProgress(0..100)` while uploading. */
+  async requestMedicine(fields, files = [], onProgress) {
+    const form = new FormData()
+    Object.entries(fields).forEach(([k, v]) => { if (v) form.append(k, v) })
+    files.forEach((f) => form.append('files[]', f))
+    return unwrap(await api.post('/v1/medicine-requests', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => onProgress?.(e.total ? Math.round((e.loaded / e.total) * 100) : 0),
+    }))
+  },
   async list(params = {}) {
     return normalizeList((await api.get('/v1/orders', { params })).data)
   },

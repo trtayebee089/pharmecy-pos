@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\FeedController;
 use App\Http\Controllers\Api\V1\LegacyAppController as Legacy;
 use App\Http\Controllers\Api\V1\LoyaltyController;
+use App\Http\Controllers\Api\V1\MedicineRequestController;
 use App\Http\Controllers\Api\V1\OrderController;
 use App\Http\Controllers\Api\V1\PaymentController;
 use App\Http\Controllers\Api\V1\SiteController;
@@ -59,6 +60,9 @@ Route::prefix('v1')->middleware([ForceJson::class, 'throttle:customer-api'])->gr
     // Orders: checkout works signed in or as a guest; history is the owner's only.
     Route::post('checkout', [OrderController::class, 'checkout'])->middleware('throttle:checkout');
     Route::get('tracking/{code}', [OrderController::class, 'track'])->middleware('throttle:order-tracking');
+
+    // "Request a medicine" with prescription photos / PDFs
+    Route::post('medicine-requests', [MedicineRequestController::class, 'store'])->middleware('throttle:medicine-requests');
 
     // Online payment (SSLCommerz, bKash): start/retry and switch to COD by tracking code; gateway returns.
     Route::post('payments/start', [PaymentController::class, 'start'])->middleware('throttle:checkout');
