@@ -4,13 +4,13 @@ namespace App\Reports;
 
 use App\Models\Customer;
 use App\Models\Purchase;
+use App\Support\PresentLoyalty;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Purchases, customers, suppliers, payments and cashier reports. Balances come
- * from the party ledgers; loyalty (membership, points) is not built yet, so
- * every customer has membership "none" and 0 points.
+ * from the party ledgers; points and membership tiers from the loyalty tables.
  */
 class PartyReports
 {
@@ -57,13 +57,14 @@ class PartyReports
         $period = $this->salesBy($s, true);
         $lifetime = $this->salesBy($s, false);
         $due = $this->ledger('customer', 'debit - credit');
+        $loyalty = PresentLoyalty::forCustomers($customers->pluck('id'));
         $rows = $customers->map(fn ($c) => [
-            'customerId' => $c->id, 'name' => $c->name, 'phone' => (string) $c->phone, 'membership' => 'none',
+            'customerId' => $c->id, 'name' => $c->name, 'phone' => (string) $c->phone, 'membership' => $loyalty['tiers'][$c->id] ?? 'none',
             'invoices' => (int) ($period[$c->id]->n ?? 0), 'periodSpend' => ReportScope::r2($period[$c->id]->spent ?? 0),
-            'lifetime' => ReportScope::r2($lifetime[$c->id]->spent ?? 0), 'points' => 0, 'due' => max(0, ReportScope::r2($due[$c->id] ?? 0)),
+            'lifetime' => ReportScope::r2($lifetime[$c->id]->spent ?? 0), 'points' => (int) ($loyalty['points'][$c->id] ?? 0), 'due' => max(0, ReportScope::r2($due[$c->id] ?? 0)),
             'lastVisit' => isset($lifetime[$c->id]) ? substr((string) $lifetime[$c->id]->last, 0, 10) : null,
         ])
-            ->filter(fn ($r) => ! $membership || $membership === 'none') // no memberships exist yet
+            ->filter(fn ($r) => ! $membership || $r['membership'] === $membership)
             ->filter(fn ($r) => $s->filter('due') !== 'yes' || $r['due'] > 0)
             ->sortByDesc('lifetime')->values()->all();
 
@@ -72,17 +73,17 @@ class PartyReports
                 ReportScope::kpi('Customers', count($rows), 'number'),
                 ReportScope::kpi('Spend in period', ReportScope::sum($rows, 'periodSpend'), 'money', 'Named customers only'),
                 ReportScope::kpi('Outstanding due', ReportScope::sum($rows, 'due'), 'money', collect($rows)->where('due', '>', 0)->count().' customers owe'),
-                ReportScope::kpi('Points liability', 0, 'number', 'Unredeemed points'),
+                ReportScope::kpi('Points liability', ReportScope::sum($rows, 'points'), 'number', 'Unredeemed points'),
             ],
             'columns' => [
                 ReportScope::col('name', 'Customer'), ReportScope::col('phone', 'Phone'),
-                ReportScope::col('membership', 'Membership', 'badge', ['tones' => ['Gold' => 'warning', 'Silver' => 'neutral', 'none' => 'neutral']]),
+                ReportScope::col('membership', 'Membership', 'badge', ['tones' => ['Platinum' => 'brand', 'Gold' => 'warning', 'Silver' => 'neutral', 'none' => 'neutral']]),
                 ReportScope::col('invoices', 'Invoices', 'number'), ReportScope::col('periodSpend', 'Spend (period)', 'money'), ReportScope::col('lifetime', 'Lifetime', 'money'),
                 ReportScope::col('points', 'Points', 'number'), ReportScope::col('due', 'Due', 'money'), ReportScope::col('lastVisit', 'Last visit', 'date'),
             ],
             'rows' => $rows,
             'totals' => ['invoices' => ReportScope::sum($rows, 'invoices'), 'periodSpend' => ReportScope::sum($rows, 'periodSpend'),
-                'lifetime' => ReportScope::sum($rows, 'lifetime'), 'points' => 0, 'due' => ReportScope::sum($rows, 'due')],
+                'lifetime' => ReportScope::sum($rows, 'lifetime'), 'points' => ReportScope::sum($rows, 'points'), 'due' => ReportScope::sum($rows, 'due')],
         ];
     }
 
@@ -115,7 +116,7 @@ class PartyReports
                 'kpis' => [
                     ReportScope::kpi('Purchases', $of('sale', 'debit')), ReportScope::kpi('Paid', $of('payment', 'credit')),
                     ReportScope::kpi('Returns', $of('return', 'credit')),
-                    ReportScope::kpi('Balance due', ReportScope::r2($balance), 'money', '0 points · no membership'),
+                    ReportScope::kpi('Balance due', ReportScope::r2($balance), 'money', (($l = PresentLoyalty::forCustomers(collect([$c->id])))['points'][$c->id] ?? 0).' points · '.($l['tiers'][$c->id] ?? 'no').' membership'),
                 ],
                 'columns' => $columns, 'rows' => $rows,
                 'totals' => ['debit' => ReportScope::sum($rows, 'debit'), 'credit' => ReportScope::sum($rows, 'credit'), 'balance' => ReportScope::r2($balance)],
@@ -126,14 +127,16 @@ class PartyReports
             ->groupBy('party_id', 'type')->selectRaw('party_id, type, SUM(debit) AS d, SUM(credit) AS c')->get()->groupBy('party_id');
         $due = $this->ledger('customer', 'debit - credit');
         $invoices = $this->salesBy($s, true);
-        $rows = Customer::where('is_walk_in', false)->get(['id', 'name', 'phone'])->map(function ($c) use ($sums, $due, $invoices) {
+        $named = Customer::where('is_walk_in', false)->get(['id', 'name', 'phone']);
+        $loyalty = PresentLoyalty::forCustomers($named->pluck('id'));
+        $rows = $named->map(function ($c) use ($sums, $due, $invoices, $loyalty) {
             $g = $sums[$c->id] ?? collect();
 
             return [
-                'customerId' => $c->id, 'name' => $c->name, 'phone' => (string) $c->phone, 'membership' => '',
+                'customerId' => $c->id, 'name' => $c->name, 'phone' => (string) $c->phone, 'membership' => $loyalty['tiers'][$c->id] ?? '',
                 'invoices' => (int) ($invoices[$c->id]->n ?? 0), 'purchases' => ReportScope::r2($g->where('type', 'invoice')->sum('d')),
                 'paid' => ReportScope::r2($g->where('type', 'payment')->sum('c')), 'returns' => ReportScope::r2($g->where('type', 'return')->sum('c')),
-                'due' => max(0, ReportScope::r2($due[$c->id] ?? 0)), 'points' => 0,
+                'due' => max(0, ReportScope::r2($due[$c->id] ?? 0)), 'points' => (int) ($loyalty['points'][$c->id] ?? 0),
             ];
         })->sortByDesc('purchases')->values()->all();
 

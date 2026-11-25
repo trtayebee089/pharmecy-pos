@@ -10,6 +10,7 @@ use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\FinanceController;
 use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\InventoryController;
+use App\Http\Controllers\Pos\LoyaltyController;
 use App\Http\Controllers\Pos\ProductController;
 use App\Http\Controllers\Pos\PurchaseController;
 use App\Http\Controllers\Pos\PurchaseOrderController;
@@ -35,6 +36,33 @@ Route::prefix('pos/v1')->group(function () {
         Route::put('me/password', [AuthController::class, 'changePassword']);
 
         Route::get('dashboard/summary', [DashboardController::class, 'summary'])->middleware('can:dashboard.view');
+
+        // Loyalty: wallets, campaigns, membership plans and members; reward point settings.
+        Route::prefix('loyalty')->group(function () {
+            Route::middleware('can:loyalty.view')->group(function () {
+                Route::get('wallets', [LoyaltyController::class, 'wallets']);
+                Route::get('wallets/{customer}/ledger', [LoyaltyController::class, 'ledger']);
+                Route::get('campaigns', [LoyaltyController::class, 'campaigns']);
+                Route::get('campaigns/{campaign}', [LoyaltyController::class, 'campaign'])->whereNumber('campaign');
+                Route::get('membership-plans', [LoyaltyController::class, 'plans']);
+                Route::get('members', [LoyaltyController::class, 'members']);
+            });
+            Route::middleware('can:loyalty.manage')->group(function () {
+                Route::post('wallets/{customer}/adjustments', [LoyaltyController::class, 'adjust'])->middleware('idempotent');
+                Route::post('campaigns', [LoyaltyController::class, 'saveCampaign']);
+                Route::put('campaigns/{campaign}', [LoyaltyController::class, 'saveCampaign']);
+                Route::delete('campaigns/{campaign}', [LoyaltyController::class, 'deleteCampaign']);
+                Route::put('membership-plans/{plan}', [LoyaltyController::class, 'savePlan']);
+                Route::delete('membership-plans/{plan}', [LoyaltyController::class, 'deletePlan']);
+                Route::post('customers/{customer}/membership', [LoyaltyController::class, 'assign']);
+                Route::post('members/{member}/renew', [LoyaltyController::class, 'renew'])->middleware('idempotent');
+                Route::post('members/{member}/plan', [LoyaltyController::class, 'changePlan']);
+                Route::post('members/{member}/cancel', [LoyaltyController::class, 'cancel']);
+            });
+        });
+        // The POS reads the reward rules to offer points at checkout; only settings managers change them.
+        Route::get('settings/reward-points', [LoyaltyController::class, 'settings']);
+        Route::put('settings/reward-points', [LoyaltyController::class, 'saveSettings'])->middleware('can:settings.manage');
 
         Route::middleware('can:products.view')->group(function () {
             Route::get('catalog/products/search', [CatalogController::class, 'search']);

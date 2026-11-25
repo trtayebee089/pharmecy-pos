@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Services\DocumentNumbers;
+use App\Services\LoyaltySettings;
 use App\Services\Pricing;
 use App\Services\StockLedger;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(Pricing::class);
+        $this->app->scoped(LoyaltySettings::class);
         $this->app->singleton(StockLedger::class);
         $this->app->singleton(DocumentNumbers::class);
     }

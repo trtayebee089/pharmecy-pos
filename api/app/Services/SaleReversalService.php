@@ -9,6 +9,7 @@ use App\Models\PartyLedgerEntry;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\PaymentMethod;
+use App\Models\RewardLedgerEntry;
 use App\Models\Sale;
 use App\Models\SaleItemBatch;
 use App\Models\SaleReturn;
@@ -37,6 +38,7 @@ class SaleReversalService
         private StockLedger $stock,
         private DocumentNumbers $numbers,
         private RegisterService $registers,
+        private RewardLedger $rewards,
     ) {}
 
     public function void(User $user, Sale $sale, string $reason): Sale
@@ -83,6 +85,10 @@ class SaleReversalService
             }
 
             $this->ledger($sale->customer_id, 'void', debit: (float) $sale->paid_total, credit: (float) $sale->grand_total, sourceType: 'sale', sourceId: $sale->id, note: 'Void '.$sale->number, userId: $user->id);
+
+            // Loyalty: spent points go back to the wallet; earned points are taken back (may go negative if already spent).
+            $this->rewards->credit($sale->customer_id, 'reverse', (int) $sale->points_redeemed, ['sale', $sale->id], 'Void '.$sale->number, $user->id);
+            $this->rewards->debit($sale->customer_id, 'reverse', (int) $sale->points_earned, ['sale', $sale->id], 'Void '.$sale->number, $user->id, mustCover: false);
 
             $sale->update(['status' => 'void', 'voided_by' => $user->id, 'voided_at' => now(), 'void_reason' => $reason]);
             AuditLog::record($user->id, 'sale.voided', 'sale', $sale->id, ['reason' => $reason]);
@@ -172,8 +178,23 @@ class SaleReversalService
                 }
             }
 
+            // Loyalty, in proportion to the returned value: the share paid with points goes back as points
+            // (not cash), and the points earned on that share are taken back.
+            $ratio = (float) $sale->grand_total > 0 ? $total / SaleService::paisa($sale->grand_total) : 0;
+            $back = fn (string $kind) => (int) abs(RewardLedgerEntry::where(['source_type' => 'sale_return_'.$kind])
+                ->whereIn('source_id', SaleReturn::where('sale_id', $sale->id)->pluck('id'))->sum('points'));
+            $pointsBack = min((int) round($sale->points_redeemed * $ratio), $sale->points_redeemed - $back('redeem'));
+            $pointsBackPaisa = $pointsBack > 0 ? (int) round(SaleService::paisa($sale->points_value) * $pointsBack / $sale->points_redeemed) : 0;
+            $earnedBack = min((int) round($sale->points_earned * $ratio), $sale->points_earned - $back('earn'));
+            $this->rewards->credit($sale->customer_id, 'reverse', $pointsBack, ['sale_return_redeem', $return->id], $return->number, $user->id);
+            $this->rewards->debit($sale->customer_id, 'reverse', $earnedBack, ['sale_return_earn', $return->id], $return->number, $user->id, mustCover: false);
+
+            $this->ledger($sale->customer_id, 'return', debit: 0, credit: (float) SaleService::money($total), sourceType: 'sale_return', sourceId: $return->id, note: $return->number, userId: $user->id);
+            if ($pointsBackPaisa > 0) {
+                $this->ledger($sale->customer_id, 'refund', debit: (float) SaleService::money($pointsBackPaisa), credit: 0, sourceType: 'sale_return', sourceId: $return->id, note: $return->number.' (points)', userId: $user->id);
+            }
+            $total -= $pointsBackPaisa; // money still to refund
             $money = SaleService::money($total);
-            $this->ledger($sale->customer_id, 'return', debit: 0, credit: (float) $money, sourceType: 'sale_return', sourceId: $return->id, note: $return->number, userId: $user->id);
             if ($method && $total > 0) {
                 $payment = Payment::create([
                     'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('payment', $warehouse),

@@ -93,14 +93,17 @@ class Present
             ->groupBy('customer_id')->selectRaw('customer_id, SUM(grand_total) AS spent, MAX(sale_date) AS last')->get()->keyBy('customer_id');
         $customers = new EloquentCollection($customers->all());
         $customers->loadMissing('group');
+        $loyalty = PresentLoyalty::forCustomers($ids);
 
         return $customers->map(fn (Customer $c) => [
             'id' => $c->id, 'code' => $c->code, 'name' => $c->name, 'phone' => $c->phone,
             'group' => $c->group?->name,
             'groupDiscountPct' => $c->is_walk_in ? 0 : (float) ($c->group?->discount_pct ?? 0),
             'dueBalance' => max(0, round((float) ($ledger[$c->id] ?? 0), 2)),
-            'points' => 0, // reward ledger arrives with the loyalty module
-            'membership' => null,
+            'points' => (int) ($loyalty['points'][$c->id] ?? 0),
+            'membership' => $loyalty['tiers'][$c->id] ?? null,
+            // Plan discount of the active membership; the POS combines it with the group % per the reward settings mode.
+            'membershipDiscountPct' => $c->is_walk_in ? 0 : (float) ($loyalty['discounts'][$c->id] ?? 0),
             'isWalkIn' => $c->is_walk_in,
             'totalSpent' => round((float) ($sales[$c->id]->spent ?? 0), 2),
             'lastVisit' => isset($sales[$c->id]) ? substr((string) $sales[$c->id]->last, 0, 10) : null,

@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Account;
 use App\Models\Customer;
+use App\Models\MembershipPlan;
 use App\Models\PaymentMethod;
 use App\Models\PriceList;
 use Illuminate\Database\Seeder;
@@ -56,6 +57,16 @@ class DatabaseSeeder extends Seeder
         ];
         foreach ($methods as [$code, $name, $account, $ref]) {
             PaymentMethod::updateOrCreate(['code' => $code], ['name' => $name, 'account_id' => $account, 'requires_reference' => $ref]);
+        }
+        // Reward points as a tender: no money account, the reward ledger carries it.
+        PaymentMethod::updateOrCreate(['code' => 'points'], ['name' => 'Reward points', 'account_id' => null, 'requires_reference' => false]);
+
+        // The POS edits three fixed tiers. They start inactive with no discount until an admin configures them.
+        foreach ([['Silver', 'Silver', 1], ['Gold', 'Gold', 2], ['Platinum', 'Platinum', 3]] as [$code, $name, $order]) {
+            MembershipPlan::firstOrCreate(['code' => $code], [
+                'name' => $name, 'min_annual_spend' => 0, 'discount_pct' => 0, 'points_multiplier' => 1, 'fee' => 0,
+                'duration_months' => 12, 'benefits' => [], 'is_active' => false, 'sort_order' => $order,
+            ]);
         }
 
         if (! Customer::where('is_walk_in', true)->exists()) {

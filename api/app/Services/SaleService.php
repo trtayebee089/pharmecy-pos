@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Models\AccountTransaction;
 use App\Models\Customer;
+use App\Models\CustomerMembership;
 use App\Models\PartyLedgerEntry;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\PaymentMethod;
 use App\Models\Product;
 use App\Models\ProductUnit;
+use App\Models\RewardCampaign;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SaleItemBatch;
@@ -36,7 +38,104 @@ class SaleService
         private DocumentNumbers $numbers,
         private DiscountLimits $limits,
         private RegisterService $registers,
+        private LoyaltySettings $loyalty,
+        private RewardLedger $rewards,
+        private Memberships $memberships,
     ) {}
+
+    /**
+     * Automatic line discount for the customer: the group % and, when the
+     * admin enables it, the membership % (larger of the two, or stacked).
+     *
+     * @return array{0: float, 1: float, 2: float, 3: ?CustomerMembership} [line %, group %, membership % applied, membership]
+     */
+    private function customerDiscount(Customer $customer): array
+    {
+        if ($customer->is_walk_in) {
+            return [0.0, 0.0, 0.0, null];
+        }
+        $group = (float) ($customer->group?->discount_pct ?? 0);
+        $membership = $this->memberships->active($customer->id);
+        $member = $membership ? (float) $membership->plan->discount_pct : 0.0;
+
+        return match ($this->loyalty->get('membershipDiscountMode')) {
+            'larger' => [max($group, $member), $group, $member >= $group ? $member : 0.0, $membership],
+            'stack' => [round(100 * (1 - (1 - $group / 100) * (1 - $member / 100)), 4), $group, $member, $membership],
+            default => [$group, $group, 0.0, $membership],
+        };
+    }
+
+    /**
+     * Validates a points payment against the reward settings and the wallet.
+     * Returns the points to redeem (0 when no points payment).
+     */
+    private function pointsToRedeem(Customer $customer, array $payments, int $grand): int
+    {
+        $paisa = 0;
+        foreach ($payments as $p) {
+            if ($p['method']->code === 'points') {
+                $paisa += $p['amount'];
+            }
+        }
+        if ($paisa === 0) {
+            return 0;
+        }
+        $s = $this->loyalty->all();
+        $fail = fn (string $m) => throw ValidationException::withMessages(['payments' => $m]);
+        if (! $s['active']) {
+            $fail('Reward points are switched off.');
+        }
+        if ($customer->is_walk_in) {
+            $fail('Walk-in customers have no points. Select the customer first.');
+        }
+        $valuePaisa = self::paisa($s['pointValue']);
+        if ($valuePaisa <= 0 || $paisa % $valuePaisa !== 0) {
+            $fail('Points must be redeemed in whole points (1 point = ৳'.self::money($valuePaisa).').');
+        }
+        $points = intdiv($paisa, $valuePaisa);
+        if ($grand < self::paisa($s['minRedeemSaleAmount'])) {
+            $fail('Points can be used only on bills of at least ৳'.self::money(self::paisa($s['minRedeemSaleAmount'])).'.');
+        }
+        if ($paisa * 100 > $grand * (float) $s['maxRedeemPercent']) {
+            $fail("Points can pay at most {$s['maxRedeemPercent']}% of the bill.");
+        }
+        $balance = $this->rewards->balance($customer->id);
+        if ($balance < (int) $s['minRedeemPoints']) {
+            $fail("The customer needs at least {$s['minRedeemPoints']} points to redeem (has {$balance}).");
+        }
+        if ($points > $balance) {
+            $fail("The customer has only {$balance} points.");
+        }
+
+        return $points;
+    }
+
+    /**
+     * Points earned: bill after all discounts, minus the part paid with points,
+     * custom items and (optionally) discounted lines, at the earn rate times the
+     * membership and campaign multipliers. Walk-ins and small bills earn nothing.
+     */
+    private function pointsToEarn(Customer $customer, array $lines, int $afterLines, int $grand, int $pointsPaisa, ?CustomerMembership $membership): int
+    {
+        $s = $this->loyalty->all();
+        if (! $s['active'] || $customer->is_walk_in || $grand <= 0 || $grand < self::paisa($s['minimumSoldAmount']) || (float) $s['soldAmountPerPoint'] <= 0) {
+            return 0;
+        }
+        $ratio = $afterLines > 0 ? $grand / $afterLines : 0; // order discount share
+        $excluded = 0;
+        foreach ($lines as $l) {
+            if (! $l['product'] || ($s['excludeDiscountedItems'] && $l['discount'] > 0)) {
+                $excluded += (int) round(($l['gross'] - $l['discount']) * $ratio);
+            }
+        }
+        $base = max(0, $grand - $pointsPaisa - $excluded);
+        $multiplier = (float) ($membership?->plan->points_multiplier ?? 1);
+        $today = now()->toDateString();
+        $campaign = (float) (RewardCampaign::where('is_active', true)->where('starts_at', '<=', $today)->where('ends_at', '>=', $today)->max('multiplier') ?? 1);
+        $multiplier *= max(1, $campaign);
+
+        return (int) floor($base / 100 / (float) $s['soldAmountPerPoint'] * $multiplier + 1e-9);
+    }
 
     /** @param  array<string, mixed>  $data  validated request */
     public function complete(User $user, array $data): Sale
@@ -51,9 +150,10 @@ class SaleService
         }
 
         $limit = $this->limits->for($user);
-        // Customer group discount: applied to every catalogue line; a manual line discount only counts when it is larger.
-        $groupPct = $customer->is_walk_in ? 0.0 : (float) ($customer->group?->discount_pct ?? 0);
-        $lines = $this->priceLines($user, $data['lines'], $limit, $groupPct);
+        // Customer discount (group, and membership per the admin's mode): applied to every catalogue line;
+        // a manual line discount only counts when it is larger.
+        [$autoPct, $groupPct, $memberPct, $membership] = $this->customerDiscount($customer);
+        $lines = $this->priceLines($user, $data['lines'], $limit, $autoPct);
 
         $subtotal = array_sum(array_column($lines, 'gross'));
         $lineDiscounts = array_sum(array_column($lines, 'discount'));
@@ -68,6 +168,9 @@ class SaleService
         $grand = $afterLines - $orderDiscount;
 
         [$payments, $applied, $change] = $this->settlePayments($data['payments'] ?? [], $grand);
+        $pointsRedeemed = $this->pointsToRedeem($customer, $payments, $grand);
+        $pointsPaisa = array_sum(array_map(fn ($p) => $p['method']->code === 'points' ? $p['amount'] : 0, $payments));
+        $pointsEarned = $this->pointsToEarn($customer, $lines, $afterLines, $grand, $pointsPaisa, $membership);
         $due = $grand - $applied;
         if ($due > 0 && $customer->is_walk_in) {
             throw ValidationException::withMessages(['payments' => 'Walk-in customers must pay in full. Select a registered customer to sell on credit.']);
@@ -79,7 +182,7 @@ class SaleService
             }
         }
 
-        return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due, $groupPct) {
+        return DB::transaction(function () use ($user, $warehouse, $customer, $lines, $subtotal, $lineDiscounts, $orderDiscount, $grand, $payments, $applied, $change, $due, $groupPct, $memberPct, $pointsRedeemed, $pointsPaisa, $pointsEarned) {
             $session = $this->registers->current($user, $warehouse->id);
             $sale = Sale::create([
                 'ulid' => (string) Str::ulid(),
@@ -95,6 +198,10 @@ class SaleService
                 'line_discount_total' => self::money($lineDiscounts),
                 'order_discount_total' => self::money($orderDiscount),
                 'group_discount_pct' => $groupPct,
+                'membership_discount_pct' => $memberPct,
+                'points_redeemed' => $pointsRedeemed,
+                'points_value' => self::money($pointsPaisa),
+                'points_earned' => $pointsEarned,
                 'grand_total' => self::money($grand),
                 'paid_total' => self::money($applied),
                 'change_total' => self::money($change),
@@ -158,6 +265,11 @@ class SaleService
                     'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number, 'created_by' => $user->id,
                 ]);
             }
+
+            // Loyalty: spend points (locked, re-checked), earn on this bill, then review the membership tier.
+            $this->rewards->debit($customer->id, 'redeem', $pointsRedeemed, ['sale', $sale->id], $sale->number, $user->id, (float) self::money($pointsPaisa));
+            $this->rewards->credit($customer->id, 'earn', $pointsEarned, ['sale', $sale->id], $sale->number, $user->id);
+            $this->memberships->review($customer);
 
             return $sale->fresh(['items.batches.batch', 'customer']);
         });

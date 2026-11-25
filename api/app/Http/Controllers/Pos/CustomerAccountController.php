@@ -8,8 +8,11 @@ use App\Models\Customer;
 use App\Models\CustomerGroup;
 use App\Models\Sale;
 use App\Services\CustomerPayments;
+use App\Services\Memberships;
+use App\Services\RewardLedger;
 use App\Services\SaleService;
 use App\Support\Present;
+use App\Support\PresentLoyalty;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -33,7 +36,8 @@ class CustomerAccountController extends Controller
         return response()->json([
             'id' => $customer->id, 'code' => $customer->code, 'name' => $customer->name, 'phone' => $customer->phone,
             'email' => $customer->email, 'address' => $customer->address, 'group' => $customer->group?->name,
-            'membership' => null, 'points' => 0, // loyalty module
+            'membership' => app(Memberships::class)->active($customer->id)?->plan->code,
+            'points' => app(RewardLedger::class)->balance($customer->id),
             'dueBalance' => max(0, CustomerPayments::balance($customer->id) / 100),
             'totalSpent' => round((float) $stats->spent, 2), 'visits' => $visits,
             'avgBasket' => $visits ? round((float) $stats->spent / $visits, 2) : 0,
@@ -54,7 +58,7 @@ class CustomerAccountController extends Controller
                         'debit' => (float) $e->debit, 'credit' => (float) $e->credit, 'balance' => $balance / 100,
                     ];
                 })->all(),
-            'rewards' => [], // loyalty module
+            'rewards' => PresentLoyalty::entries($customer->id, 50),
         ]);
     }
 
