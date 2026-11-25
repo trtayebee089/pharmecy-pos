@@ -11,6 +11,14 @@ function readCart() {
   }
 }
 
+function readZone() {
+  try {
+    return JSON.parse(localStorage.getItem('redpharma_zone') || 'null')
+  } catch {
+    return null
+  }
+}
+
 function linePrice(item) {
   return Number(item.product.discount_price || item.product.price || 0) * item.quantity
 }
@@ -20,6 +28,7 @@ export const useCartStore = defineStore('cart', {
     items: readCart(),
     rewardPoints: Number(localStorage.getItem('redpharma_reward_points') || 0),
     reorderWarnings: [],
+    zone: readZone(),
   }),
   getters: {
     count: (state) => state.items.reduce((sum, item) => sum + item.quantity, 0),
@@ -30,8 +39,11 @@ export const useCartStore = defineStore('cart', {
         const offer = Number(item.product.discount_price || regular)
         return sum + Math.max(regular - offer, 0) * item.quantity
       }, 0),
+    /** Estimate from the chosen delivery zone; the server works out the final charge. */
     deliveryCharge() {
-      return this.subtotal > 999 || this.subtotal === 0 ? 0 : 60
+      if (!this.zone || this.subtotal === 0) return 0
+      const free = this.zone.free_shipping_min
+      return free != null && this.subtotal >= Number(free) ? 0 : Number(this.zone.rate || 0)
     },
     total() {
       return this.subtotal + this.deliveryCharge
@@ -73,6 +85,10 @@ export const useCartStore = defineStore('cart', {
       this.reorderWarnings = []
       localStorage.removeItem('redpharma_reward_points')
       this.persist()
+    },
+    setZone(zone) {
+      this.zone = zone || null
+      try { localStorage.setItem('redpharma_zone', JSON.stringify(this.zone)) } catch { /* storage blocked */ }
     },
     setRewardPoints(points) {
       this.rewardPoints = Math.max(0, Number(points || 0))

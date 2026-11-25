@@ -7,9 +7,9 @@
       </div>
       <div v-if="loading" class="mt-8 grid gap-4 md:grid-cols-3" role="status"><div v-for="n in 3" :key="n" class="h-32 animate-pulse rounded-3xl bg-slate-100" /></div>
       <div v-else-if="error" class="mt-6 rounded-2xl bg-red-50 p-4 text-red-700" role="alert">{{ error }}</div>
-      <template v-else-if="membership">
+      <template v-else-if="data">
         <section class="mt-6 overflow-hidden rounded-[2rem] p-6 text-white shadow-soft" :style="{ background: `linear-gradient(135deg, ${plan.color || '#0f766e'}, #0f172a)` }" aria-label="Membership card">
-          <div class="flex flex-wrap justify-between gap-6"><div><p class="text-sm font-bold uppercase tracking-[.2em] text-white/70">RedPharma member</p><h2 class="mt-2 text-4xl font-black">{{ plan.name }}</h2><p class="mt-2 text-white/80">Status: {{ membership.status }}</p></div><div class="text-right"><p class="text-sm text-white/70">Member since</p><p class="font-bold">{{ date(membership.started_at) }}</p><p v-if="membership.expires_at" class="mt-2 text-sm text-white/70">Valid until {{ date(membership.expires_at) }}</p></div></div>
+          <div class="flex flex-wrap justify-between gap-6"><div><p class="text-sm font-bold uppercase tracking-[.2em] text-white/70">RedPharma member</p><h2 class="mt-2 text-4xl font-black">{{ plan.name || 'No tier yet' }}</h2><p class="mt-2 text-white/80">{{ membership ? `Status: ${membership.status}` : `Tiers are earned automatically by your yearly purchases` }}</p></div><div v-if="membership" class="text-right"><p class="text-sm text-white/70">Member since</p><p class="font-bold">{{ date(membership.started_at) }}</p><p v-if="membership.expires_at" class="mt-2 text-sm text-white/70">Valid until {{ date(membership.expires_at) }}</p></div></div>
         </section>
         <section class="mt-6 grid gap-4 sm:grid-cols-3" aria-label="Membership statistics">
           <article class="rounded-2xl bg-slate-50 p-5"><p class="text-sm text-slate-500">Current-year purchase</p><p class="mt-1 text-2xl font-black text-ink">৳{{ money(statistics.current_year_purchase) }}</p></article>
@@ -17,7 +17,7 @@
           <article class="rounded-2xl bg-slate-50 p-5"><p class="text-sm text-slate-500">Reward balance</p><p class="mt-1 text-2xl font-black text-ink">{{ money(statistics.reward_balance) }}</p></article>
         </section>
         <section class="mt-8 rounded-3xl border border-slate-100 p-5">
-          <div class="flex justify-between gap-4"><div><h2 class="text-xl font-black text-ink">Upgrade progress</h2><p class="text-sm text-slate-500">{{ progress.next ? `৳${money(progress.remaining_purchase)} remaining for ${progress.next.name}` : 'Highest eligible tier reached' }}</p></div><strong class="text-primary-800">{{ progress.percentage }}%</strong></div>
+          <div class="flex justify-between gap-4"><div><h2 class="text-xl font-black text-ink">Upgrade progress</h2><p class="text-sm text-slate-500">{{ progress.next ? `৳${money(progress.remaining_purchase)} remaining for ${progress.next.name}` : (membership ? 'Highest eligible tier reached' : 'No membership tiers are open right now') }}</p></div><strong class="text-primary-800">{{ progress.percentage }}%</strong></div>
           <div class="mt-4 h-3 overflow-hidden rounded-full bg-slate-100" role="progressbar" :aria-valuenow="progress.percentage" aria-valuemin="0" aria-valuemax="100"><div class="h-full rounded-full bg-primary-700 transition-all" :style="{ width: `${progress.percentage}%` }" /></div>
           <p v-if="progress.fee_required" class="mt-3 text-sm text-amber-700">Red also requires a successful annual membership fee payment.</p>
           <button v-if="progress.fee_required && statistics.current_year_purchase >= Number(progress.next?.minimum_annual_purchase || 0)" class="mt-4 rounded-xl bg-primary-800 px-4 py-2 font-bold text-white disabled:opacity-50" :disabled="renewing" @click="renew">{{ renewing ? 'Creating request…' : 'Request renewal' }}</button>

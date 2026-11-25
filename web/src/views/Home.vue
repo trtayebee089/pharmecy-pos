@@ -216,8 +216,7 @@ const blocks = computed(() => {
 /**
  * Popular-search chips built from the leading token of real product names, so
  * every chip matches the catalogue. Manufacturer names are deliberately not
- * used: search matches product names only, and an empty result set makes
- * productService fall back to its offline demo list.
+ * used as chips, so a chip never leads to an empty result page.
  */
 const quickSearches = computed(() => {
   const seen = new Set()

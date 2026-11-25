@@ -19,6 +19,7 @@
         <div class="mt-5 flex flex-wrap items-center gap-3">
           <span class="text-3xl font-black text-primary-700">{{ formatPrice(product.discount_price || product.price) }}</span>
           <span v-if="product.discount_price" class="text-lg text-slate-400 line-through">{{ formatPrice(product.price) }}</span>
+          <span v-if="product.unit" class="text-sm text-slate-500">per {{ product.unit.toLowerCase() }}<template v-if="product.pack"> · sold as {{ product.pack }}</template></span>
           <OfferBadge :price="product.price" :discount-price="product.discount_price" />
         </div>
         <p class="mt-3 text-sm font-bold" :class="product.stock > 0 ? 'text-primary-700' : 'text-red-600'">
@@ -74,7 +75,12 @@ const loading = ref(true)
 
 async function load() {
   loading.value = true
-  product.value = await productService.find(route.params.slug)
+  try {
+    product.value = await productService.find(route.params.slug)
+  } catch {
+    router.replace({ name: 'not-found', params: { pathMatch: route.path.slice(1).split('/') } })
+    return
+  }
   recentlyViewed.record(product.value)
   const response = await productService.list({ category: product.value.category_slug, per_page: 12 })
   related.value = response.data.filter((item) => item.id !== product.value.id).slice(0, 6)

@@ -63,6 +63,7 @@
           <span v-if="product.discount_price" class="text-[11px] text-slate-400 line-through">
             {{ formatPrice(product.price) }}
           </span>
+          <span v-if="product.unit" class="text-[11px] text-slate-500">/ {{ product.unit.toLowerCase() }}</span>
         </div>
 
         <p v-if="lowStock" class="mt-1 text-[10px] font-semibold text-amber-600">
@@ -118,7 +119,7 @@ const lowStock = computed(() => props.product.stock > 0 && props.product.stock <
 
 /** Strength/pack when the API supplies it, else the manufacturer. */
 const meta = computed(() => {
-  const spec = [props.product.strength, props.product.unit].filter(Boolean).join(' · ')
+  const spec = [props.product.strength, props.product.pack].filter(Boolean).join(' · ')
   return spec || props.product.generic_name || props.product.manufacturer || 'Healthcare essential'
 })
 </script>

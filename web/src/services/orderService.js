@@ -1,31 +1,29 @@
 import api, { normalizeList, unwrap } from './api'
 
+/** A key per checkout attempt: a retried request returns the first order instead of a second one. */
+function idempotencyKey() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
 export const orderService = {
   async list(params = {}) {
-    try {
-      const response = await api.get('/customer/orders', { params })
-      return normalizeList(response.data)
-    } catch {
-      return { data: [], meta: { total: 0, current_page: 1, last_page: 1 } }
-    }
+    return normalizeList((await api.get('/v1/orders', { params })).data)
   },
-  async find(id) {
-    const response = await api.get(`/customer/orders/${id}`)
-    return unwrap(response)
+  async find(number) {
+    return unwrap(await api.get(`/v1/orders/${encodeURIComponent(number)}`))
   },
-  async checkout(payload) {
-    const response = await api.post('/checkout', payload)
-    return unwrap(response)
+  /** Server prices, zone shipping and discounts; the response carries the final totals. */
+  async checkout(payload, key = idempotencyKey()) {
+    return unwrap(await api.post('/v1/checkout', payload, { headers: { 'Idempotency-Key': key } }))
   },
-  async reorder(id, delivery = {}) {
-    return unwrap(await api.post(`/orders/${id}/reorder`, delivery))
+  async reorder(number) {
+    return unwrap(await api.post(`/v1/orders/${encodeURIComponent(number)}/reorder`))
   },
-  async track(payload) {
-    const response = await api.post('/track-order', payload)
-    return unwrap(response)
+  async track(code) {
+    return unwrap(await api.get(`/v1/tracking/${encodeURIComponent(code.trim())}`))
   },
-  async requestOrder(payload) {
-    const response = await api.post('/request-order', payload)
-    return unwrap(response)
+  async zones() {
+    return unwrap(await api.get('/v1/shipping-zones'))
   },
+  newKey: idempotencyKey,
 }

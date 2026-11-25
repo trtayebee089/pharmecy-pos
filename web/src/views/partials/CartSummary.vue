@@ -4,7 +4,7 @@
     <div class="mt-5 space-y-3 text-sm">
       <div class="flex justify-between"><span>Subtotal</span><strong>{{ formatPrice(cart.subtotal) }}</strong></div>
       <div class="flex justify-between"><span>Discount saved</span><strong>{{ formatPrice(cart.discount) }}</strong></div>
-      <div class="flex justify-between"><span>Delivery charge</span><strong>{{ formatPrice(cart.deliveryCharge) }}</strong></div>
+      <div class="flex justify-between"><span>Delivery charge</span><strong>{{ cart.zone ? formatPrice(cart.deliveryCharge) : 'At checkout' }}</strong></div>
       <div class="border-t border-slate-100 pt-3 flex justify-between text-lg"><span>Total</span><strong>{{ formatPrice(cart.total) }}</strong></div>
     </div>
     <PrescriptionNotice v-if="cart.hasPrescription" class="mt-5" />
