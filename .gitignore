@@ -10,3 +10,14 @@ vendor/
 *.zip
 *.log
 .DS_Store
+
+# Signing keys and their passwords (Android upload key, certificates) never go into Git
+*.jks
+*.keystore
+*.pem
+*.p12
+key.properties
+
+# Local tool settings and build logs
+.claude/
+build_log.txt
