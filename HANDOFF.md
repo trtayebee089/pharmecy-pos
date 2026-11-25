@@ -18,7 +18,7 @@ cd api
 php artisan migrate                        # 4 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders), 101600 (HR & payroll), 101700 (role descriptions)
 php artisan db:seed                        # DatabaseSeeder: adds the "points" payment method and the three
                                            # membership plans (Silver/Gold/Platinum) INACTIVE with 0 discount
-php vendor/bin/pest                        # expect 177 passing (also on MySQL: -c phpunit.mysql.xml)
+php vendor/bin/pest                        # expect 206 passing (also on MySQL: -c phpunit.mysql.xml)
 php artisan db:seed --class=DemoSeeder     # dev only: 5 Dhaka shipping zones, 2 riders, 2 departments, 3 employees
 ```
 
@@ -39,10 +39,16 @@ started from `.claude/launch.json` (`redpharma-mysql`, before the API). `api/.en
 databases `redpharma_pos` and `redpharma_pos_test`, user `redpharma`; the old SQLite settings are kept in the
 ignored `api/.env.sqlite.bak`.
 
-**Next task:** §5 item 1, **Customer channel `/api/v1` + legacy bridge**: the API for the website and Android app
-(customer sign-in, catalogue, checkout through `OnlineOrders::place` with server pricing, order tracking, rewards), and a
-bridge so the legacy website/app keep working until they are rebuilt. Read `docs/api-architecture.md` and
-`docs/rebuild/rebuild-architecture.md` (legacy bridge) first; ask the owner about customer sign-in (OTP?) and checkout rules.
+**Customer channel done (home PC, 25 Nov 2026 night):** `/api/v1` for the website and app, the installed app's legacy
+paths, the website switched to `/api/v1`, small app-source fixes. After `git pull`: `cd api && php artisan migrate`
+(1 new additive migration `2026_11_25_101800`: customer passwords, password-reset codes, account-removal requests,
+discount/points/idempotency columns on online orders), `php vendor/bin/pest` → 206. Website locally:
+`cd web && npm install && npm run dev` (Vite proxies `/api` to `http://localhost:8000`; no `.env` needed).
+Rules: §3 "Customer channel". Endpoints: `api/README.md` "Customer API".
+
+**Next task:** §5 item 1, **data migration** (ETL per `docs/rebuild/data-migration-plan.md`). Before going live with the
+customer channel: a real mailer (reset codes), the website origin in `CORS_ALLOWED_ORIGINS`, and an app build tested on a
+phone (Flutter is not installed on the home PC; the app-source changes are unbuilt).
 
 ---
 
@@ -163,7 +169,7 @@ Engineering decisions taken during the build (change only on purpose):
   - **Source**: staff place phone/WhatsApp orders (Online orders › New phone order); the website and app will call the
     same `place()` through `/api/v1` later. Prices are fixed at placement from the retail list; shipping from the active
     zone (free at or above its minimum). Customer matched by normalised phone, created if new. Sellable stock is checked
-    at placement but only taken at confirm. No group/membership discount or points on online orders yet.
+    at placement but only taken at confirm. Website/app orders of signed-in customers get the customer discount and may redeem points (see "Customer channel" below); phone orders get neither.
   - **Stock leaves once, at confirm**: a sale (channel = order channel, `OO-` order number kept on the order) is posted
     with FEFO batches from the **online branch** (setting `online_orders.warehouseId`, chosen on Delivery › Shipping
     zones). Cancelling before delivery voids that sale (the counter's time window does not apply) and puts the stock
@@ -210,6 +216,20 @@ Engineering decisions taken during the build (change only on purpose):
   - One append-only `reward_ledger` + `reward_wallets` projection under lock (`App\Services\RewardLedger`); spending and
     expiry consume the oldest-expiring points first; `php artisan loyalty:expire` (scheduled daily 00:15) expires points
     and memberships. Production needs the Laravel scheduler (`schedule:run` every minute).
+- Customer channel (owner decisions, 25 Nov 2026), `routes/customer.php`, details in `api/README.md` "Customer API":
+  - **New `/api/v1` + legacy paths**: the website (`web/`) and the app source (`app/`) call `/api/v1`; the paths and
+    response shapes the *installed* Android app uses are served too (`LegacyAppController`) until old installs age out.
+    This replaces the planned DB-sync legacy bridge.
+  - **Sign-in**: phone or email + password; forgot password sends a 6-digit code to the account's **email** (no SMS).
+    A customer without an email cannot reset online (staff add one at the counter).
+  - **Prices**: server rules only. Retail price per piece + zone shipping. The customer discount (group / membership
+    per the reward settings) and reward-point redemption apply to **signed-in** customers only; guests pay retail
+    (the old 5 % web/app discount is gone).
+  - **Guests may order**; the order is linked to the customer with that phone, but a guest gets no token, no points,
+    no discount and no account access. Registering an existing phone is refused (no takeover); such a customer adds an
+    email at checkout or the counter and uses "forgot password".
+  - Points are taken from the wallet when the order is placed (and given back if it is cancelled); confirming posts
+    them as a `points` payment on the sale. Membership renewal is at the counter (online answers 422).
 
 ## 4. What is done
 
@@ -223,7 +243,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (177 Pest tests passing)
+### Laravel API (`api/`) – live slices (206 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -248,6 +268,7 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | HR & payroll: employees, departments, designations, holidays, attendance (day + month), payroll runs (draft → approved → paid, manual additions), salary advances with installment/full recovery, payroll settings | live |
 | Administration: users (temporary passwords, enable/disable, reset), roles & permissions, warehouses, general settings (rounding, stock switches), POS settings (layout, payment methods, invoice, printers), my account | live |
 | Dashboard summary | live |
+| Customer channel `/api/v1` (website + app): accounts with email reset codes, catalogue, guest/member checkout, orders, tracking, reorder, rewards, membership; legacy paths of the installed app | live |
 
 Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (17 migrations). The database is **MySQL/MariaDB**
 (`redpharma_pos`, tests also run on `redpharma_pos_test`); all tests pass on MariaDB 10.11, MySQL 8.0 and SQLite.
@@ -261,10 +282,19 @@ Still on mocks: the inventory reorder suggestions screen and voiding a sale retu
 
 ## 5. What needs to be built (suggested order)
 
-1. **Customer channel `/api/v1`** (website/app checkout calls `OnlineOrders::place`, order tracking by code) for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+1. **Data migration** (ETL per `docs/rebuild/data-migration-plan.md`). Legacy customers arrive without passwords: they
+   set one with "forgot password" (needs an email on file) — plan how emails are collected.
 2. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
+- Customer channel: online orders **earn** no reward points yet (redeeming works); reset codes need a real mailer in
+  production (`MAIL_*`); account-removal requests are stored (`account_removal_requests`) but the POS has no screen to
+  handle them; the website's "Request a medicine" form and prescription upload have no API (the form still only shows
+  a toast); the website needs its origin added to `CORS_ALLOWED_ORIGINS` when it is served from another domain.
+- Android app (`app/`): the source still calls the legacy paths (served by the API); only checkout was touched (sends
+  the delivery area and `Accept`, no 5 % guest discount, safe rate parsing). Unbuilt and untested here — build and
+  test on a phone before release. Moving it to `/api/v1` and adding the current password to "change password" is
+  the next app task; the legacy routes can go once old installs have aged out.
 - Overdraw checks use the account's current balance, so an expense or transfer backdated to before the money arrived
   can show a negative balance on historic statements and balance sheets.
 - Cash expenses are not tied to a cash register session (use the register's cash out for drawer money).
@@ -281,7 +311,7 @@ Small open items:
 - Decide whether selling requires an open register.
 - HR: payroll is paid from one account per run; salary expense is booked to the first active branch (no per-branch
   split yet); attendance has no check-in device integration (entered on the Attendance page).
-- Online orders: no discounts or reward points on online orders yet; delivery partners (Pathao, Steadfast, RedX) are
+- Online orders: phone orders get no discount or points (only website/app orders of signed-in customers do); delivery partners (Pathao, Steadfast, RedX) are
   only a label on the zone (no courier integration); the fulfilment board has no "New phone order" button (it is on the
   Online orders page).
 - Loyalty: the POS has no screen yet to give a customer a membership by hand (`POST /loyalty/customers/{id}/membership`
