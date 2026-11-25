@@ -58,10 +58,13 @@ const total = computed(() => groups.value.reduce((s, g) => s + g.permissions.len
 async function save() {
   if (!role.value) return
   saving.value = true
-  await api.saveRole(role.value)
-  saving.value = false
-  dirty.value = false
-  toast.success('Role saved', `${role.value.name}: ${role.value.permissions.length} permissions · max discount ${role.value.maxDiscountPct}%`)
+  try {
+    await api.saveRole(role.value)
+    dirty.value = false
+    toast.success('Role saved', `${role.value.name}: ${role.value.permissions.length} permissions · max discount ${role.value.maxDiscountPct}%`)
+  }
+  catch (e: any) { toast.error('Role not saved', e?.message) }
+  finally { saving.value = false }
 }
 
 // ---- Row actions ----
@@ -77,17 +80,23 @@ async function saveDetails() {
   const r = editTarget.value
   if (!r || !editForm.name.trim()) return
   if (roles.value.some(x => x.id !== r.id && x.name.toLowerCase() === editForm.name.trim().toLowerCase())) { toast.warning('A role with that name exists'); return }
-  await writes.updateRoleDetails(r.id, { name: editForm.name.trim(), description: editForm.description })
-  Object.assign(r, { name: editForm.name.trim(), description: editForm.description })
-  editOpen.value = false
-  toast.success('Role updated', r.name)
+  try {
+    await writes.updateRoleDetails(r.id, { name: editForm.name.trim(), description: editForm.description })
+    Object.assign(r, { name: editForm.name.trim(), description: editForm.description })
+    editOpen.value = false
+    toast.success('Role updated', r.name)
+  }
+  catch (e: any) { toast.error('Role not updated', e?.message) }
 }
 async function duplicate(r: Role) {
   const copy = { name: `${r.name} (copy)`, description: r.description, permissions: [...r.permissions], maxDiscountPct: r.maxDiscountPct }
-  const { id } = await writes.createRole(copy, crypto.randomUUID())
-  roles.value.push({ id, ...copy, users: 0 })
-  selectedId.value = id
-  toast.success('Role duplicated', `${copy.name}: adjust its permissions and save.`)
+  try {
+    const { id } = await writes.createRole(copy, crypto.randomUUID())
+    roles.value.push({ id, ...copy, users: 0 })
+    selectedId.value = id
+    toast.success('Role duplicated', `${copy.name}: adjust its permissions and save.`)
+  }
+  catch (e: any) { toast.error('Role not duplicated', e?.message) }
 }
 async function removeRole(r: Role) {
   const { ok } = await ask({ title: `Delete role ${r.name}?`, description: 'Only roles with no users can be deleted.', confirmLabel: 'Delete role' })

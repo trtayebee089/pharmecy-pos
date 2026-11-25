@@ -92,7 +92,7 @@ const rewardDefaults = (): RewardPointConfig => ({
 })
 
 export function useSettingsApi() {
-  const api = useApi()
+  const api = useApi('admin')
   const posStore = useState<PosConfig | null>('mock-pos-config', () => null)
   const rewardStore = useState<RewardPointConfig | null>('mock-reward-config', () => null)
   return {

@@ -19,9 +19,9 @@ async function save() {
   if (!s.value) return
   if (s.value.criticalExpiryDays >= s.value.nearExpiryDays) { toast.error('Check expiry thresholds', 'Critical days must be lower than near-expiry days.'); return }
   saving.value = true
-  await api.saveSettings(s.value)
-  saving.value = false
-  toast.success('Settings saved', 'They apply to every counter immediately.')
+  try { await api.saveSettings(s.value); toast.success('Settings saved', 'They apply to every counter immediately.') }
+  catch (e: any) { toast.error('Settings not saved', e?.message) }
+  finally { saving.value = false }
 }
 </script>
 
@@ -39,10 +39,8 @@ async function save() {
             <UiInput v-model.number="s.nearExpiryDays" type="number" label="Near-expiry (days)" hint="Amber warnings and dashboard count" />
             <UiInput v-model.number="s.criticalExpiryDays" type="number" label="Critical (days)" hint="Red warnings" />
           </div>
-          <div class="flex items-start justify-between gap-4 rounded-xl bg-slate-50 p-3">
-            <div><p class="flex items-center gap-1.5 text-sm font-medium"><Lock class="size-3.5 text-slate-400" />Block sale of expired batches</p><p class="mt-0.5 text-[12.5px] text-slate-500">Always on: decided business rule (R3)</p></div>
-            <UiBadge tone="success">On</UiBadge>
-          </div>
+          <UiSwitch v-model="s.blockExpiredSale" label="Block sale of expired batches" description="Recommended. When off, expired batches can be sold, but only after all unexpired stock of the product" />
+          <p v-if="!s.blockExpiredSale" class="rounded-xl bg-rose-50 px-3 py-2 text-[12.5px] text-rose-700">Expired medicines can now be sold. Switch this back on unless you have a reason.</p>
           <UiSwitch v-model="s.allowNegativeStock" label="Allow selling without stock" description="Not recommended: creates negative balances that must be corrected" />
         </div>
       </UiSection>

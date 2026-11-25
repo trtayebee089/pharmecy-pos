@@ -7,6 +7,8 @@ export interface AuthUser {
   role: string
   permissions: string[] // '*' = all (Admin)
   warehouses: { id: number; name: string }[]
+  /** Set by an admin (temporary password): only the password page is usable until it is changed. */
+  mustChangePassword?: boolean
 }
 
 /**

@@ -31,7 +31,7 @@ let csrfReady: Promise<void> | null = null
  * that domain to the real API, so finished endpoints can be used while the
  * rest of the UI still runs on mocks. With mocks off, everything is live.
  */
-export type ApiDomain = 'auth' | 'catalog' | 'customers' | 'sales' | 'dashboard' | 'purchases' | 'registers' | 'loyalty' | 'orders' | 'hr' | 'inventory' | 'finance' | 'reports'
+export type ApiDomain = 'auth' | 'catalog' | 'customers' | 'sales' | 'dashboard' | 'purchases' | 'registers' | 'loyalty' | 'orders' | 'hr' | 'admin' | 'inventory' | 'finance' | 'reports'
 
 export function useApi(domain?: ApiDomain) {
   const config = useRuntimeConfig()
@@ -69,6 +69,12 @@ export function useApi(domain?: ApiDomain) {
       if (status === 401) {
         useAuthStore().clear()
         await navigateTo('/login')
+      }
+      // Temporary password: the API only allows the account pages until it is changed.
+      if (status === 403 && body.code === 'password_change_required') {
+        const auth = useAuthStore()
+        if (auth.user) auth.user.mustChangePassword = true
+        await navigateTo('/account/password')
       }
       throw new ApiError(body.message ?? (status ? `Request failed (${status})` : 'Network error, check the connection'), status, body.errors ?? {})
     }

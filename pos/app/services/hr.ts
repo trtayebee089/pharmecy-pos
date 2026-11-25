@@ -19,7 +19,7 @@ export function useHolidaysResource() {
   return useResource<Holiday>('hr/holidays', async () => (await hrMocks()).holidays, 'hr')
 }
 export function useWarehousesResource() {
-  return useResource<Warehouse>('admin/warehouses', async () => (await hrMocks()).warehouses)
+  return useResource<Warehouse>('admin/warehouses', async () => (await hrMocks()).warehouses, 'admin')
 }
 
 export function useAttendanceApi() {
@@ -173,9 +173,10 @@ export function usePayrollApi() {
  * and disabling users are permission-checked by the API (roles.manage / users.view).
  */
 export function useUserAdminApi() {
-  const api = useApi()
+  const api = useApi('admin')
   return {
-    async save(u: { id?: number; name: string; username: string; email: string; role: string; warehouses: string[] }, idempotencyKey: string): Promise<{ id: number }> {
+    /** New users need a temporary password (emailed to them, changed at first sign-in). */
+    async save(u: { id?: number; name: string; username: string; email: string; role: string; warehouses: string[]; password?: string }, idempotencyKey: string): Promise<{ id: number }> {
       if (!api.useMocks) return u.id ? api.put(`/admin/users/${u.id}`, u) : api.post('/admin/users', u, idempotencyKey)
       await mockDelay(450)
       return { id: u.id ?? Date.now() }
@@ -200,15 +201,15 @@ export function useUserAdminApi() {
       await mockDelay(350)
     },
     /** Sends a reset link and forces a new password at next sign-in. No password is ever shown. */
-    async resetPassword(id: number): Promise<void> {
-      if (!api.useMocks) return api.post(`/admin/users/${id}/password-reset`)
+    async resetPassword(id: number, password: string): Promise<void> {
+      if (!api.useMocks) return api.post(`/admin/users/${id}/password-reset`, { password })
       await mockDelay(400)
     },
   }
 }
 
 export function useAccountApi() {
-  const api = useApi()
+  const api = useApi('auth')
   return {
     async profile(): Promise<AccountProfile> {
       if (!api.useMocks) return api.get('/me/profile')

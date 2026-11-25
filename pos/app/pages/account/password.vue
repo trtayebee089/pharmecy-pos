@@ -52,6 +52,8 @@ async function submit() {
   saving.value = true
   try {
     await api.changePassword(current.value, next.value)
+    const auth = useAuthStore()
+    if (auth.user) auth.user.mustChangePassword = false
     current.value = next.value = confirm.value = ''
     done.value = true
     toast.success('Password changed', 'Other sessions were signed out.')

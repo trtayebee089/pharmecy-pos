@@ -83,6 +83,8 @@ export const useCartStore = defineStore('cart', {
     lastReceipt: null as ReceiptSnapshot | null,
     /** Reward rules (points at checkout, membership discount mode); loaded by the counter. */
     rewardRules: null as RewardPointConfig | null,
+    /** Cash rounding step from General settings (0, 0.5 or 1 taka); the API rounds the same way. */
+    roundTo: 0,
   }),
   getters: {
     unitOf: () => (l: CartLine) => l.product.units.find(u => u.id === l.unitId) ?? l.product.units[0]!,
@@ -132,7 +134,11 @@ export const useCartStore = defineStore('cart', {
     },
     subtotal(): number { return this.lines.reduce((s, l) => s + this.lineGross(l), 0) },
     lineDiscounts(): number { return this.lines.reduce((s, l) => s + (this.lineGross(l) - this.lineTotal(l)), 0) },
-    total(): number { return Math.max(0, Math.round((this.subtotal - this.lineDiscounts - this.orderDiscount) * 100) / 100) },
+    /** Total before cash rounding. */
+    exactTotal(): number { return Math.max(0, Math.round((this.subtotal - this.lineDiscounts - this.orderDiscount) * 100) / 100) },
+    /** Payable total, rounded like the server (nearest 0.50 or 1 taka when set). */
+    total(): number { return this.roundTo > 0 ? Math.round(Math.round(this.exactTotal / this.roundTo) * this.roundTo * 100) / 100 : this.exactTotal },
+    rounding(): number { return Math.round((this.total - this.exactTotal) * 100) / 100 },
     itemCount: s => s.lines.length,
     hasShortage(): boolean { return this.lines.some(l => this.allocation(l).short > 0) },
   },
@@ -142,6 +148,8 @@ export const useCartStore = defineStore('cart', {
       if (this.rewardRules && !force) return
       try { this.rewardRules = await useSettingsApi().rewards() }
       catch { this.rewardRules = null }
+      try { this.roundTo = Number((await useAdminApi().settings()).roundTo) || 0 }
+      catch { this.roundTo = 0 }
     },
     add(product: Product, unitId?: number): 'added' | 'merged' | 'no-stock' {
       if (product.stockBase <= 0) return 'no-stock'

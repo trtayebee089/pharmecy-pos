@@ -152,7 +152,7 @@ export function useAdjustmentsApi() {
 }
 
 export function useAdminApi() {
-  const api = useApi()
+  const api = useApi('admin')
   return {
     async users(): Promise<StaffUser[]> {
       if (api.useMocks) { await mockDelay(); return (await extra()).users }
