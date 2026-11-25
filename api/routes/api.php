@@ -11,6 +11,7 @@ use App\Http\Controllers\Pos\FinanceController;
 use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\LoyaltyController;
+use App\Http\Controllers\Pos\OnlineOrderController;
 use App\Http\Controllers\Pos\ProductController;
 use App\Http\Controllers\Pos\PurchaseController;
 use App\Http\Controllers\Pos\PurchaseOrderController;
@@ -60,6 +61,35 @@ Route::prefix('pos/v1')->group(function () {
                 Route::post('members/{member}/cancel', [LoyaltyController::class, 'cancel']);
             });
         });
+        // Online orders (phone orders now, website/app later) and delivery.
+        Route::middleware('can:orders.view')->group(function () {
+            Route::get('orders', [OnlineOrderController::class, 'index']);
+            Route::get('orders/settings', [OnlineOrderController::class, 'settings']);
+            Route::get('orders/{order}', [OnlineOrderController::class, 'show'])->whereNumber('order');
+            Route::get('delivery/riders', [OnlineOrderController::class, 'riders']);
+            Route::get('delivery/riders/{rider}', [OnlineOrderController::class, 'riderShow'])->whereNumber('rider');
+            Route::get('delivery/riders/{rider}/cash', [OnlineOrderController::class, 'riderCash']);
+            Route::get('delivery/zones', [OnlineOrderController::class, 'zones']);
+            Route::get('delivery/zones/{zone}', [OnlineOrderController::class, 'zoneShow'])->whereNumber('zone');
+        });
+        Route::middleware('can:orders.fulfil')->group(function () {
+            Route::post('orders', [OnlineOrderController::class, 'store'])->middleware('idempotent');
+            Route::post('orders/{order}/status', [OnlineOrderController::class, 'status'])->middleware('idempotent');
+            Route::post('orders/{order}/rider', [OnlineOrderController::class, 'rider'])->middleware('idempotent');
+        });
+        Route::middleware('can:riders.manage')->group(function () {
+            Route::post('delivery/riders', [OnlineOrderController::class, 'saveRider']);
+            Route::put('delivery/riders/{rider}', [OnlineOrderController::class, 'saveRider']);
+            Route::delete('delivery/riders/{rider}', [OnlineOrderController::class, 'deleteRider']);
+            Route::post('delivery/riders/{rider}/handover', [OnlineOrderController::class, 'handover'])->middleware('idempotent');
+        });
+        Route::middleware('can:zones.manage')->group(function () {
+            Route::post('delivery/zones', [OnlineOrderController::class, 'saveZone']);
+            Route::put('delivery/zones/{zone}', [OnlineOrderController::class, 'saveZone']);
+            Route::delete('delivery/zones/{zone}', [OnlineOrderController::class, 'deleteZone']);
+            Route::put('orders/settings', [OnlineOrderController::class, 'saveSettings']);
+        });
+
         // The POS reads the reward rules to offer points at checkout; only settings managers change them.
         Route::get('settings/reward-points', [LoyaltyController::class, 'settings']);
         Route::put('settings/reward-points', [LoyaltyController::class, 'saveSettings'])->middleware('can:settings.manage');

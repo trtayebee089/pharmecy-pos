@@ -41,9 +41,14 @@ class SaleReversalService
         private RewardLedger $rewards,
     ) {}
 
-    public function void(User $user, Sale $sale, string $reason): Sale
+    /**
+     * $forOrder: the sale behind an online order being cancelled before delivery. The
+     * counter's time window (open register session / same day) does not apply: the goods
+     * never left the shop, or came back with the rider.
+     */
+    public function void(User $user, Sale $sale, string $reason, bool $forOrder = false): Sale
     {
-        return DB::transaction(function () use ($user, $sale, $reason) {
+        return DB::transaction(function () use ($user, $sale, $reason, $forOrder) {
             $sale = Sale::whereKey($sale->id)->lockForUpdate()->firstOrFail();
             if ($sale->status !== 'completed') {
                 throw ValidationException::withMessages(['sale' => 'Only completed sales can be voided.']);
@@ -54,7 +59,9 @@ class SaleReversalService
             if (CustomerPayments::hasCollections($sale->id)) {
                 throw ValidationException::withMessages(['sale' => 'A due payment was collected on this sale later. Use a return instead.']);
             }
-            if ($sale->session_id) {
+            if ($forOrder) {
+                // no time window for an undelivered online order
+            } elseif ($sale->session_id) {
                 if (CashRegisterSession::whereKey($sale->session_id)->value('status') !== 'open') {
                     throw ValidationException::withMessages(['sale' => 'The register session of this sale is closed. Use a return instead.']);
                 }

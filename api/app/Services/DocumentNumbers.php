@@ -14,7 +14,7 @@ class DocumentNumbers
 {
     private const PREFIX = ['sale' => 'S', 'purchase' => 'P', 'purchase_order' => 'PO', 'payment' => 'PAY', 'sale_return' => 'R', 'purchase_return' => 'PR',
         'stock_adjustment' => 'ADJ', 'stock_count' => 'SC', 'stock_transfer' => 'TR', 'held_sale' => 'H', 'purchase_order_draft' => 'POD',
-        'money_transfer' => 'MT', 'expense' => 'EXP', 'income' => 'INC'];
+        'money_transfer' => 'MT', 'expense' => 'EXP', 'income' => 'INC', 'online_order' => 'OO'];
 
     public function next(string $docType, Warehouse $warehouse): string
     {

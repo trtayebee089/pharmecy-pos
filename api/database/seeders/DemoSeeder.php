@@ -13,6 +13,8 @@ use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\ProductPrice;
 use App\Models\ProductUnit;
+use App\Models\Rider;
+use App\Models\ShippingZone;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
@@ -119,6 +121,14 @@ class DemoSeeder extends Seeder
             ]);
             $u->syncRoles([$role]);
             $u->warehouses()->sync($role === 'Admin' ? [$dhk->id, $utr->id] : [$dhk->id]);
+        }
+
+        // Delivery: a few Dhaka zones and two riders (demo only).
+        foreach ([['Dhanmondi', 60, 1000], ['Mohammadpur', 70, 1000], ['Uttara', 100, 1500], ['Gulshan', 90, 1500], ['Mirpur', 80, 1200]] as [$thana, $rate, $free]) {
+            ShippingZone::firstOrCreate(['division' => 'Dhaka', 'district' => 'Dhaka', 'thana' => $thana], ['rate' => $rate, 'free_shipping_min' => $free, 'partner' => 'own_rider']);
+        }
+        foreach ([['Rasel Mia', '01711000001'], ['Jamal Uddin', '01811000002']] as [$name, $phone]) {
+            Rider::firstOrCreate(['phone' => $phone], ['name' => $name, 'status' => 'active']);
         }
 
         if (Product::exists()) {

@@ -1,0 +1,359 @@
+<?php
+
+namespace App\Services;
+
+use App\Http\Controllers\Pos\CustomerController;
+use App\Models\Account;
+use App\Models\AccountTransaction;
+use App\Models\AuditLog;
+use App\Models\Customer;
+use App\Models\OnlineOrder;
+use App\Models\OnlineOrderHistory;
+use App\Models\OnlineOrderLine;
+use App\Models\PartyLedgerEntry;
+use App\Models\Payment;
+use App\Models\PaymentAllocation;
+use App\Models\PaymentMethod;
+use App\Models\ProductUnit;
+use App\Models\Rider;
+use App\Models\RiderCashEntry;
+use App\Models\Sale;
+use App\Models\SaleItem;
+use App\Models\SaleItemBatch;
+use App\Models\Setting;
+use App\Models\ShippingZone;
+use App\Models\User;
+use App\Models\Warehouse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * Online orders (W17), owner decisions 25 Nov 2026:
+ *
+ * - Orders are placed by staff (phone/WhatsApp) for now; the website and app will
+ *   place them through the same `place()` once the customer channel exists.
+ *   Prices are fixed at placement from the retail list (server-side), shipping from
+ *   the active zone (free at or above its minimum).
+ * - Stock leaves once, at **confirm**: a sale (channel = order channel) is posted
+ *   with FEFO batch allocation from the **online branch** (setting
+ *   `online_orders.warehouseId`). Cancelling before delivery voids that sale and
+ *   puts the stock back into the same batches.
+ * - Cash on delivery: delivered = a cash payment on the sale with no account yet,
+ *   held by the rider (`rider_cash_entries` collect). A **handover** moves the cash
+ *   into Cash in hand. Held = collected − handed over.
+ *
+ * Status flow: pending → confirmed → packed → in_transit → delivered; any open
+ * order can be cancelled with a reason. in_transit needs an active rider.
+ */
+class OnlineOrders
+{
+    public const NEXT = [
+        'pending' => ['confirmed', 'cancelled'],
+        'confirmed' => ['packed', 'cancelled'],
+        'packed' => ['in_transit', 'cancelled'],
+        'in_transit' => ['delivered', 'cancelled'],
+    ];
+
+    public function __construct(
+        private Pricing $pricing,
+        private StockLedger $stock,
+        private DocumentNumbers $numbers,
+        private SaleReversalService $reversals,
+    ) {}
+
+    // ---------------------------------------------------------------- settings
+
+    public function warehouseId(): int
+    {
+        $stored = Setting::where(['scope' => 'global', 'scope_id' => 0, 'key' => 'online_orders'])->value('value');
+        $stored = is_string($stored) ? json_decode($stored, true) : (array) $stored;
+        $id = (int) ($stored['warehouseId'] ?? 0);
+
+        return Warehouse::where('is_active', true)->whereKey($id)->exists()
+            ? $id
+            : (int) Warehouse::where('is_active', true)->orderBy('id')->value('id');
+    }
+
+    public function setWarehouse(int $warehouseId): void
+    {
+        if (! Warehouse::where('is_active', true)->whereKey($warehouseId)->exists()) {
+            throw ValidationException::withMessages(['warehouseId' => 'Choose an active branch.']);
+        }
+        Setting::updateOrCreate(['scope' => 'global', 'scope_id' => 0, 'key' => 'online_orders'], ['value' => ['warehouseId' => $warehouseId]]);
+    }
+
+    // ---------------------------------------------------------------- placing
+
+    /** @param  array<string, mixed>  $data  validated */
+    public function place(?User $user, array $data): OnlineOrder
+    {
+        $warehouse = Warehouse::findOrFail($this->warehouseId());
+        $zone = ShippingZone::where('is_active', true)->find($data['zoneId']);
+        if (! $zone) {
+            throw ValidationException::withMessages(['zoneId' => 'Choose an active delivery zone.']);
+        }
+        $customer = $this->customer($data);
+
+        $units = ProductUnit::with('product')->whereIn('id', array_column($data['lines'], 'unitId'))->get()->keyBy('id');
+        $prices = $this->pricing->forUnits($units->keys()->all());
+        $lines = [];
+        $need = [];
+        foreach ($data['lines'] as $i => $l) {
+            $unit = $units->get((int) $l['unitId']);
+            if (! $unit || $unit->product_id !== (int) $l['productId'] || ! $unit->product?->is_active) {
+                throw ValidationException::withMessages(["lines.$i.unitId" => 'This product or unit is not available.']);
+            }
+            if (! $prices->has($unit->id)) {
+                throw ValidationException::withMessages(["lines.$i.unitId" => "{$unit->product->name} has no selling price for {$unit->label}."]);
+            }
+            $qtyBase = (float) $l['qty'] * $unit->factor;
+            if (abs($qtyBase - round($qtyBase)) > 1e-9) {
+                throw ValidationException::withMessages(["lines.$i.qty" => 'Quantity must be a whole number of pieces.']);
+            }
+            $priceP = SaleService::paisa($prices->get($unit->id));
+            $lines[] = ['unit' => $unit, 'qty' => (float) $l['qty'], 'qtyBase' => (int) round($qtyBase), 'price' => $prices->get($unit->id), 'total' => (int) round($priceP * (float) $l['qty'])];
+            $need[$unit->product_id] = ($need[$unit->product_id] ?? 0) + (int) round($qtyBase);
+        }
+        foreach ($need as $productId => $qty) {
+            $available = (int) StockLedger::sellableQuery($warehouse->id, $productId)->sum('stock_balances.qty_base');
+            if ($available < $qty) {
+                $name = $units->firstWhere('product_id', $productId)->product->name;
+                throw ValidationException::withMessages(['lines' => "{$name}: only {$available} pieces in stock at {$warehouse->name}."]);
+            }
+        }
+
+        $subtotal = array_sum(array_column($lines, 'total'));
+        $shipping = $zone->free_shipping_min !== null && $subtotal >= SaleService::paisa($zone->free_shipping_min) ? 0 : SaleService::paisa($zone->rate);
+
+        return DB::transaction(function () use ($user, $data, $warehouse, $zone, $customer, $lines, $subtotal, $shipping) {
+            $order = OnlineOrder::create([
+                'number' => $this->numbers->next('online_order', $warehouse),
+                'tracking_code' => $this->trackingCode(),
+                'legacy_ref' => $data['legacyRef'] ?? null,
+                'channel' => $data['channel'] ?? 'phone',
+                'customer_id' => $customer->id, 'warehouse_id' => $warehouse->id,
+                'phone' => $customer->phone ?? $data['phone'], 'address' => $data['address'],
+                'zone_id' => $zone->id, 'division' => $zone->division, 'district' => $zone->district, 'thana' => $zone->thana,
+                'status' => 'pending', 'subtotal' => SaleService::money($subtotal), 'shipping' => SaleService::money($shipping),
+                'grand_total' => SaleService::money($subtotal + $shipping), 'placed_at' => now(),
+                'note' => $data['note'] ?? null, 'created_by' => $user?->id,
+            ]);
+            foreach ($lines as $l) {
+                OnlineOrderLine::create([
+                    'online_order_id' => $order->id, 'product_id' => $l['unit']->product_id, 'product_unit_id' => $l['unit']->id,
+                    'description' => trim($l['unit']->product->name.' '.$l['unit']->product->strength), 'qty' => $l['qty'],
+                    'qty_base' => $l['qtyBase'], 'unit_price' => $l['price'], 'line_total' => SaleService::money($l['total']),
+                ]);
+            }
+            $this->history($order, 'pending', 'Order placed by '.($order->channel === 'phone' ? 'phone' : $order->channel), $user);
+
+            return $order;
+        });
+    }
+
+    // ---------------------------------------------------------------- status
+
+    public function transition(User $user, OnlineOrder $order, string $to, ?string $note): OnlineOrder
+    {
+        return DB::transaction(function () use ($user, $order, $to, $note) {
+            $order = OnlineOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if (! in_array($to, self::NEXT[$order->status] ?? [], true)) {
+                throw ValidationException::withMessages(['status' => in_array($order->status, ['delivered', 'cancelled'], true)
+                    ? 'This order is already closed.'
+                    : "An order that is {$order->status} cannot be marked {$to}."]);
+            }
+
+            match ($to) {
+                'confirmed' => $this->confirm($user, $order),
+                'in_transit' => $this->assertRider($order),
+                'delivered' => $this->deliver($user, $order),
+                'cancelled' => $this->cancel($user, $order, $note),
+                default => null,
+            };
+            $order->update(['status' => $to]);
+            $this->history($order, $to, $note, $user);
+
+            return $order->fresh();
+        });
+    }
+
+    public function assignRider(User $user, OnlineOrder $order, int $riderId): OnlineOrder
+    {
+        if (in_array($order->status, ['delivered', 'cancelled'], true)) {
+            throw ValidationException::withMessages(['rider_id' => 'This order is already closed.']);
+        }
+        $rider = Rider::where('status', 'active')->find($riderId);
+        if (! $rider) {
+            throw ValidationException::withMessages(['rider_id' => 'Choose an active rider.']);
+        }
+        $order->update(['rider_id' => $rider->id]);
+        $this->history($order, $order->status, 'Rider: '.$rider->name, $user);
+
+        return $order->fresh();
+    }
+
+    /** Cash still with the rider (collected on delivery minus handed over). */
+    public static function cashHeld(int $riderId): float
+    {
+        $rows = RiderCashEntry::where('rider_id', $riderId)->groupBy('type')->pluck(DB::raw('SUM(amount)'), 'type');
+
+        return round((float) ($rows['collect'] ?? 0) - (float) ($rows['handover'] ?? 0), 2);
+    }
+
+    public function handover(User $user, Rider $rider, float $amount, ?string $note): RiderCashEntry
+    {
+        return DB::transaction(function () use ($user, $rider, $amount, $note) {
+            Rider::whereKey($rider->id)->lockForUpdate()->first();
+            $held = self::cashHeld($rider->id);
+            if ($amount <= 0 || SaleService::paisa($amount) > SaleService::paisa($held)) {
+                throw ValidationException::withMessages(['amount' => 'The rider holds '.SaleService::money(SaleService::paisa($held)).'.']);
+            }
+            $cash = Account::where('type', 'cash')->orderByDesc('is_default')->firstOrFail();
+            $entry = RiderCashEntry::create([
+                'rider_id' => $rider->id, 'type' => 'handover', 'amount' => round($amount, 2), 'account_id' => $cash->id,
+                'note' => $note, 'created_by' => $user->id, 'created_at' => now(),
+            ]);
+            AccountTransaction::create([
+                'account_id' => $cash->id, 'txn_date' => now()->toDateString(), 'direction' => 'in', 'amount' => round($amount, 2),
+                'source_type' => 'rider_handover', 'source_id' => $entry->id, 'note' => 'COD handover: '.$rider->name,
+            ]);
+            AuditLog::record($user->id, 'rider.handover', 'rider', $rider->id, ['amount' => round($amount, 2)]);
+
+            return $entry;
+        });
+    }
+
+    // ---------------------------------------------------------------- internals
+
+    /** Posts the order as a sale and takes the stock (FEFO) from the online branch. */
+    private function confirm(User $user, OnlineOrder $order): void
+    {
+        $order->loadMissing('lines.unit');
+        $grand = SaleService::paisa($order->grand_total);
+        $sale = Sale::create([
+            'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('sale', Warehouse::findOrFail($order->warehouse_id)),
+            'channel' => $order->channel, 'warehouse_id' => $order->warehouse_id, 'customer_id' => $order->customer_id,
+            'cashier_id' => $user->id, 'status' => 'completed', 'sale_date' => now(),
+            'subtotal' => $order->subtotal, 'shipping_total' => $order->shipping, 'grand_total' => $order->grand_total,
+            'paid_total' => 0, 'due_total' => $order->grand_total, 'payment_status' => $grand > 0 ? 'unpaid' : 'paid',
+            'note' => 'Online order '.$order->number,
+        ]);
+        $costTotal = 0.0;
+        foreach ($order->lines as $i => $l) {
+            $item = SaleItem::create([
+                'sale_id' => $sale->id, 'line_type' => 'product', 'product_id' => $l->product_id, 'product_unit_id' => $l->product_unit_id,
+                'description' => $l->description, 'qty' => $l->qty, 'factor' => $l->unit?->factor ?? 1, 'qty_base' => $l->qty_base,
+                'unit_price' => $l->unit_price, 'line_total' => $l->line_total,
+            ]);
+            $lineCost = 0.0;
+            foreach ($this->stock->allocate($order->warehouse_id, $l->product_id, $l->qty_base, "lines.$i.qty") as $part) {
+                $b = $part['balance'];
+                $unitCost = (float) $b->avg_unit_cost;
+                SaleItemBatch::create(['sale_item_id' => $item->id, 'batch_id' => $b->batch_id, 'qty_base' => $part['qty'], 'unit_cost' => $unitCost]);
+                $this->stock->move([
+                    'warehouse_id' => $order->warehouse_id, 'product_id' => $l->product_id, 'batch_id' => $b->batch_id,
+                    'qty_base' => -$part['qty'], 'type' => 'sale', 'unit_cost' => $unitCost,
+                    'source_type' => 'sale', 'source_id' => $sale->id, 'source_line_id' => $item->id, 'created_by' => $user->id,
+                ]);
+                $lineCost += $part['qty'] * $unitCost;
+            }
+            $item->update(['cost_total' => round($lineCost, 2)]);
+            $costTotal += $lineCost;
+        }
+        $sale->update(['cost_total' => round($costTotal, 2)]);
+        PartyLedgerEntry::create([
+            'party_type' => 'customer', 'party_id' => $order->customer_id, 'entry_date' => now()->toDateString(), 'type' => 'invoice',
+            'debit' => $order->grand_total, 'credit' => 0, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number, 'created_by' => $user->id,
+        ]);
+        $order->update(['sale_id' => $sale->id]);
+    }
+
+    /** Cash on delivery: paid on the sale, held by the rider until handover. */
+    private function deliver(User $user, OnlineOrder $order): void
+    {
+        $this->assertRider($order);
+        $sale = Sale::whereKey($order->sale_id)->lockForUpdate()->firstOrFail();
+        $due = SaleService::paisa($sale->due_total);
+        if ($due > 0) {
+            $method = PaymentMethod::where('code', 'cash')->firstOrFail();
+            $money = SaleService::money($due);
+            $payment = Payment::create([
+                'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('payment', Warehouse::findOrFail($order->warehouse_id)),
+                'direction' => 'in', 'party_type' => 'customer', 'party_id' => $order->customer_id,
+                'payment_method_id' => $method->id, 'account_id' => null, // with the rider until handover
+                'amount' => $money, 'paid_at' => now(), 'note' => 'COD '.$order->number.' via '.$order->rider->name, 'created_by' => $user->id,
+            ]);
+            PaymentAllocation::create(['payment_id' => $payment->id, 'allocatable_type' => 'sale', 'allocatable_id' => $sale->id, 'amount' => $money]);
+            PartyLedgerEntry::create([
+                'party_type' => 'customer', 'party_id' => $order->customer_id, 'entry_date' => now()->toDateString(), 'type' => 'payment',
+                'debit' => 0, 'credit' => $money, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number.' COD', 'created_by' => $user->id,
+            ]);
+            $sale->update(['paid_total' => SaleService::money(SaleService::paisa($sale->paid_total) + $due), 'due_total' => 0, 'payment_status' => 'paid']);
+            RiderCashEntry::create([
+                'rider_id' => $order->rider_id, 'type' => 'collect', 'amount' => $money, 'online_order_id' => $order->id,
+                'note' => $order->number, 'created_by' => $user->id, 'created_at' => now(),
+            ]);
+        }
+        $order->update(['delivered_at' => now()]);
+    }
+
+    private function cancel(User $user, OnlineOrder $order, ?string $note): void
+    {
+        if (! $note || mb_strlen(trim($note)) < 3) {
+            throw ValidationException::withMessages(['note' => 'A reason is required to cancel an order.']);
+        }
+        if ($order->sale_id) {
+            $this->reversals->void($user, Sale::findOrFail($order->sale_id), 'Online order cancelled: '.trim($note), forOrder: true);
+        }
+        $order->update(['cancel_reason' => trim($note)]);
+    }
+
+    private function assertRider(OnlineOrder $order): void
+    {
+        if (! $order->rider_id || Rider::whereKey($order->rider_id)->value('status') !== 'active') {
+            throw ValidationException::withMessages(['status' => 'Assign an active rider first.']);
+        }
+    }
+
+    private function customer(array $data): Customer
+    {
+        if (! empty($data['customerId'])) {
+            $c = Customer::where('is_active', true)->where('is_walk_in', false)->find($data['customerId']);
+            if (! $c) {
+                throw ValidationException::withMessages(['customerId' => 'Customer not found.']);
+            }
+
+            return $c;
+        }
+        $phone = CustomerController::normalizePhone((string) ($data['phone'] ?? ''));
+        if (! $phone) {
+            throw ValidationException::withMessages(['phone' => 'Enter a valid Bangladeshi mobile number (01XXXXXXXXX).']);
+        }
+        $c = Customer::where('phone_normalized', $phone)->first();
+        if ($c) {
+            return $c;
+        }
+        if (empty($data['name'])) {
+            throw ValidationException::withMessages(['name' => 'New customer: enter a name.']);
+        }
+        $c = Customer::create(['code' => 'TMP-'.uniqid(), 'name' => trim($data['name']), 'phone' => $phone, 'phone_normalized' => $phone, 'address' => $data['address'] ?? null]);
+        $c->update(['code' => 'C-'.str_pad((string) $c->id, 4, '0', STR_PAD_LEFT)]);
+
+        return $c;
+    }
+
+    private function history(OnlineOrder $order, string $status, ?string $note, ?User $user): void
+    {
+        OnlineOrderHistory::create(['online_order_id' => $order->id, 'status' => $status, 'note' => $note, 'user_id' => $user?->id, 'created_at' => now()]);
+    }
+
+    private function trackingCode(): string
+    {
+        do {
+            $code = 'RP'.strtoupper(Str::random(8));
+        } while (OnlineOrder::where('tracking_code', $code)->exists());
+
+        return $code;
+    }
+}
