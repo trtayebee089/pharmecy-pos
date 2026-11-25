@@ -1,6 +1,6 @@
 # Red Pharma rebuild: handoff
 
-Status as of **25 Nov 2026** on `main`, last feature commit `9b1de8d connect reports in pos`
+Status as of **25 Nov 2026** (evening) on `main`, last feature: loyalty (see §10)
 (everything pushed to `origin` = github.com/trtayebee089/pharmecy-pos).
 
 Read this file first on a new device or in a new AI session. It carries the
@@ -8,42 +8,40 @@ decisions, rules and state that are not obvious from the code.
 
 ---
 
-## 0. Continue here (office PC, 26 Nov 2026)
+## 0. Continue here (after the office PC, 25 Nov 2026 evening)
 
-Work on 25 Nov happened on the home PC (XAMPP). The office PC last saw commit `62dd94b`. To catch up:
+The office PC built **Loyalty** on top of `6b4a7ca`. On any other machine:
 
 ```bash
-git pull                                   # 20 new commits: 2924b79 … 9b1de8d + this handoff
+git pull
 cd api
-composer install                           # no new packages, but harmless
-php artisan migrate                        # 8 new additive migrations (2026_11_25_100600 … 101300)
-php artisan db:seed                        # DatabaseSeeder only: syncs the NEW permissions
-                                           # purchase_returns.create and customer_groups.manage
-php vendor/bin/pest                        # expect 131 passing
-cd ../pos
-npm install
+php artisan migrate                        # 1 new additive migration: 2026_11_25_101400_create_loyalty_tables
+php artisan db:seed                        # DatabaseSeeder: adds the "points" payment method and the three
+                                           # membership plans (Silver/Gold/Platinum) INACTIVE with 0 discount
+php vendor/bin/pest                        # expect 146 passing (also on MySQL: -c phpunit.mysql.xml)
 ```
 
-Then in **`pos/.env`** (not in Git) set the live domains to the full list and restart `npm run dev`:
+Then add `loyalty` to the live domains in **`pos/.env`** and restart `npm run dev`:
 
 ```
-NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports
+NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty
 ```
 
-**Database choice on the office PC.** Since `2924b79` the API defaults to **MySQL/MariaDB** (`api/.env.example`).
-If the office PC still runs on SQLite, either keep SQLite (`DB_CONNECTION=sqlite` in `api/.env` still works) or set up
-MySQL as in `api/README.md` → "Database (MySQL / MariaDB)". MySQL is recommended: it caught two bugs SQLite hid
-(index names over 64 characters, date comparisons). Run `php vendor/bin/pest -c phpunit.mysql.xml` when MySQL is set up.
+Loyalty is **off** until an admin switches it on in Administration › Reward points (the API defaults are inactive,
+membership discount mode `off`), and the three tiers do nothing until an admin activates and prices them in
+Loyalty › Memberships.
 
-**Not in Git (stays on the home PC):** the home PC's demo database contents (test sales for "Farhana Hossain",
-held sale H-DHK1-2026-00001, PO-DHK1-2026-00001, product VERIF250, group "Senior citizen", expense EXP-…-00001),
-`api/.env`, `pos/.env`, and `.claude/launch.json` (dev-server launch config with the home PC's PHP path). None of it is
-needed: `php artisan migrate:fresh --seed --seeder=DemoSeeder` gives a clean demo database anywhere.
+**Office PC database (25 Nov):** MySQL Server 8.0.46 (already installed in `C:\Program Files\MySQL`) runs as a dev
+server with a private data folder `D:\01 REDPHARMA\00 CODEBASE\.mysql80\` (outside the repo: `my.ini`, data, root
+password in `root-password.txt`) on **port 3307**, because XAMPP's old MariaDB 10.4 on that PC may hold 3306. It is
+started from `.claude/launch.json` (`redpharma-mysql`, before the API). `api/.env` there points at 127.0.0.1:3307,
+databases `redpharma_pos` and `redpharma_pos_test`, user `redpharma`; the old SQLite settings are kept in the
+ignored `api/.env.sqlite.bak`.
 
-**Next task:** §5 item 1, **Loyalty** (reward wallets and ledger, membership plans, reward point settings). Contracts:
-`pos/app/services/people.ts` (`useLoyaltyApi`, `/loyalty/*`) and `pos/app/types/people.ts`. When it is live, fill the
-placeholders that read 0 / `none` today: `points` and `membership` in `Present::customers`, the customer profile
-(`CustomerAccountController::show`), and the Customer due / Customer report (`App\Reports\PartyReports`).
+**Next task:** §5 item 1, **Online orders & delivery** (orders, fulfilment board, riders, zones). Contracts:
+`pos/app/services/orders.ts` and `pos/app/types/orders.ts`. Read the legacy web-order flow in
+`docs/pos-business-workflows.md` first (server pricing, membership discount and reward redemption at web checkout)
+and ask the owner before deciding money rules.
 
 ---
 
@@ -142,7 +140,27 @@ Engineering decisions taken during the build (change only on purpose):
   `order_date`) must not get an Eloquent `date` cast without `whereDate`: the cast stores a time and string comparisons
   then fail on SQLite.
 - Reports run on the server over the selected warehouse (or all the user's). A "biller" is the branch (warehouse) an
-  invoice is issued from; memberships/points read `none`/0 until the loyalty module exists.
+  invoice is issued from.
+- Loyalty (owner decisions, 25 Nov 2026), rules in `App\Services\LoyaltySettings` (settings key `reward_points`, edited in
+  Administration › Reward points):
+  - **Earn** on the bill after all discounts, minus the part paid with points, custom items and (optional) discounted
+    lines: `floor(base ÷ soldAmountPerPoint × membership multiplier × best active campaign multiplier)`; bills under
+    `minimumSoldAmount` and walk-ins earn nothing.
+  - **Redeem** = payment method `points` (no money account): the customer must hold at least `minRedeemPoints`, the bill
+    must be at least `minRedeemSaleAmount` (new setting), points pay at most `maxRedeemPercent` of the bill, in whole
+    points (1 point = `pointValue` ৳), checked against the locked wallet.
+  - **Membership discount at the POS** is the admin's choice (`membershipDiscountMode`): `off` (group % only, as
+    legacy), `larger` (larger of group and membership %), `stack` (both, compounded). The manual line discount rule is
+    unchanged (replaces the automatic % only when larger; only that larger part counts against the role limit).
+  - **Tiers**: automatic upgrade when the last-12-month spend (completed sales − returns) reaches an active plan's
+    minimum; never auto-downgraded (a tier runs to its end date); staff can assign, renew (plan fee collected in cash),
+    change plan or cancel, always with a reason.
+  - **Reversals**: a void gives spent points back and takes earned points away (the wallet may go negative if they were
+    already spent; a negative wallet cannot redeem). A return does the same in proportion to the value returned, and the
+    share that was paid with points goes back as points, not cash.
+  - One append-only `reward_ledger` + `reward_wallets` projection under lock (`App\Services\RewardLedger`); spending and
+    expiry consume the oldest-expiring points first; `php artisan loyalty:expire` (scheduled daily 00:15) expires points
+    and memberships. Production needs the Laravel scheduler (`schedule:run` every minute).
 
 ## 4. What is done
 
@@ -156,7 +174,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (131 Pest tests passing)
+### Laravel API (`api/`) – live slices (146 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -176,27 +194,27 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Purchase orders: company report, forecast, drafts, convert to ordered purchase, drafts for all companies | live |
 | Finance: accounts, statements, money transfers, expenses and income (with attachments), categories, balance sheet + P&L | live |
 | Reports: sales, profit, billers, custom items, stock, expiry, purchases, customers, customer statement, suppliers, payments, cashiers, monthly summary | live |
+| Loyalty: reward wallets + ledger, adjustments, campaigns, membership plans, members (auto tier, assign, renew, change, cancel), reward point settings, points as a POS payment | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (13 migrations). The database is **MySQL/MariaDB**
-(`redpharma_pos`, tests also run on `redpharma_pos_test`); all 131 tests pass on MariaDB 10.11 and SQLite.
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (14 migrations). The database is **MySQL/MariaDB**
+(`redpharma_pos`, tests also run on `redpharma_pos_test`); all tests pass on MariaDB 10.11, MySQL 8.0 and SQLite.
 
 In `pos/.env` the live domains are:
-`NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports`
+`NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty`
 (everything else still runs on mocks while `NUXT_PUBLIC_USE_MOCKS=true`). A new domain needs three things: its name in
 `ApiDomain` (`pos/app/composables/useApi.ts`), `useApi('<domain>')` in the service, and the name in `.env`.
 
-Still on mocks: loyalty, online orders & delivery, riders/zones, HR & payroll, admin (users, roles, warehouses,
+Still on mocks: online orders & delivery, riders/zones, HR & payroll, admin (users, roles, warehouses,
 settings), the inventory reorder suggestions screen, and voiding a sale return.
 
 ## 5. What needs to be built (suggested order)
 
-1. **Loyalty**: reward wallets/ledger, membership plans, reward point settings.
-2. **Online orders & delivery**: orders, fulfilment board, riders, zones.
-3. **HR & payroll**: employees, attendance, holidays, payroll.
-4. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-5. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-6. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Online orders & delivery**: orders, fulfilment board, riders, zones.
+2. **HR & payroll**: employees, attendance, holidays, payroll.
+3. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+4. **Customer channel `/api/v1`** for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+5. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Overdraw checks use the account's current balance, so an expense or transfer backdated to before the money arrived
@@ -211,7 +229,9 @@ Small open items:
 - Voiding a sale return (`/sales/returns` row action) still runs on mocks; the API has no sale-return void yet.
 - Register page always opens register id 1 (`pos/app/pages/finance/registers.vue`); the API has `GET /cash-registers` for a picker.
 - Decide whether selling requires an open register.
-- Loyalty points in customer responses are `0` until the loyalty module exists.
+- Loyalty: the POS has no screen yet to give a customer a membership by hand (`POST /loyalty/customers/{id}/membership`
+  exists; tiers otherwise come from spend). Membership fees are collected in cash only and are not tied to the register
+  session. Points paid at the counter show as "Reward points" under non-cash on the register.
 
 ## 6. Set up on another device
 
@@ -318,6 +338,9 @@ pos/                  Nuxt 4 POS
 ## 10. Commit history
 
 ```
+302abd9 connect loyalty in pos
+2b509f8 add loyalty api
+6b4a7ca update handoff notes
 9b1de8d connect reports in pos
 61072c5 add reports api
 64c4b31 connect finance in pos
