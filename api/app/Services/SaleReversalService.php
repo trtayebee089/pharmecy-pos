@@ -53,6 +53,10 @@ class SaleReversalService
             if ($sale->status !== 'completed') {
                 throw ValidationException::withMessages(['sale' => 'Only completed sales can be voided.']);
             }
+            if ($sale->is_legacy) {
+                // Imported history: its stock and money are already in the opening balances.
+                throw ValidationException::withMessages(['sale' => 'This sale was imported from the old system. Use a return instead.']);
+            }
             if (SaleReturn::where('sale_id', $sale->id)->exists()) {
                 throw ValidationException::withMessages(['sale' => 'This sale has returns. Return the remaining items instead of voiding.']);
             }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Etl\Legacy\LegacyRecords;
 use App\Models\AuditLog;
 use App\Models\Batch;
 use App\Models\StockAdjustment;
@@ -112,6 +113,7 @@ class StockAdjustmentService
             if ($adj->status !== 'posted') {
                 throw ValidationException::withMessages(['adjustment' => 'This adjustment is already void.']);
             }
+            LegacyRecords::refuseVoid(LegacyRecords::is('stock_adjustment', $adj->id), 'adjustment', 'adjustment');
             foreach ($adj->items()->with('batch')->get() as $item) {
                 $have = (int) StockBalance::where(['warehouse_id' => $adj->warehouse_id, 'batch_id' => $item->batch_id])->lockForUpdate()->value('qty_base');
                 if ($item->qty_base > 0 && $have < $item->qty_base) {

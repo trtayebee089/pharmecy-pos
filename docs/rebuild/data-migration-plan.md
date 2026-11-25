@@ -126,3 +126,28 @@ See `rebuild-architecture.md` §5. Implementation notes:
 - Separate DB connection `legacy` with a **dedicated legacy DB user granted only** SELECT on the needed tables and UPDATE on `products(qty, price, name, is_active, image, slug, category_id, brand_id)`, `product_warehouse(qty)`, `customers(points)`, `order_trackings`, `order_tracking_histories`.
 - New products created in the new system are inserted into legacy `products` (minimal columns) so the website can show them. The id mapping goes into `legacy_id_map`.
 - Every bridge run writes to `bridge_watermarks`. Failures alert the admin (mail/SMS) and leave the watermark unchanged, so the next run retries.
+
+## 7. Implementation (26 Nov 2026)
+
+Built as `php artisan legacy:migrate` (`api/app/Etl/Legacy`, how to run: `api/README.md` "Legacy data migration").
+Rehearsed on the dump of 25 Nov 2026 (247k sales, 627k sale lines, 258k payments, 25k products, 2.5k customers).
+
+Owner decisions (26 Nov 2026): **supplier dues imported as-is**, **legacy qty as opening stock** on one LEGACY batch
+per product, **full history** imported.
+
+What changed against §1–§3 while building it:
+
+| Topic | As built |
+|---|---|
+| Ids | Documents keep their legacy primary keys (sales, sale lines, returns, purchases, purchase lines, payments, products, batches = product id). The target must therefore be empty. Masters (users, customers, suppliers…) get new ids, kept in `legacy_id_map` |
+| Website & app | No bridge: the website and app already use the new API, so this is a one-time cutover import |
+| Sale lines | Every product line gets a `sale_item_batches` row on the product's LEGACY batch, so legacy sales can be returned in the new POS (restock into LEGACY) |
+| Line cost | qty × the product's legacy cost (or its last purchase cost); profit on legacy sales is an estimate |
+| Customer dues | Per sale: due = max(0, total − payments − returns); a return beyond the open due was a cash refund (legacy stored no refund payment). Opening debit = Σ per customer. The walk-in's dues are not carried (listed) |
+| Supplier dues | Per received purchase: max(0, total − paid − returned); opening credit = Σ per supplier |
+| Open website orders | Pending/processing/assigned/in-transit orders become **pending** online orders with their lines and no sale (staff confirm again; better: finish them in legacy before cutover). Delivered/returned ones are sales; cancelled ones are cancelled orders |
+| Purchases | Received (1, 2) → received; pending/ordered (3, 4) → ordered, receivable in the new POS |
+| Users | Admin/Owner → Admin, staff and online-order users → Cashier, all `must_change_password`. Supplier, customer and advertiser logins skipped. Missing users → inactive "Legacy import" user |
+| HR | Departments (designation "Staff"), employees, attendance (1 present, 0 late), holidays. Payroll history not imported. Open advance per employee = Σ advances − Σ deducted on payrolls, recovered by the next payroll |
+| Not imported | Customer passwords/tokens, legacy cash registers (all open), payroll history, reward tiers (plans start fresh), gift cards, coupons, quotations, transfers (empty), account balances (entered at cutover) |
+| Void guards | Legacy purchases (received), expenses/income, adjustments and purchase returns cannot be voided (they posted no stock or money) |

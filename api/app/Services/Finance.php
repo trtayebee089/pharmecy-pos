@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Etl\Legacy\LegacyRecords;
 use App\Models\Account;
 use App\Models\AccountTransaction;
 use App\Models\AuditLog;
@@ -206,6 +207,7 @@ class Finance
             if ($e->status !== 'posted') {
                 throw ValidationException::withMessages(['entry' => 'This entry is already void.']);
             }
+            LegacyRecords::refuseVoid($e->source_type === 'legacy', 'entry', 'entry');
             if ($e->source_type === 'payroll_run') {
                 // Its cash left with the payslips; voiding it alone would double-count the money.
                 throw ValidationException::withMessages(['entry' => 'This salary expense belongs to a paid payroll run and cannot be voided on its own.']);

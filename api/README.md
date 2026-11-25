@@ -150,6 +150,48 @@ methods, price lists, the walk-in customer).
 In the POS `.env`, `NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases`
 sends those domains to this API while the rest of the UI stays on mocks.
 
+## Legacy data migration (`legacy:migrate`)
+
+Imports the legacy POS database into this schema: full history as read-only
+legacy documents plus opening balances at cutover. Plan and mapping:
+`../docs/rebuild/data-migration-plan.md` (§7 is the implementation);
+code: `app/Etl/Legacy` (one class per step).
+
+1. Load the legacy dump into its own database (never the app database) and give
+   the app user SELECT on it only:
+
+   ```sql
+   CREATE DATABASE redpharma_legacy CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   -- mysql -u root redpharma_legacy < siteunkp_redpharmabd_pos_db.sql
+   GRANT SELECT ON redpharma_legacy.* TO 'redpharma'@'localhost', 'redpharma'@'127.0.0.1';
+   ```
+
+   The `legacy` connection reads `LEGACY_DB_HOST/PORT/DATABASE/USERNAME/PASSWORD`
+   (defaults: the app's host and user, database `redpharma_legacy`).
+2. Run on an **empty, migrated and seeded** target (the command refuses otherwise):
+
+   ```bash
+   php artisan migrate:fresh --seed
+   php artisan legacy:migrate --cutover-date=2026-12-01 [--warehouse-code=DHK1] [--stock-source=products|warehouse]
+   ```
+
+   Rehearse on a separate database first (e.g. `DB_DATABASE=redpharma_migration`).
+   Each step is one transaction. Speed depends on the database server: XAMPP's
+   defaults (16 MB buffer pool, 5 MB redo log) manage about 1,000 rows/s, so a full
+   run takes 30–40 minutes; `SET GLOBAL innodb_buffer_pool_size = 1073741824` (as
+   root, not persisted) or a tuned server is much faster.
+3. Review `storage/app/private/etl/legacy-migration-*.md` (row counts, monthly
+   sales totals, payments, dues, points, stock, link checks that must be 0) and
+   the `etl_rejects` table. Then enter the confirmed cash/bank balances
+   (Finance › Accounts) and the reward rule (Administration › Reward points),
+   and count stock to give the LEGACY batches real batch numbers and expiry dates.
+
+Legacy documents (`is_legacy`, `source_type = legacy`, or listed in
+`legacy_id_map`) posted no stock, ledger or account entries, so purchases,
+expenses, adjustments and purchase returns imported from legacy cannot be
+voided. Legacy sales can still be returned (into the product's LEGACY batch).
+The report and `etl_rejects` contain customer data: keep them on the server.
+
 ## Rules the code relies on
 
 - Stock changes only through `App\Services\StockLedger` (append-only movements plus a locked balance per warehouse and batch).

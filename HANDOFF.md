@@ -1,6 +1,6 @@
 # Red Pharma rebuild: handoff
 
-Status as of **25 Nov 2026** (evening) on `main`, last feature: Administration (see §10)
+Status as of **26 Nov 2026** on `main`, last feature: legacy data migration (see §0)
 (everything pushed to `origin` = github.com/trtayebee089/pharmecy-pos).
 
 Read this file first on a new device or in a new AI session. It carries the
@@ -54,7 +54,16 @@ php artisan migrate` (4 additive migrations `2026_11_26_1000..1003`: sms_message
 accounts/methods; the migrations add them too on an existing database), `php artisan storage:link` (banner images),
 `php vendor/bin/pest` → 234 (one more migration `2026_11_26_100400`, medicine requests). Details: `api/README.md` "Integrations".
 
-**Next task:** §5 item 1, **data migration** (ETL per `docs/rebuild/data-migration-plan.md`). Before going live with the
+**Data migration built (home PC, 26 Nov 2026):** `php artisan legacy:migrate` imports the legacy dump (loaded into its
+own database `redpharma_legacy`, read-only `legacy` connection) into a fresh, seeded target: full history as legacy
+documents plus opening stock, dues and points. Owner decisions: supplier dues as-is, legacy qty as opening stock on one
+LEGACY batch per product, full history. One additive migration `2026_11_26_100500` (`legacy_id_map`, `etl_rejects`).
+Rehearsed on the 25 Nov dump into `redpharma_migration`: 10 min, every monthly sales total, payments, points and stock
+reconcile, all link checks 0, 48 rejects. Legacy sales, purchases, expenses, adjustments and purchase returns cannot be
+voided (returns of legacy sales still work). How to run and review: `api/README.md` "Legacy data migration";
+mapping as built: `docs/rebuild/data-migration-plan.md` §7. `php vendor/bin/pest` → 237.
+
+**Next task:** §5 item 2, production readiness and cutover. Before going live with the
 customer channel: fill Administration › Integrations (SMTP for reset codes, SMS, website address, gateways in sandbox
 first), the website origin in `CORS_ALLOWED_ORIGINS`, the Laravel scheduler, and an app build tested on a phone (Flutter
 is not installed on the home PC; the app-source changes are unbuilt).
@@ -292,8 +301,13 @@ Still on mocks: the inventory reorder suggestions screen and voiding a sale retu
 
 ## 5. What needs to be built (suggested order)
 
-1. **Data migration** (ETL per `docs/rebuild/data-migration-plan.md`). Legacy customers arrive without passwords: they
-   set one with "forgot password" (needs an email on file) — plan how emails are collected.
+1. **Data migration**: built (`legacy:migrate`, see §0). Open for the business before cutover: review the report
+   (walk-in sales with a due ৳87.7k are not carried; ৳48.3M supplier opening due; 15,401 products without a price stay
+   inactive; 3,179 names without a parsed strength; 27 negative stock items opened at 0), finish or cancel the 24 open
+   website orders in legacy (otherwise they arrive as pending orders to confirm again), enter the confirmed account
+   balances and the reward rule (legacy: 1 point per ৳300, bill ≥ ৳100, 1-year expiry), copy product images from legacy
+   `public/images/product/` to `storage/app/public/products/legacy/`, and count stock to replace the LEGACY batches.
+   Legacy customers arrive without passwords: they use "forgot password" (needs an email on file; 92 of 2,468 have one).
 2. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Etl\Legacy\LegacyRecords;
 use App\Models\AccountTransaction;
 use App\Models\AuditLog;
 use App\Models\Batch;
@@ -180,6 +181,7 @@ class PurchaseReturnService
             if ($return->status !== 'posted') {
                 throw ValidationException::withMessages(['purchaseReturn' => 'This return is already void.']);
             }
+            LegacyRecords::refuseVoid(LegacyRecords::is('purchase_return', $return->id), 'purchaseReturn', 'return');
 
             foreach ($return->items()->get() as $item) {
                 $this->stock->move([

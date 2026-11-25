@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Etl\Legacy\LegacyRecords;
 use App\Models\AccountTransaction;
 use App\Models\AuditLog;
 use App\Models\Batch;
@@ -186,6 +187,7 @@ class PurchaseService
             if ($purchase->status === 'void') {
                 throw ValidationException::withMessages(['purchase' => 'This purchase is already void.']);
             }
+            LegacyRecords::refuseVoid($purchase->is_legacy && $purchase->status === 'received', 'purchase', 'purchase');
             if ($purchase->status === 'fulfilled') {
                 throw ValidationException::withMessages(['purchase' => 'This order was received. Void its goods receipt instead.']);
             }
