@@ -51,7 +51,12 @@ export interface OnlineOrder {
   number: string
   legacyRef: string
   trackingCode: string
-  channel: 'website' | 'app'
+  channel: 'website' | 'app' | 'phone'
+  /** Live API: the sale posted at confirm, customer and zone ids. */
+  saleId?: number | null
+  customerId?: number
+  zoneId?: number | null
+  grandTotal?: number
   placedAt: string
   status: OrderStatus
   customer: string
@@ -71,7 +76,17 @@ export interface OnlineOrder {
   history: OrderHistory[]
 }
 
-export interface Rider { id: number; name: string; phone: string; nid: string; status: 'active' | 'on_leave' | 'inactive'; assignedOrders: number }
+export interface Rider { id: number; name: string; phone: string; nid: string; status: 'active' | 'on_leave' | 'inactive'; assignedOrders: number; /** COD cash collected and not yet handed over (live API). */ cashHeld?: number }
+
+export interface NewOrderInput {
+  customerId?: number | null
+  name: string
+  phone: string
+  address: string
+  zoneId: number
+  note: string
+  lines: { productId: number; unitId: number; qty: number }[]
+}
 
 export interface ShippingZone {
   id: number

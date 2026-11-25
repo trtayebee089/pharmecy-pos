@@ -8,6 +8,17 @@ const resource = useZonesResource()
 const toast = useToast()
 const auth = useAuthStore()
 const crud = ref<{ reload: () => void } | null>(null)
+
+// The branch that ships online orders (stock is taken from it when an order is confirmed).
+const ordersApi = useOnlineOrdersApi()
+const branchId = ref<number | null>(null)
+const branchOptions = computed(() => (auth.user?.warehouses ?? []).map(w => ({ value: w.id, label: w.name })))
+onMounted(async () => { try { branchId.value = (await ordersApi.settings()).warehouseId } catch { /* shown as empty */ } })
+async function saveBranch(id: string | number | null | undefined) {
+  if (!id) return
+  try { branchId.value = (await ordersApi.saveSettings(Number(id))).warehouseId; toast.success('Online branch saved', branchOptions.value.find(o => o.value === branchId.value)?.label) }
+  catch (e: any) { toast.error('Not saved', e?.message) }
+}
 async function toggle(z: ShippingZone) {
   try { await resource.save({ id: z.id, isActive: !z.isActive }); toast.success(z.isActive ? 'Zone deactivated' : 'Zone activated', z.thana); crud.value?.reload() }
   catch (e: any) { toast.error('Not changed', e?.message) }
@@ -49,12 +60,20 @@ const fields: FieldDef[] = [
 
 <template>
   <UiCrudPage
-    title="Shipping zones" description="Delivery charges by area, used by website and app checkout (pushed to the legacy storefront by the bridge)."
+    title="Shipping zones" description="Delivery charges by area for phone orders now, and for website and app checkout once they move to the new API."
     :resource="resource" :columns="columns" :fields="fields" ref="crud" noun="Zone" create-permission="zones.manage" :row-actions="rowActions"
     :segments="{ key: 'division', options: [{ value: 'Dhaka', label: 'Dhaka' }, { value: 'Chattogram', label: 'Chattogram' }] }"
     :defaults="() => ({ division: 'Dhaka', district: 'Dhaka', thana: '', rate: 60, freeShippingMin: null, partner: 'own_rider' as const, isActive: true })"
     :item-label="r => `${r.thana}, ${r.district}`"
   >
+    <template #above>
+      <div class="mb-4 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+        <div class="w-full max-w-xs">
+          <UiSelect :model-value="branchId" label="Online orders ship from" :options="branchOptions" placeholder="Choose branch" :disabled="!auth.can('zones.manage')" @update:model-value="saveBranch" />
+        </div>
+        <p class="min-w-0 flex-1 text-[12.5px] text-slate-500">Confirming an online order takes its stock from this branch, earliest expiry first.</p>
+      </div>
+    </template>
     <template #cell-thana="{ row }">
       <p class="font-semibold text-ink">{{ row.thana }}</p>
       <p class="text-xs text-slate-500">{{ row.district }}</p>

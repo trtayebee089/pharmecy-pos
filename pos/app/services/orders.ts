@@ -4,7 +4,7 @@
  * resolve from app/mocks/orders.ts, kept in an in-memory session store.
  */
 import type { ListQuery, Paginated } from '~/types/domain'
-import type { HeldSaleSummary, OnlineOrder, OrderStatus, Rider, SaleReturnSummary, ShippingZone } from '~/types/orders'
+import type { HeldSaleSummary, NewOrderInput, OnlineOrder, OrderStatus, Rider, SaleReturnSummary, ShippingZone } from '~/types/orders'
 
 const ordersMock = () => import('~/mocks/orders')
 
@@ -53,7 +53,7 @@ export function useSaleReturnsApi() {
 }
 
 export function useOnlineOrdersApi() {
-  const api = useApi()
+  const api = useApi('orders')
   const store = useState<OnlineOrder[] | null>('mock-online-orders', () => null)
   async function rows() {
     store.value ??= structuredClone((await ordersMock()).orders)
@@ -81,6 +81,25 @@ export function useOnlineOrdersApi() {
       if (to === 'cancelled') o.lines.forEach(l => (l.batchNo = null))
       return o
     },
+    /** Phone/WhatsApp order: the API prices it from the retail list and adds the zone's shipping. */
+    async place(input: NewOrderInput, idempotencyKey: string): Promise<OnlineOrder> {
+      if (!api.useMocks) return api.post('/orders', input, idempotencyKey)
+      throw new ApiError('Phone orders need the live API (add orders to NUXT_PUBLIC_LIVE_DOMAINS).', 422)
+    },
+    /** The branch that ships online orders. */
+    async settings(): Promise<{ warehouseId: number }> {
+      if (api.useMocks) return { warehouseId: 1 }
+      return api.get('/orders/settings')
+    },
+    async saveSettings(warehouseId: number): Promise<{ warehouseId: number }> {
+      if (api.useMocks) return { warehouseId }
+      return api.put('/orders/settings', { warehouseId })
+    },
+    /** Rider hands collected COD cash to the shop; it moves into Cash in hand. */
+    async handover(riderId: number, amount: number, note: string, idempotencyKey: string): Promise<Rider> {
+      if (api.useMocks) { await mockDelay(400); return { id: riderId } as Rider }
+      return api.post(`/delivery/riders/${riderId}/handover`, { amount, note }, idempotencyKey)
+    },
     async assignRider(id: number, rider: Rider, idempotencyKey: string): Promise<OnlineOrder> {
       if (!api.useMocks) return api.post(`/orders/${id}/rider`, { rider_id: rider.id }, idempotencyKey)
       await mockDelay(350)
@@ -93,9 +112,9 @@ export function useOnlineOrdersApi() {
 }
 
 export function useRidersResource() {
-  return useResource<Rider>('delivery/riders', async () => (await ordersMock()).riders)
+  return useResource<Rider>('delivery/riders', async () => (await ordersMock()).riders, 'orders')
 }
 
 export function useZonesResource() {
-  return useResource<ShippingZone>('delivery/zones', async () => (await ordersMock()).zones)
+  return useResource<ShippingZone>('delivery/zones', async () => (await ordersMock()).zones, 'orders')
 }

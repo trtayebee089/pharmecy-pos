@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, Globe, Smartphone, Kanban, RefreshCw, Info, ArrowRight, Bike, Printer, Phone } from 'lucide-vue-next'
+import { Download, Globe, Smartphone, Kanban, RefreshCw, Info, ArrowRight, Bike, Printer, Phone, PhoneCall } from 'lucide-vue-next'
 import type { Column, Paginated, RowAction } from '~/types/domain'
 import type { OnlineOrder, OrderStatus, Rider } from '~/types/orders'
 
@@ -25,6 +25,9 @@ async function load() {
   finally { loading.value = false }
 }
 onMounted(load)
+
+const newOpen = ref(false)
+function onPlaced(o: OnlineOrder) { orders.value.unshift(o); tab.value = 'pending' }
 
 const statuses: OrderStatus[] = ['pending', 'confirmed', 'packed', 'in_transit', 'delivered', 'cancelled']
 const tabs = computed(() => [
@@ -95,9 +98,10 @@ function exportCsv() {
 
 <template>
   <div>
-    <UiPageHeader title="Online orders" description="Orders from the website and Android app. They arrive from the legacy storefront through the bridge about once a minute.">
+    <UiPageHeader title="Online orders" description="Phone and WhatsApp orders taken by staff, cash on delivery. Website and app orders join this list once the storefront moves to the new API.">
       <UiButton :icon="RefreshCw" :loading="loading" @click="load">Refresh</UiButton>
       <UiButton :icon="Download" :disabled="!filtered.length" @click="exportCsv">Export</UiButton>
+      <UiButton v-if="auth.can('orders.fulfil')" :icon="PhoneCall" @click="newOpen = true">New phone order</UiButton>
       <NuxtLink to="/delivery"><UiButton variant="primary" :icon="Kanban">Fulfilment board</UiButton></NuxtLink>
     </UiPageHeader>
 
@@ -111,10 +115,11 @@ function exportCsv() {
     <UiDataTable v-model:search="search" v-model:page="page" :columns="columns" :result="result" :loading="loading" row-key="id" search-placeholder="Order no, legacy ref, customer, phone, zone…" :empty-title="`No ${tab === 'all' ? '' : ORDER_STATUS_LABEL[tab].toLowerCase()} orders`">
       <template #cell-number="{ row }">
         <div class="flex items-center gap-2">
-          <component :is="row.channel === 'app' ? Smartphone : Globe" class="size-4 text-sky-500" :aria-label="row.channel" />
+          <component :is="row.channel === 'app' ? Smartphone : row.channel === 'phone' ? Phone : Globe" class="size-4 text-sky-500" :aria-label="row.channel" />
           <div>
             <button class="font-mono text-[12.5px] font-semibold text-ink hover:text-brand-700 hover:underline" @click="selectedId = row.id">{{ row.number }}</button>
-            <p class="text-[11px] text-slate-400">legacy {{ row.legacyRef }}</p>
+            <p v-if="row.legacyRef" class="text-[11px] text-slate-400">legacy {{ row.legacyRef }}</p>
+            <p v-else class="text-[11px] text-slate-400 tabular">{{ row.trackingCode }}</p>
           </div>
         </div>
       </template>
@@ -140,6 +145,7 @@ function exportCsv() {
       </template>
     </UiDataTable>
 
+    <OrdersNewOrderModal v-model="newOpen" @placed="onPlaced" />
     <OrdersOrderDrawer v-model="drawer" :order="selected" :riders="riders" @changed="onChanged" />
   </div>
 </template>
