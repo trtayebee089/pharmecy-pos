@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Plus, Banknote, CheckCircle2, Printer, HandCoins, UserRound } from 'lucide-vue-next'
+import { Plus, Banknote, CheckCircle2, Printer, HandCoins, UserRound, Settings2 } from 'lucide-vue-next'
 import type { RowAction } from '~/types/domain'
-import type { Employee, PayrollRun, SalaryAdvance } from '~/types/hr'
+import type { Employee, PayrollRun, PayrollSettings, SalaryAdvance } from '~/types/hr'
 
 definePageMeta({ title: 'Payroll' })
 const api = usePayrollApi()
@@ -58,9 +58,8 @@ async function create() {
 async function approveRun(r: PayrollRun) {
   const { ok } = await ask({ title: `Approve ${periodLabel(r.period)} payroll?`, description: `${r.employees} payslips, net ${money(r.net)}. Payslips can no longer be edited after approval.`, confirmLabel: 'Approve', tone: 'primary' })
   if (!ok) return
-  await api.approve(r.id)
-  toast.success('Payroll approved', periodLabel(r.period))
-  load()
+  try { await api.approve(r.id); toast.success('Payroll approved', periodLabel(r.period)); load() }
+  catch (e: any) { toast.error('Not approved', e?.message) }
 }
 async function deleteRun(r: PayrollRun) {
   const { ok } = await ask({ title: `Delete the ${periodLabel(r.period)} draft run?`, description: 'Draft payslips are discarded. Nothing was paid yet.', confirmLabel: 'Delete draft' })
@@ -79,7 +78,28 @@ function runActions(r: PayrollRun): RowAction[] {
 // ---- Salary advances ----
 const employees = ref<Employee[]>([])
 const advOpen = ref(false)
-const advForm = reactive({ employeeId: null as number | null, amount: 0, account: '' })
+const advForm = reactive({ employeeId: null as number | null, amount: 0, installment: 0, account: '' })
+
+// ---- Payroll settings (admin): weekly off days, late rule, advance recovery ----
+const settings = ref<PayrollSettings | null>(null)
+const settingsOpen = ref(false)
+const settingsSaving = ref(false)
+const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+async function loadSettings() { try { settings.value = await api.settings() } catch { settings.value = null } }
+function toggleOff(d: number) {
+  if (!settings.value) return
+  const s = new Set(settings.value.weeklyOffDays)
+  if (s.has(d)) s.delete(d); else s.add(d)
+  settings.value.weeklyOffDays = [...s].sort()
+}
+async function saveSettings() {
+  if (!settings.value) return
+  settingsSaving.value = true
+  try { settings.value = await api.saveSettings({ ...settings.value, latesPerAbsentDay: Number(settings.value.latesPerAbsentDay) || 0 }); toast.success('Payroll settings saved', 'They apply to new and recalculated payroll runs'); settingsOpen.value = false }
+  catch (e: any) { toast.error('Settings not saved', e?.message) }
+  finally { settingsSaving.value = false }
+}
+onMounted(loadSettings)
 const payoutAccounts = ref<string[]>([])
 const advSaving = ref(false)
 let advKey = ''
@@ -87,7 +107,7 @@ async function startAdvance(employeeId?: number) {
   tab.value = 'advances'
   if (!employees.value.length) employees.value = (await useEmployeesResource().all()).filter(e => e.isActive)
   payoutAccounts.value = await api.accounts()
-  Object.assign(advForm, { employeeId: employeeId ?? null, amount: 0, account: payoutAccounts.value[0] ?? '' })
+  Object.assign(advForm, { employeeId: employeeId ?? null, amount: 0, installment: 0, account: payoutAccounts.value[0] ?? '' })
   advKey = crypto.randomUUID()
   advOpen.value = true
 }
@@ -97,7 +117,8 @@ async function giveAdvance() {
   if (advForm.amount > emp.basicSalary) { toast.warning('Advance exceeds one month of basic salary'); return }
   advSaving.value = true
   try {
-    await api.giveAdvance({ employeeId: emp.id, employee: emp.name, amount: Number(advForm.amount), account: advForm.account }, advKey)
+    const installment = settings.value?.advanceRecovery === 'installment' && advForm.installment > 0 ? Number(advForm.installment) : null
+    await api.giveAdvance({ employeeId: emp.id, employee: emp.name, amount: Number(advForm.amount), installment, account: advForm.account }, advKey)
     toast.success('Advance given', `${emp.name} · ${money(advForm.amount)}`)
     advOpen.value = false
     load()
@@ -114,10 +135,13 @@ function startRecover(a: SalaryAdvance) { recoverTarget.value = a; recoverAmount
 async function recover() {
   const a = recoverTarget.value
   if (!a || recoverAmount.value <= 0 || recoverAmount.value > a.amount - a.recovered) return
-  await api.recordRecovery(a.id, Number(recoverAmount.value), crypto.randomUUID())
-  toast.success('Repayment recorded', `${a.employee} · ${money(recoverAmount.value)}`)
-  recoverOpen.value = false
-  load()
+  try {
+    await api.recordRecovery(a.id, Number(recoverAmount.value), crypto.randomUUID())
+    toast.success('Repayment recorded', `${a.employee} · ${money(recoverAmount.value)}`)
+    recoverOpen.value = false
+    load()
+  }
+  catch (e: any) { toast.error('Repayment not recorded', e?.message) }
 }
 async function voidAdvance(a: SalaryAdvance) {
   const { ok, reason } = await ask({ title: `Void the advance to ${a.employee}?`, description: `${money(a.amount)} given ${date(a.givenAt)}. The payment out is reversed.`, confirmLabel: 'Void advance', requireReason: true })
@@ -136,6 +160,7 @@ function advanceActions(a: SalaryAdvance): RowAction[] {
 <template>
   <div>
     <UiPageHeader title="Payroll" description="Monthly runs built from basic salary, attendance and advance recovery. A paid run is final.">
+      <UiButton v-if="canPayroll && settings" :icon="Settings2" @click="settingsOpen = true">Settings</UiButton>
       <UiButton v-if="canPayroll" :icon="HandCoins" @click="startAdvance()">Give advance</UiButton>
       <UiButton v-if="canPayroll" variant="primary" :icon="Plus" @click="startNew">New payroll run</UiButton>
     </UiPageHeader>
@@ -208,10 +233,30 @@ function advanceActions(a: SalaryAdvance): RowAction[] {
       </template>
     </UiModal>
 
+    <UiModal v-model="settingsOpen" title="Payroll settings" description="Absent days are deducted at basic ÷ 30 per day." size="sm" :dismissible="!settingsSaving">
+      <div v-if="settings" class="space-y-5">
+        <div>
+          <p class="label mb-2">Weekly off days</p>
+          <div class="flex flex-wrap gap-2">
+            <button v-for="(d, i) in weekdays" :key="d" type="button" class="h-9 rounded-xl border px-3 text-sm font-semibold transition" :class="settings.weeklyOffDays.includes(i) ? 'border-brand-500 bg-brand-50 text-brand-800' : 'border-slate-200 text-slate-600 hover:border-slate-300'" @click="toggleOff(i)">{{ d }}</button>
+          </div>
+          <p class="mt-1.5 text-xs text-slate-500">Used for the working days on each payslip, together with holidays.</p>
+        </div>
+        <UiInput v-model.number="settings.latesPerAbsentDay" type="number" label="Late days that count as one absent day" hint="0 = late days are paid in full" />
+        <UiSelect v-model="settings.advanceRecovery" label="Recover salary advances" :options="[{ value: 'installment', label: 'By the monthly installment set on each advance' }, { value: 'full', label: 'Whole open balance in the next payroll' }]" />
+      </div>
+      <template #footer>
+        <UiButton variant="ghost" :disabled="settingsSaving" @click="settingsOpen = false">Cancel</UiButton>
+        <UiButton variant="primary" :loading="settingsSaving" @click="saveSettings">Save settings</UiButton>
+      </template>
+    </UiModal>
+
     <UiModal v-model="advOpen" title="Give salary advance" description="Paid out now and recovered from the next payroll runs." size="sm" :dismissible="!advSaving">
       <div class="space-y-4">
         <UiSelect v-model="advForm.employeeId" label="Employee" :options="employees.map(e => ({ value: e.id, label: `${e.name} · basic ${money(e.basicSalary)}` }))" placeholder="Choose employee" />
         <UiInput v-model.number="advForm.amount" type="number" label="Amount (৳)" />
+        <UiInput v-if="settings?.advanceRecovery === 'installment'" v-model.number="advForm.installment" type="number" label="Recover per month (৳)" hint="Deducted from each payroll run until repaid; leave 0 to recover the whole balance next run" />
+        <p v-else class="text-[12.5px] text-slate-500">Settings recover the whole open balance from the next payroll run (never more than the net pay).</p>
         <UiSelect v-model="advForm.account" label="Paid from" :options="payoutAccounts.map(a => ({ value: a, label: a }))" />
       </div>
       <template #footer>

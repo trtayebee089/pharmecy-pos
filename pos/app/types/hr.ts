@@ -32,6 +32,8 @@ export interface AttendanceRow {
 export interface Holiday { id: number; date: string; name: string; warehouse: string }
 
 export type PayrollStatus = 'draft' | 'approved' | 'paid'
+/** Admin payroll rules (Payroll › Settings). weeklyOffDays: 0 = Sunday … 6 = Saturday. */
+export interface PayrollSettings { weeklyOffDays: number[]; latesPerAbsentDay: number; advanceRecovery: 'installment' | 'full' }
 
 export interface PayrollRun {
   id: number
@@ -61,7 +63,10 @@ export interface Payslip {
 
 export interface SalaryAdvance {
   id: number
+  employeeId?: number
   employee: string
+  /** Monthly recovery (installment mode); null = whole balance. */
+  installment?: number | null
   amount: number
   givenAt: string
   recovered: number

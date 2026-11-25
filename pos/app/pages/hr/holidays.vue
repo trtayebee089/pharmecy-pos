@@ -22,7 +22,7 @@ const columns: CrudColumn[] = [
 ]
 const fields: FieldDef[] = [
   { key: 'date', label: 'Date', type: 'date', required: true },
-  { key: 'warehouse', label: 'Applies to', type: 'select', required: true, options: [{ value: 'All warehouses', label: 'All warehouses' }, { value: 'Red Pharma · Dhanmondi', label: 'Dhanmondi only' }, { value: 'Red Pharma · Uttara', label: 'Uttara only' }] },
+  { key: 'warehouse', label: 'Applies to', type: 'select', required: true, options: [{ value: 'All warehouses', label: 'All warehouses' }, ...(useAuthStore().user?.warehouses ?? []).map(w => ({ value: w.name, label: `${w.name} only` }))] },
   { key: 'name', label: 'Holiday name', type: 'text', required: true, span: 2 },
 ]
 </script>

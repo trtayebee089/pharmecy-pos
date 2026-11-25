@@ -2,28 +2,28 @@
  * HR, payroll, warehouses and own-account API modules (/api/pos/v1).
  * With useMocks on (development only) they resolve from app/mocks/hr.ts.
  */
-import type { AccountProfile, AttendanceRow, AttendanceStatus, Department, Designation, Employee, Holiday, PayrollRun, Payslip, SalaryAdvance, Warehouse } from '~/types/hr'
+import type { AccountProfile, AttendanceRow, AttendanceStatus, Department, Designation, Employee, Holiday, PayrollRun, PayrollSettings, Payslip, SalaryAdvance, Warehouse } from '~/types/hr'
 
 const hrMocks = () => import('~/mocks/hr')
 
 export function useEmployeesResource() {
-  return useResource<Employee>('hr/employees', async () => (await hrMocks()).employees)
+  return useResource<Employee>('hr/employees', async () => (await hrMocks()).employees, 'hr')
 }
 export function useDepartmentsResource() {
-  return useResource<Department>('hr/departments', async () => (await hrMocks()).departments)
+  return useResource<Department>('hr/departments', async () => (await hrMocks()).departments, 'hr')
 }
 export function useDesignationsResource() {
-  return useResource<Designation>('hr/designations', async () => (await hrMocks()).designations)
+  return useResource<Designation>('hr/designations', async () => (await hrMocks()).designations, 'hr')
 }
 export function useHolidaysResource() {
-  return useResource<Holiday>('hr/holidays', async () => (await hrMocks()).holidays)
+  return useResource<Holiday>('hr/holidays', async () => (await hrMocks()).holidays, 'hr')
 }
 export function useWarehousesResource() {
   return useResource<Warehouse>('admin/warehouses', async () => (await hrMocks()).warehouses)
 }
 
 export function useAttendanceApi() {
-  const api = useApi()
+  const api = useApi('hr')
   const saved = useState<Record<string, AttendanceRow[]>>('mock-attendance', () => ({}))
   return {
     async day(day: string): Promise<AttendanceRow[]> {
@@ -62,7 +62,7 @@ export function useAttendanceApi() {
 }
 
 export function usePayrollApi() {
-  const api = useApi()
+  const api = useApi('hr')
   const runs = useState<PayrollRun[] | null>('mock-payroll-runs', () => null)
   const advanceStore = useState<SalaryAdvance[] | null>('mock-salary-advances', () => null)
   async function mockRuns() {
@@ -70,6 +70,15 @@ export function usePayrollApi() {
     return runs.value!
   }
   return {
+    /** Admin payroll rules: weekly off days, late rule, advance recovery mode. */
+    async settings(): Promise<PayrollSettings> {
+      if (api.useMocks) return { weeklyOffDays: [5], latesPerAbsentDay: 0, advanceRecovery: 'installment' }
+      return api.get('/hr/settings')
+    },
+    async saveSettings(s: PayrollSettings): Promise<PayrollSettings> {
+      if (api.useMocks) return s
+      return api.put('/hr/settings', s)
+    },
     async runs(): Promise<PayrollRun[]> {
       if (!api.useMocks) return api.get('/hr/payroll-runs')
       await mockDelay()
@@ -133,7 +142,7 @@ export function usePayrollApi() {
       return advanceStore.value
     },
     /** Gives an advance (posts a payment out from the account); recovered from the next payroll runs. */
-    async giveAdvance(payload: { employeeId: number; employee: string; amount: number; account: string }, idempotencyKey: string): Promise<SalaryAdvance> {
+    async giveAdvance(payload: { employeeId: number; employee: string; amount: number; installment?: number | null; account: string }, idempotencyKey: string): Promise<SalaryAdvance> {
       if (!api.useMocks) return api.post('/hr/salary-advances', payload, idempotencyKey)
       await mockDelay(500)
       advanceStore.value ??= structuredClone((await hrMocks()).advances)

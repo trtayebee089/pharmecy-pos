@@ -35,7 +35,7 @@ const employeeFields = computed<FieldDef[]>(() => [
   { key: 'phone', label: 'Phone', type: 'tel', required: true },
   { key: 'email', label: 'Email', type: 'email' },
   { key: 'basicSalary', label: 'Basic salary (৳ / month)', type: 'money', required: true, hint: 'Used by payroll; stored, never derived' },
-  { key: 'warehouse', label: 'Works at', type: 'select', options: [{ value: 'Dhanmondi', label: 'Dhanmondi' }, { value: 'Uttara', label: 'Uttara' }] },
+  { key: 'warehouse', label: 'Works at', type: 'select', options: (useAuthStore().user?.warehouses ?? []).map(w => ({ value: w.name, label: w.name })) },
   { key: 'isActive', label: 'Active', type: 'switch', hint: 'Inactive employees are left out of attendance and payroll', span: 2 },
 ])
 const deptColumns: CrudColumn[] = [{ key: 'name', label: 'Department' }, { key: 'employees', label: 'Employees', align: 'right', format: 'number' }]
