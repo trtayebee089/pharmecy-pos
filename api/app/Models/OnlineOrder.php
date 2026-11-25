@@ -12,6 +12,7 @@ class OnlineOrder extends Model
 
     protected $casts = [
         'subtotal' => 'decimal:2', 'shipping' => 'decimal:2', 'grand_total' => 'decimal:2',
+        'discount_pct' => 'decimal:4', 'discount_total' => 'decimal:2', 'points_value' => 'decimal:2', 'points_redeemed' => 'integer',
         'placed_at' => 'datetime', 'delivered_at' => 'datetime',
     ];
 

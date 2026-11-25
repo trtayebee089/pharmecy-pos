@@ -49,7 +49,7 @@ class SaleService
      *
      * @return array{0: float, 1: float, 2: float, 3: ?CustomerMembership} [line %, group %, membership % applied, membership]
      */
-    private function customerDiscount(Customer $customer): array
+    public function customerDiscount(Customer $customer): array
     {
         if ($customer->is_walk_in) {
             return [0.0, 0.0, 0.0, null];

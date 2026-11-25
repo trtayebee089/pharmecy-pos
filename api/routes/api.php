@@ -34,7 +34,7 @@ Route::prefix('pos/v1')->group(function () {
     Route::post('auth/login', [AuthController::class, 'login'])->middleware('throttle:20,1');
 
     // password.fresh: a user with an admin-set temporary password can only reach /me, /me/password, /me/profile and logout.
-    Route::middleware(['auth:sanctum', 'password.fresh'])->group(function () {
+    Route::middleware(['auth:sanctum', 'staff', 'password.fresh'])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
         Route::get('me', [AuthController::class, 'me']);
         Route::put('me/password', [AuthController::class, 'changePassword']);
@@ -346,3 +346,6 @@ Route::prefix('pos/v1')->group(function () {
     // Opened directly in the browser: protected by a 5-minute signature instead of the session.
     Route::get('finance/attachments/{entry}', [FinanceController::class, 'downloadAttachment'])->middleware('signed')->name('finance.attachment');
 });
+
+// Customer channel (website and app): /api/v1/* and the legacy paths installed apps still call.
+require __DIR__.'/customer.php';

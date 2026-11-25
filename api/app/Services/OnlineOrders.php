@@ -60,7 +60,46 @@ class OnlineOrders
         private StockLedger $stock,
         private DocumentNumbers $numbers,
         private SaleReversalService $reversals,
+        private RewardLedger $rewards,
+        private LoyaltySettings $loyalty,
     ) {}
+
+    /**
+     * Points a signed-in customer may redeem on an online order, with the same
+     * rules as the counter: reward points switched on, whole points, the
+     * minimum balance and bill, at most maxRedeemPercent of the goods after
+     * discount, and never more than the wallet holds.
+     *
+     * @return array{0: int, 1: int} [points, value in paisa]
+     */
+    public function pointsToRedeem(Customer $customer, int $points, int $goodsPaisa): array
+    {
+        if ($points <= 0) {
+            return [0, 0];
+        }
+        $s = $this->loyalty->all();
+        $fail = fn (string $m) => throw ValidationException::withMessages(['reward_points' => $m]);
+        if (! $s['active']) {
+            $fail('Reward points are switched off.');
+        }
+        $valuePaisa = SaleService::paisa($s['pointValue']);
+        $balance = $this->rewards->balance($customer->id);
+        if ($balance < (int) $s['minRedeemPoints']) {
+            $fail("You need at least {$s['minRedeemPoints']} points to redeem (you have {$balance}).");
+        }
+        if ($goodsPaisa < SaleService::paisa($s['minRedeemSaleAmount'])) {
+            $fail('Points can be used on orders of at least ৳'.SaleService::money(SaleService::paisa($s['minRedeemSaleAmount'])).'.');
+        }
+        if ($points > $balance) {
+            $fail("You have only {$balance} points.");
+        }
+        $maxPaisa = (int) floor($goodsPaisa * (float) $s['maxRedeemPercent'] / 100);
+        if ($points * $valuePaisa > $maxPaisa) {
+            $fail('You can pay at most '.(float) $s['maxRedeemPercent'].'% of this order with points ('.intdiv($maxPaisa, max(1, $valuePaisa)).' points).');
+        }
+
+        return [$points, $points * $valuePaisa];
+    }
 
     // ---------------------------------------------------------------- settings
 
@@ -123,10 +162,21 @@ class OnlineOrders
             }
         }
 
+        // Customer channel, signed-in customer only (owner decision 26 Nov 2026): the customer discount
+        // (group %, and membership % per the reward settings) on every line, and points redeemed.
+        $loyalty = ! empty($data['loyalty']) && ! $customer->is_walk_in;
+        $pct = $loyalty ? (float) app(SaleService::class)->customerDiscount($customer)[0] : 0.0;
+        foreach ($lines as &$l) {
+            $l['net'] = (int) round($l['total'] * (1 - $pct / 100));
+        }
+        unset($l);
         $subtotal = array_sum(array_column($lines, 'total'));
-        $shipping = $zone->free_shipping_min !== null && $subtotal >= SaleService::paisa($zone->free_shipping_min) ? 0 : SaleService::paisa($zone->rate);
+        $afterDiscount = array_sum(array_column($lines, 'net'));
+        $discount = $subtotal - $afterDiscount;
+        $shipping = $zone->free_shipping_min !== null && $afterDiscount >= SaleService::paisa($zone->free_shipping_min) ? 0 : SaleService::paisa($zone->rate);
+        [$points, $pointsPaisa] = $loyalty ? $this->pointsToRedeem($customer, (int) ($data['redeemPoints'] ?? 0), $afterDiscount) : [0, 0];
 
-        return DB::transaction(function () use ($user, $data, $warehouse, $zone, $customer, $lines, $subtotal, $shipping) {
+        return DB::transaction(function () use ($user, $data, $warehouse, $zone, $customer, $lines, $subtotal, $shipping, $pct, $discount, $afterDiscount, $points, $pointsPaisa) {
             $order = OnlineOrder::create([
                 'number' => $this->numbers->next('online_order', $warehouse),
                 'tracking_code' => $this->trackingCode(),
@@ -135,16 +185,23 @@ class OnlineOrders
                 'customer_id' => $customer->id, 'warehouse_id' => $warehouse->id,
                 'phone' => $customer->phone ?? $data['phone'], 'address' => $data['address'],
                 'zone_id' => $zone->id, 'division' => $zone->division, 'district' => $zone->district, 'thana' => $zone->thana,
-                'status' => 'pending', 'subtotal' => SaleService::money($subtotal), 'shipping' => SaleService::money($shipping),
-                'grand_total' => SaleService::money($subtotal + $shipping), 'placed_at' => now(),
+                'status' => 'pending', 'subtotal' => SaleService::money($subtotal),
+                'discount_pct' => $pct, 'discount_total' => SaleService::money($discount), 'shipping' => SaleService::money($shipping),
+                'grand_total' => SaleService::money($afterDiscount + $shipping), // before points; COD = grand − points value
+                'points_redeemed' => $points, 'points_value' => SaleService::money($pointsPaisa),
+                'client_key' => $data['clientKey'] ?? null, 'placed_at' => now(),
                 'note' => $data['note'] ?? null, 'created_by' => $user?->id,
             ]);
             foreach ($lines as $l) {
                 OnlineOrderLine::create([
                     'online_order_id' => $order->id, 'product_id' => $l['unit']->product_id, 'product_unit_id' => $l['unit']->id,
                     'description' => trim($l['unit']->product->name.' '.$l['unit']->product->strength), 'qty' => $l['qty'],
-                    'qty_base' => $l['qtyBase'], 'unit_price' => $l['price'], 'line_total' => SaleService::money($l['total']),
+                    'qty_base' => $l['qtyBase'], 'unit_price' => $l['price'], 'line_total' => SaleService::money($l['net']),
                 ]);
+            }
+            // Points leave the wallet now so they cannot be spent twice; a cancel gives them back.
+            if ($points > 0) {
+                $this->rewards->debit($customer->id, 'redeem', $points, ['online_order', $order->id], $order->number, $user?->id, (float) SaleService::money($pointsPaisa));
             }
             $this->history($order, 'pending', 'Order placed by '.($order->channel === 'phone' ? 'phone' : $order->channel), $user);
 
@@ -235,16 +292,20 @@ class OnlineOrders
             'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('sale', Warehouse::findOrFail($order->warehouse_id)),
             'channel' => $order->channel, 'warehouse_id' => $order->warehouse_id, 'customer_id' => $order->customer_id,
             'cashier_id' => $user->id, 'status' => 'completed', 'sale_date' => now(),
-            'subtotal' => $order->subtotal, 'shipping_total' => $order->shipping, 'grand_total' => $order->grand_total,
+            'subtotal' => $order->subtotal, 'line_discount_total' => $order->discount_total, 'shipping_total' => $order->shipping, 'grand_total' => $order->grand_total,
             'paid_total' => 0, 'due_total' => $order->grand_total, 'payment_status' => $grand > 0 ? 'unpaid' : 'paid',
+            // Points were taken from the wallet at placement; on the sale they make a void give them back once.
+            'points_redeemed' => $order->points_redeemed, 'points_value' => $order->points_value,
             'note' => 'Online order '.$order->number,
         ]);
         $costTotal = 0.0;
         foreach ($order->lines as $i => $l) {
+            $gross = (int) round(SaleService::paisa($l->unit_price) * (float) $l->qty);
             $item = SaleItem::create([
                 'sale_id' => $sale->id, 'line_type' => 'product', 'product_id' => $l->product_id, 'product_unit_id' => $l->product_unit_id,
                 'description' => $l->description, 'qty' => $l->qty, 'factor' => $l->unit?->factor ?? 1, 'qty_base' => $l->qty_base,
-                'unit_price' => $l->unit_price, 'line_total' => $l->line_total,
+                'unit_price' => $l->unit_price, 'discount_pct' => $order->discount_pct,
+                'discount_total' => SaleService::money($gross - SaleService::paisa($l->line_total)), 'line_total' => $l->line_total,
             ]);
             $lineCost = 0.0;
             foreach ($this->stock->allocate($order->warehouse_id, $l->product_id, $l->qty_base, "lines.$i.qty") as $part) {
@@ -267,6 +328,25 @@ class OnlineOrders
             'party_type' => 'customer', 'party_id' => $order->customer_id, 'entry_date' => now()->toDateString(), 'type' => 'invoice',
             'debit' => $order->grand_total, 'credit' => 0, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number, 'created_by' => $user->id,
         ]);
+        // The points part is paid now (like a points payment at the counter); the rider collects the rest.
+        $pointsPaisa = SaleService::paisa($order->points_value);
+        if ($pointsPaisa > 0) {
+            $method = PaymentMethod::where('code', 'points')->firstOrFail();
+            $money = SaleService::money($pointsPaisa);
+            $payment = Payment::create([
+                'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('payment', Warehouse::findOrFail($order->warehouse_id)),
+                'direction' => 'in', 'party_type' => 'customer', 'party_id' => $order->customer_id,
+                'payment_method_id' => $method->id, 'account_id' => $method->account_id, 'amount' => $money, 'paid_at' => now(),
+                'note' => $order->points_redeemed.' points · '.$order->number, 'created_by' => $user->id,
+            ]);
+            PaymentAllocation::create(['payment_id' => $payment->id, 'allocatable_type' => 'sale', 'allocatable_id' => $sale->id, 'amount' => $money]);
+            PartyLedgerEntry::create([
+                'party_type' => 'customer', 'party_id' => $order->customer_id, 'entry_date' => now()->toDateString(), 'type' => 'payment',
+                'debit' => 0, 'credit' => $money, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number.' points', 'created_by' => $user->id,
+            ]);
+            $due = $grand - $pointsPaisa;
+            $sale->update(['paid_total' => $money, 'due_total' => SaleService::money($due), 'payment_status' => $due > 0 ? 'partial' : 'paid']);
+        }
         $order->update(['sale_id' => $sale->id]);
     }
 
@@ -305,7 +385,10 @@ class OnlineOrders
             throw ValidationException::withMessages(['note' => 'A reason is required to cancel an order.']);
         }
         if ($order->sale_id) {
+            // The void gives the redeemed points back (they are on the sale).
             $this->reversals->void($user, Sale::findOrFail($order->sale_id), 'Online order cancelled: '.trim($note), forOrder: true);
+        } elseif ($order->points_redeemed > 0) {
+            $this->rewards->credit($order->customer_id, 'reverse', (int) $order->points_redeemed, ['online_order', $order->id], 'Cancelled '.$order->number, $user->id);
         }
         $order->update(['cancel_reason' => trim($note)]);
     }

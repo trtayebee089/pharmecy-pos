@@ -13,6 +13,7 @@ use App\Models\Warehouse;
 use App\Services\StockLedger;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 pest()->extend(TestCase::class)
@@ -78,4 +79,22 @@ function supplier(): Supplier
 function day(int $offset): string
 {
     return now()->addDays($offset)->toDateString();
+}
+
+// ---------------------------------------------------------------- customer channel (/api/v1)
+
+const V1 = '/api/v1';
+
+/** Registers the test customer (01812345678 / secret123) through the API. */
+function signUp($test, array $over = []): TestResponse
+{
+    return $test->postJson(V1.'/customer/register', $over + [
+        'name' => 'Nusrat Jahan', 'phone_number' => '01812345678', 'email' => 'nusrat@example.test',
+        'password' => 'secret123', 'password_confirmation' => 'secret123', 'device_name' => 'redpharma-web-v2',
+    ]);
+}
+
+function bearer(string $token): array
+{
+    return ['Authorization' => 'Bearer '.$token, 'Accept' => 'application/json'];
 }

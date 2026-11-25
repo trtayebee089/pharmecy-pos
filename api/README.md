@@ -40,6 +40,30 @@ talks to `/api/pos/v1` with Sanctum SPA cookie auth. The design is in
 Not yet built (the POS still uses its mock layer for these):
 the inventory reorder suggestions screen (`/reorder/*`) and voiding a sale return.
 
+## Customer API (website and Android app)
+
+Routes: `routes/customer.php`. Bearer tokens (Sanctum, ability `customer`, 30 days); the staff `pos/v1` group
+refuses customer tokens (`staff` middleware) and customer routes refuse staff sessions (`customer` middleware).
+Every customer route answers JSON even without an `Accept` header (`ForceJson`), and money stays a JSON float
+(`60.0`, `JSON_PRESERVE_ZERO_FRACTION`) because the app assigns some values straight into a Dart `double`.
+
+| Area | `/api/v1` endpoints | Notes |
+|---|---|---|
+| Account | `POST customer/{register,login,forgot-password,reset-password}`, `GET/PUT customer/profile`, `PUT customer/password`, `POST customer/{logout,logout-all,account-removal-request}` | Sign in with phone or email + password (min 8, letters and numbers). Registering an existing phone or email is refused (no account takeover). Reset: 6-digit code to the account's email, 15 min, 5 tries, 60 s between codes, same answer for unknown accounts; a reset signs out every device. Changing the password needs the current one. The phone cannot be changed online. Throttled per IP and per account |
+| Catalogue | `GET categories`, `GET categories/{slug}` (`data` + top-level `products` paginator), `GET products` (`category`, `search`, `sort`, `price=a-b`, `in_stock`, `prescription_required`, `page`, `per_page` ≤ 60), `GET products/{featured,best-selling}`, `GET products/suggestions?query=`, `GET products/{slug or id}`, `GET shipping-zones` | Active products with a retail price for one piece; `price`, `stock` and order quantities are **per piece** (`unit` = the piece label, `pack` = how it is usually sold); stock = sellable (active, not expired) batches at the online branch |
+| Orders | `POST checkout` (optional bearer, `Idempotency-Key`), `GET orders`, `GET orders/{number}`, `POST orders/{number}/reorder`, `GET tracking/{code}` | Through `OnlineOrders::place`: server prices, zone shipping, stock check, cash on delivery. A signed-in customer gets the customer discount (group / membership per the reward settings) and may redeem `reward_points`; a guest gets neither, even with an existing customer's phone (the order is linked to that customer, nothing else). A new guest may leave an email to set a password later. Orders are addressed by number and only the owner sees them; tracking by the random `RP…` code shows status only (no name, phone or address). Same key + same phone returns the first order |
+| Rewards & membership | `GET customer/rewards`, `GET customer/rewards/transactions`, `POST customer/rewards/quote`, `GET customer/membership` (+ `/progress`), `GET customer/membership/history`, `POST customer/membership/renew` | Quote only checks the rules; points leave the wallet when the order is placed and come back if it is cancelled. Renewal answers 422: the fee is paid at a branch |
+
+**Legacy paths for the installed Android app** (`LegacyAppController`, remove when old installs have aged out):
+`customer/{login,register,profile,profile/update,profile/update-password,forget-password,verify-otp,logout,orders,orders/{id}}`,
+`orders/{id}/reorder`, `categories(/{slug})`, `products/{featured,best-selling,suggestions,{slug}}`, `search/{q}`,
+`shipping-zones`, `checkout`, `reward/{profile,transactions,redeem}`. Same services and rules, old response shapes
+(see `tests/Feature/LegacyAppApiTest.php`). Differences: the old checkout sends no delivery area, so the zone is
+matched by the shipping rate (preferring the district named in the address); client prices, discount and `user_id`
+in the old body are ignored; a guest no longer gets the 5 % the old app shows (the confirmation shows the real
+total); the old password change sends no current password, so it is accepted on that path only and signs out every
+other device.
+
 ## Local development (Windows)
 
 Herd's PHP 8.4 is used with a cleaned php.ini kept outside the repo

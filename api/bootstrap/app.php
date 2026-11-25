@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureCustomer;
+use App\Http\Middleware\EnsureStaff;
 use App\Http\Middleware\Idempotent;
 use App\Http\Middleware\PasswordFresh;
 use Illuminate\Foundation\Application;
@@ -17,7 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA: requests from SANCTUM_STATEFUL_DOMAINS get session + CSRF.
         $middleware->statefulApi();
-        $middleware->alias(['idempotent' => Idempotent::class, 'password.fresh' => PasswordFresh::class]);
+        $middleware->alias([
+            'idempotent' => Idempotent::class, 'password.fresh' => PasswordFresh::class,
+            'staff' => EnsureStaff::class, 'customer' => EnsureCustomer::class,
+        ]);
         // An API has no login page: unauthenticated requests get 401 JSON.
         $middleware->redirectGuestsTo(fn () => null);
     })
