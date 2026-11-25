@@ -11,6 +11,7 @@ use App\Http\Controllers\Pos\DashboardController;
 use App\Http\Controllers\Pos\FinanceController;
 use App\Http\Controllers\Pos\HeldSaleController;
 use App\Http\Controllers\Pos\HrController;
+use App\Http\Controllers\Pos\IntegrationController;
 use App\Http\Controllers\Pos\InventoryController;
 use App\Http\Controllers\Pos\LoyaltyController;
 use App\Http\Controllers\Pos\OnlineOrderController;
@@ -70,6 +71,14 @@ Route::prefix('pos/v1')->group(function () {
         Route::get('settings/pos', [AdminController::class, 'posSettings']);
         Route::put('settings/pos', [AdminController::class, 'savePosSettings'])->middleware('can:settings.manage');
         Route::post('settings/printers/{printer}/test', [AdminController::class, 'testPrint'])->middleware('can:settings.manage')->whereNumber('printer');
+
+        // Integrations: email, SMS, tracking, feed, payment gateways, couriers, website details (secrets write-only).
+        Route::prefix('admin/integrations')->middleware('can:settings.manage')->group(function () {
+            Route::get('/', [IntegrationController::class, 'index']);
+            Route::put('{group}', [IntegrationController::class, 'save'])->where('group', '[a-z]+');
+            Route::post('mail/test', [IntegrationController::class, 'testMail'])->middleware('throttle:10,1');
+            Route::post('sms/test', [IntegrationController::class, 'testSms'])->middleware('throttle:10,1');
+        });
 
         Route::get('dashboard/summary', [DashboardController::class, 'summary'])->middleware('can:dashboard.view');
 

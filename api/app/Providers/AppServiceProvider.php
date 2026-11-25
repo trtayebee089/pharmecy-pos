@@ -4,7 +4,9 @@ namespace App\Providers;
 
 use App\Models\User;
 use App\Services\DocumentNumbers;
+use App\Services\Integrations;
 use App\Services\LoyaltySettings;
+use App\Services\MailSettings;
 use App\Services\Pricing;
 use App\Services\StockLedger;
 use Illuminate\Database\Eloquent\Model;
@@ -19,6 +21,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(LoyaltySettings::class);
         $this->app->singleton(StockLedger::class);
         $this->app->singleton(DocumentNumbers::class);
+        $this->app->scoped(Integrations::class);
     }
 
     public function boot(): void
@@ -28,5 +31,8 @@ class AppServiceProvider extends ServiceProvider
 
         // Admin passes every permission check; everyone else needs the explicit permission.
         Gate::before(fn (User $user) => $user->isAdmin() ? true : null);
+
+        // SMTP from Administration › Integrations, read only when something actually sends mail.
+        $this->app->afterResolving('mail.manager', fn () => $this->app->make(MailSettings::class)->apply());
     }
 }

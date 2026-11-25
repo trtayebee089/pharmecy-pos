@@ -8,9 +8,11 @@ use App\Models\Customer;
 use App\Models\CustomerGroup;
 use App\Models\Sale;
 use App\Services\CustomerPayments;
+use App\Services\Integrations;
 use App\Services\Memberships;
 use App\Services\RewardLedger;
 use App\Services\SaleService;
+use App\Services\SmsGateway;
 use App\Support\Present;
 use App\Support\PresentLoyalty;
 use Illuminate\Http\JsonResponse;
@@ -160,8 +162,26 @@ class CustomerAccountController extends Controller
     }
 
     /** No SMS gateway is configured yet: say so instead of pretending to send. */
-    public function dueReminder(Customer $customer): JsonResponse
+    /** Sends the due as an SMS through the gateway set in Administration › Integrations. */
+    public function dueReminder(Request $request, Customer $customer, SmsGateway $sms, Integrations $integrations): JsonResponse
     {
-        return response()->json(['message' => 'SMS reminders are not available yet: no SMS gateway is configured.', 'queued' => false], 503);
+        if (! $sms->enabled()) {
+            return response()->json(['message' => 'SMS is not set up: an admin turns it on in Administration › Integrations › SMS.', 'queued' => false], 503);
+        }
+        $due = CustomerPayments::balance($customer->id) / 100; // paisa → taka
+        if ($due <= 0) {
+            throw ValidationException::withMessages(['customer' => "{$customer->name} owes nothing."]);
+        }
+        if (! $customer->phone) {
+            throw ValidationException::withMessages(['customer' => "{$customer->name} has no phone number."]);
+        }
+        $shop = $integrations->public('storefront');
+        $text = "Dear {$customer->name}, your due at {$shop['siteName']} is Tk ".number_format($due, 2).'. Please pay at your convenience.'
+            .($shop['phone'] ? " Call {$shop['phone']}." : '');
+        $log = $sms->send($customer->phone, $text, 'due_reminder', $request->user()->id);
+
+        return $log->status === 'sent'
+            ? response()->json(['message' => "Reminder sent to {$customer->phone}.", 'queued' => true])
+            : response()->json(['message' => 'The SMS could not be sent: '.$log->error, 'queued' => false], 502);
     }
 }
