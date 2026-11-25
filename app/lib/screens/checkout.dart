@@ -91,7 +91,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   double _getDiscountRate(AuthProvider auth) {
-    double baseDiscount = 5.0;
+    // The server gives a discount only to signed-in members; guests pay retail.
+    double baseDiscount = 0.0;
 
     if (auth.isLoggedIn &&
         auth.membership != null &&
@@ -131,7 +132,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         "paid_amount": 0,
         "sale_type": "website",
 
-        "customer": {"name": fullName, "phone": phone, "address": address},
+        "customer": {
+          "name": fullName,
+          "phone": phone,
+          "address": address,
+          // Lets the server pick the exact delivery zone (older builds sent only the rate).
+          "division": division,
+          "district": district,
+        },
 
         "subtotal": subtotal,
         "shipping_cost": shippingRate,
@@ -163,6 +171,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         Uri.parse(ApiEndpoints.checkout),
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
           if (auth.token != null) "Authorization": "Bearer ${auth.token}",
         },
         body: jsonEncode(payload),
@@ -225,7 +234,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
     setState(() {
       district = selectedDistrict;
-      shippingRate = districtData['rate'] ?? 0.0;
+      shippingRate = double.tryParse('${districtData['rate'] ?? 0}') ?? 0.0;
     });
   }
 
