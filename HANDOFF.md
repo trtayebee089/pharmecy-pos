@@ -1,6 +1,6 @@
 # Red Pharma rebuild: handoff
 
-Status as of **25 Nov 2026** (evening) on `main`, last feature: HR & payroll (see §10)
+Status as of **25 Nov 2026** (evening) on `main`, last feature: Administration (see §10)
 (everything pushed to `origin` = github.com/trtayebee089/pharmecy-pos).
 
 Read this file first on a new device or in a new AI session. It carries the
@@ -10,22 +10,22 @@ decisions, rules and state that are not obvious from the code.
 
 ## 0. Continue here (after the office PC, 25 Nov 2026 evening)
 
-The office PC built **Loyalty**, **Online orders & delivery** and **HR & payroll** on top of `6b4a7ca`. On any other machine:
+The office PC built **Loyalty**, **Online orders & delivery**, **HR & payroll** and **Administration** on top of `6b4a7ca`. On any other machine:
 
 ```bash
 git pull
 cd api
-php artisan migrate                        # 3 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders), 101600 (HR & payroll)
+php artisan migrate                        # 4 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders), 101600 (HR & payroll), 101700 (role descriptions)
 php artisan db:seed                        # DatabaseSeeder: adds the "points" payment method and the three
                                            # membership plans (Silver/Gold/Platinum) INACTIVE with 0 discount
-php vendor/bin/pest                        # expect 165 passing (also on MySQL: -c phpunit.mysql.xml)
+php vendor/bin/pest                        # expect 177 passing (also on MySQL: -c phpunit.mysql.xml)
 php artisan db:seed --class=DemoSeeder     # dev only: 5 Dhaka shipping zones, 2 riders, 2 departments, 3 employees
 ```
 
-Then add `loyalty`, `orders` and `hr` to the live domains in **`pos/.env`** and restart `npm run dev`:
+Then add `loyalty`, `orders`, `hr` and `admin` to the live domains in **`pos/.env`** and restart `npm run dev`:
 
 ```
-NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders,hr
+NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders,hr,admin
 ```
 
 Loyalty is **off** until an admin switches it on in Administration › Reward points (the API defaults are inactive,
@@ -39,9 +39,10 @@ started from `.claude/launch.json` (`redpharma-mysql`, before the API). `api/.en
 databases `redpharma_pos` and `redpharma_pos_test`, user `redpharma`; the old SQLite settings are kept in the
 ignored `api/.env.sqlite.bak`.
 
-**Next task:** §5 item 1, **Admin** (users, roles & permissions screen, warehouses, POS settings, general settings).
-Contracts: `useUserAdminApi`, `useWarehousesResource` (`pos/app/services/hr.ts`), `useAdminApi` (`operations.ts`), `useSettingsApi`
-(`settings.ts`). Mind KI-010: only admins may change roles or other users; self-service only name, email, password.
+**Next task:** §5 item 1, **Customer channel `/api/v1` + legacy bridge**: the API for the website and Android app
+(customer sign-in, catalogue, checkout through `OnlineOrders::place` with server pricing, order tracking, rewards), and a
+bridge so the legacy website/app keep working until they are rebuilt. Read `docs/api-architecture.md` and
+`docs/rebuild/rebuild-architecture.md` (legacy bridge) first; ask the owner about customer sign-in (OTP?) and checkout rules.
 
 ---
 
@@ -185,6 +186,27 @@ Engineering decisions taken during the build (change only on purpose):
     refuses to void it alone) and the advance recoveries. Advances are paid out from an account (an asset "Staff salary
     advances" on the balance sheet, not an expense) and recovered by payroll or in cash into Cash in hand; an advance can
     be voided only before any recovery.
+- Administration (owner decisions, 25 Nov 2026), `AdminController`, `AppSettings`:
+  - **Only Admins** manage users, roles and permissions (`roles.manage`). Self-service (`/me/profile`) changes only name,
+    email and phone (fixes KI-010). Nobody disables or changes their own role; the last active Admin always stays. The
+    Admin role always has every permission and cannot be edited; other roles (permissions + discount limit) can.
+  - **Passwords**: the admin sets a temporary password when creating or resetting a user; it is emailed to the user
+    (`App\Mail\TemporaryPassword`, needs a real `MAIL_MAILER` in production: the development `log` mailer writes the
+    message, password included, to the local log) and the user must change it at the next sign-in. Until then the
+    `password.fresh` middleware only allows `/me`, `/me/password`, `/me/profile` and logout. Resets end the user's sessions.
+  - **General settings** (`settings` key `general`): near/critical expiry days (dashboard and stock use them),
+    **roundTo** = the server rounds every sale's grand total to 0.50 or 1 taka and stores the difference in
+    `sales.rounding` (the cart previews the same rounding), and two **real stock switches** that default to the safe
+    rule: `blockExpiredSale` (off = expired batches can be sold, but only after every unexpired batch) and
+    `allowNegativeStock` (on = a sale may take more than is on hand; the shortfall goes onto the last batch used as a
+    negative balance). These reverse the earlier fixed rules only when an admin switches them.
+  - **POS settings** (key `pos`): counter layout and defaults, invoice layout, printers; payment methods are the
+    `payment_methods` rows (Cash cannot be switched off); the PrintNode key is stored encrypted and never returned.
+    Server-side printing (PrintNode / network) is not built: "Test print" says so.
+  - Warehouses: new stores get a "Counter 1" register; codes are capital letters/digits and cannot change once a branch
+    has documents; branches with history are deactivated, never deleted; one branch always stays active.
+  - The reference seeder no longer resets role permissions or discount limits: it adds only permissions that are new
+    since its last run (`settings` key `permissions_seeded`).
   - One append-only `reward_ledger` + `reward_wallets` projection under lock (`App\Services\RewardLedger`); spending and
     expiry consume the oldest-expiring points first; `php artisan loyalty:expire` (scheduled daily 00:15) expires points
     and memberships. Production needs the Laravel scheduler (`schedule:run` every minute).
@@ -201,7 +223,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (165 Pest tests passing)
+### Laravel API (`api/`) – live slices (177 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -224,24 +246,23 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Loyalty: reward wallets + ledger, adjustments, campaigns, membership plans, members (auto tier, assign, renew, change, cancel), reward point settings, points as a POS payment | live |
 | Online orders & delivery: phone orders, status flow (stock at confirm, COD held by riders), rider assignment, riders with cash handover, shipping zones, online branch setting | live |
 | HR & payroll: employees, departments, designations, holidays, attendance (day + month), payroll runs (draft → approved → paid, manual additions), salary advances with installment/full recovery, payroll settings | live |
+| Administration: users (temporary passwords, enable/disable, reset), roles & permissions, warehouses, general settings (rounding, stock switches), POS settings (layout, payment methods, invoice, printers), my account | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (16 migrations). The database is **MySQL/MariaDB**
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (17 migrations). The database is **MySQL/MariaDB**
 (`redpharma_pos`, tests also run on `redpharma_pos_test`); all tests pass on MariaDB 10.11, MySQL 8.0 and SQLite.
 
 In `pos/.env` the live domains are:
-`NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders,hr`
+`NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders,hr,admin`
 (everything else still runs on mocks while `NUXT_PUBLIC_USE_MOCKS=true`). A new domain needs three things: its name in
 `ApiDomain` (`pos/app/composables/useApi.ts`), `useApi('<domain>')` in the service, and the name in `.env`.
 
-Still on mocks: admin (users, roles, warehouses,
-settings), the inventory reorder suggestions screen, and voiding a sale return.
+Still on mocks: the inventory reorder suggestions screen and voiding a sale return. Every other POS screen is live.
 
 ## 5. What needs to be built (suggested order)
 
-1. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-2. **Customer channel `/api/v1`** (website/app checkout calls `OnlineOrders::place`, order tracking by code) for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-3. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Customer channel `/api/v1`** (website/app checkout calls `OnlineOrders::place`, order tracking by code) for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+2. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Overdraw checks use the account's current balance, so an expense or transfer backdated to before the money arrived
@@ -252,7 +273,9 @@ Small open items:
 - The inventory reorder suggestions screen (`useReorderApi`, `/reorder/*`) still runs on mocks; it overlaps with the
   purchase orders forecast and could reuse `PurchaseOrderPlanner`.
 - Due reminder SMS: the endpoint answers 503 until an SMS gateway is chosen and configured.
-- Transfers can only target warehouses the user is assigned to until a warehouse list endpoint exists (Admin module).
+- Transfers can still only target warehouses the user is assigned to (the API now lists every branch at `GET /admin/warehouses`).
+- Admin: production needs a real mailer for temporary passwords; server-side printing (PrintNode, network printers) and the
+  SMS-after-sale switch are stored but not wired; with no email on file the admin hands the temporary password over.
 - Voiding a sale return (`/sales/returns` row action) still runs on mocks; the API has no sale-return void yet.
 - Register page always opens register id 1 (`pos/app/pages/finance/registers.vue`); the API has `GET /cash-registers` for a picker.
 - Decide whether selling requires an open register.
@@ -370,6 +393,9 @@ pos/                  Nuxt 4 POS
 ## 10. Commit history
 
 ```
+6f057fb connect administration in pos
+849f174 add administration api
+020a4e2 update handoff notes
 cf27187 connect hr and payroll in pos
 f0f8943 add hr and payroll api
 4f4107e update handoff notes
