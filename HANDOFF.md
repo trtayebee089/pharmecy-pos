@@ -1,6 +1,6 @@
 # Red Pharma rebuild: handoff
 
-Status as of **25 Nov 2026** (evening) on `main`, last feature: online orders & delivery (see §10)
+Status as of **25 Nov 2026** (evening) on `main`, last feature: HR & payroll (see §10)
 (everything pushed to `origin` = github.com/trtayebee089/pharmecy-pos).
 
 Read this file first on a new device or in a new AI session. It carries the
@@ -10,22 +10,22 @@ decisions, rules and state that are not obvious from the code.
 
 ## 0. Continue here (after the office PC, 25 Nov 2026 evening)
 
-The office PC built **Loyalty** and **Online orders & delivery** on top of `6b4a7ca`. On any other machine:
+The office PC built **Loyalty**, **Online orders & delivery** and **HR & payroll** on top of `6b4a7ca`. On any other machine:
 
 ```bash
 git pull
 cd api
-php artisan migrate                        # 2 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders)
+php artisan migrate                        # 3 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders), 101600 (HR & payroll)
 php artisan db:seed                        # DatabaseSeeder: adds the "points" payment method and the three
                                            # membership plans (Silver/Gold/Platinum) INACTIVE with 0 discount
-php vendor/bin/pest                        # expect 156 passing (also on MySQL: -c phpunit.mysql.xml)
-php artisan db:seed --class=DemoSeeder     # dev only: adds 5 Dhaka shipping zones and 2 riders
+php vendor/bin/pest                        # expect 165 passing (also on MySQL: -c phpunit.mysql.xml)
+php artisan db:seed --class=DemoSeeder     # dev only: 5 Dhaka shipping zones, 2 riders, 2 departments, 3 employees
 ```
 
-Then add `loyalty` and `orders` to the live domains in **`pos/.env`** and restart `npm run dev`:
+Then add `loyalty`, `orders` and `hr` to the live domains in **`pos/.env`** and restart `npm run dev`:
 
 ```
-NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders
+NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders,hr
 ```
 
 Loyalty is **off** until an admin switches it on in Administration › Reward points (the API defaults are inactive,
@@ -39,8 +39,9 @@ started from `.claude/launch.json` (`redpharma-mysql`, before the API). `api/.en
 databases `redpharma_pos` and `redpharma_pos_test`, user `redpharma`; the old SQLite settings are kept in the
 ignored `api/.env.sqlite.bak`.
 
-**Next task:** §5 item 1, **HR & payroll** (employees, attendance, holidays, payroll). Contracts: `pos/app/services/hr.ts`
-and its types; ask the owner before deciding payroll money rules (salary structure, deductions, how payroll is paid).
+**Next task:** §5 item 1, **Admin** (users, roles & permissions screen, warehouses, POS settings, general settings).
+Contracts: `useUserAdminApi`, `useWarehousesResource` (`pos/app/services/hr.ts`), `useAdminApi` (`operations.ts`), `useSettingsApi`
+(`settings.ts`). Mind KI-010: only admins may change roles or other users; self-service only name, email, password.
 
 ---
 
@@ -171,6 +172,19 @@ Engineering decisions taken during the build (change only on purpose):
   - **COD**: delivered = a cash payment on the sale with no account, held by the rider (`rider_cash_entries` collect).
     Delivery › Riders › Receive COD cash records the handover (never more than held) into Cash in hand. A rider who
     holds cash or has open orders cannot be removed; riders/zones with history are deactivated, not deleted.
+- HR & payroll (owner decisions, 25 Nov 2026), rules in `App\Services\Payroll`:
+  - **Absence deduction = basic ÷ 30 × absent days** (capped at the basic). Leave is paid.
+  - **Admin settings** (Payroll › Settings, settings key `hr_payroll`, needs `hr.payroll`): weekly off days (working days on
+    payslips = days − off days − holidays of all branches or the employee's branch), the late rule (every N late days
+    count as one absent day; 0 = lates are paid) and how advances are recovered (`installment` = the monthly amount set
+    on each advance, `full` = the whole open balance in the next run). Recovery never exceeds the net pay.
+  - Runs go draft → approved → paid; drafts take manual additions (bonus/overtime with a note) and can be deleted;
+    approving recomputes from attendance and locks that month's attendance; paid runs are final.
+  - **Paying** posts one cash-out per payslip (net) from the chosen account, one "Salaries & wages" expense for what was
+    earned (net + advance recovered; linked to the run via `finance_entries.source_type = payroll_run`, so Finance
+    refuses to void it alone) and the advance recoveries. Advances are paid out from an account (an asset "Staff salary
+    advances" on the balance sheet, not an expense) and recovered by payroll or in cash into Cash in hand; an advance can
+    be voided only before any recovery.
   - One append-only `reward_ledger` + `reward_wallets` projection under lock (`App\Services\RewardLedger`); spending and
     expiry consume the oldest-expiring points first; `php artisan loyalty:expire` (scheduled daily 00:15) expires points
     and memberships. Production needs the Laravel scheduler (`schedule:run` every minute).
@@ -187,7 +201,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (156 Pest tests passing)
+### Laravel API (`api/`) – live slices (165 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -209,25 +223,25 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Reports: sales, profit, billers, custom items, stock, expiry, purchases, customers, customer statement, suppliers, payments, cashiers, monthly summary | live |
 | Loyalty: reward wallets + ledger, adjustments, campaigns, membership plans, members (auto tier, assign, renew, change, cancel), reward point settings, points as a POS payment | live |
 | Online orders & delivery: phone orders, status flow (stock at confirm, COD held by riders), rider assignment, riders with cash handover, shipping zones, online branch setting | live |
+| HR & payroll: employees, departments, designations, holidays, attendance (day + month), payroll runs (draft → approved → paid, manual additions), salary advances with installment/full recovery, payroll settings | live |
 | Dashboard summary | live |
 
-Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (15 migrations). The database is **MySQL/MariaDB**
+Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (16 migrations). The database is **MySQL/MariaDB**
 (`redpharma_pos`, tests also run on `redpharma_pos_test`); all tests pass on MariaDB 10.11, MySQL 8.0 and SQLite.
 
 In `pos/.env` the live domains are:
-`NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders`
+`NUXT_PUBLIC_LIVE_DOMAINS=auth,catalog,customers,sales,dashboard,registers,purchases,inventory,finance,reports,loyalty,orders,hr`
 (everything else still runs on mocks while `NUXT_PUBLIC_USE_MOCKS=true`). A new domain needs three things: its name in
 `ApiDomain` (`pos/app/composables/useApi.ts`), `useApi('<domain>')` in the service, and the name in `.env`.
 
-Still on mocks: HR & payroll, admin (users, roles, warehouses,
+Still on mocks: admin (users, roles, warehouses,
 settings), the inventory reorder suggestions screen, and voiding a sale return.
 
 ## 5. What needs to be built (suggested order)
 
-1. **HR & payroll**: employees, attendance, holidays, payroll.
-2. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
-3. **Customer channel `/api/v1`** (website/app checkout calls `OnlineOrders::place`, order tracking by code) for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
-4. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
+1. **Admin**: users, roles & permissions UI, warehouses, POS settings, general settings (server-side).
+2. **Customer channel `/api/v1`** (website/app checkout calls `OnlineOrders::place`, order tracking by code) for website/app + **legacy bridge**; then **data migration** (ETL per `docs/rebuild/data-migration-plan.md`).
+3. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
 - Overdraw checks use the account's current balance, so an expense or transfer backdated to before the money arrived
@@ -242,6 +256,8 @@ Small open items:
 - Voiding a sale return (`/sales/returns` row action) still runs on mocks; the API has no sale-return void yet.
 - Register page always opens register id 1 (`pos/app/pages/finance/registers.vue`); the API has `GET /cash-registers` for a picker.
 - Decide whether selling requires an open register.
+- HR: payroll is paid from one account per run; salary expense is booked to the first active branch (no per-branch
+  split yet); attendance has no check-in device integration (entered on the Attendance page).
 - Online orders: no discounts or reward points on online orders yet; delivery partners (Pathao, Steadfast, RedX) are
   only a label on the zone (no courier integration); the fulfilment board has no "New phone order" button (it is on the
   Online orders page).
@@ -354,6 +370,9 @@ pos/                  Nuxt 4 POS
 ## 10. Commit history
 
 ```
+cf27187 connect hr and payroll in pos
+f0f8943 add hr and payroll api
+4f4107e update handoff notes
 52808b3 connect online orders in pos
 a91ae5f add online orders and delivery api
 996a115 update handoff notes
