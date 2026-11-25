@@ -18,7 +18,7 @@ cd api
 php artisan migrate                        # 4 new additive migrations: 2026_11_25_101400 (loyalty), 101500 (online orders), 101600 (HR & payroll), 101700 (role descriptions)
 php artisan db:seed                        # DatabaseSeeder: adds the "points" payment method and the three
                                            # membership plans (Silver/Gold/Platinum) INACTIVE with 0 discount
-php vendor/bin/pest                        # expect 206 passing (also on MySQL: -c phpunit.mysql.xml)
+php vendor/bin/pest                        # expect 232 passing (also on MySQL: -c phpunit.mysql.xml)
 php artisan db:seed --class=DemoSeeder     # dev only: 5 Dhaka shipping zones, 2 riders, 2 departments, 3 employees
 ```
 
@@ -46,9 +46,18 @@ discount/points/idempotency columns on online orders), `php vendor/bin/pest` →
 `cd web && npm install && npm run dev` (Vite proxies `/api` to `http://localhost:8000`; no `.env` needed).
 Rules: §3 "Customer channel". Endpoints: `api/README.md` "Customer API".
 
+**Integrations done (home PC, 26 Nov 2026):** Administration › **Integrations** (email SMTP, any-provider SMS, GTM /
+Pixel / GA4 / Google Ads + server-side purchases, product feed, SSLCommerz + bKash, Steadfast + Pathao, website details)
+and **Website banners** (wide rotating main banner + three tiles, the owner's layout). After `git pull`: `cd api &&
+php artisan migrate` (4 additive migrations `2026_11_26_1000..1003`: sms_messages, storefront_banners, online_payments
++ payment columns, courier columns + Pathao ids on zones), `php artisan db:seed` (adds the SSLCommerz and Courier COD
+accounts/methods; the migrations add them too on an existing database), `php artisan storage:link` (banner images),
+`php vendor/bin/pest` → 232. Details: `api/README.md` "Integrations".
+
 **Next task:** §5 item 1, **data migration** (ETL per `docs/rebuild/data-migration-plan.md`). Before going live with the
-customer channel: a real mailer (reset codes), the website origin in `CORS_ALLOWED_ORIGINS`, and an app build tested on a
-phone (Flutter is not installed on the home PC; the app-source changes are unbuilt).
+customer channel: fill Administration › Integrations (SMTP for reset codes, SMS, website address, gateways in sandbox
+first), the website origin in `CORS_ALLOWED_ORIGINS`, the Laravel scheduler, and an app build tested on a phone (Flutter
+is not installed on the home PC; the app-source changes are unbuilt).
 
 ---
 
@@ -243,7 +252,7 @@ About 65 screens covering every module in the sidebar (sales, POS grid + classic
 purchases + purchase orders, customers, suppliers, loyalty, delivery, finance, reports, HR, admin).
 Every screen works on a **development mock layer** (`pos/app/mocks`), and finished domains switch to the real API.
 
-### Laravel API (`api/`) – live slices (206 Pest tests passing)
+### Laravel API (`api/`) – live slices (232 Pest tests passing)
 
 | Slice | Status |
 |---|---|
@@ -269,6 +278,7 @@ Every screen works on a **development mock layer** (`pos/app/mocks`), and finish
 | Administration: users (temporary passwords, enable/disable, reset), roles & permissions, warehouses, general settings (rounding, stock switches), POS settings (layout, payment methods, invoice, printers), my account | live |
 | Dashboard summary | live |
 | Customer channel `/api/v1` (website + app): accounts with email reset codes, catalogue, guest/member checkout, orders, tracking, reorder, rewards, membership; legacy paths of the installed app | live |
+| Integrations: SMTP, any-provider SMS (+ log, due reminders, order-update SMS), GTM/Pixel/GA4/Ads + server-side purchases, product feed, SSLCommerz + bKash payments, Steadfast + Pathao booking and webhooks, website details, home page banners | live (gateways untested against the real services) |
 
 Endpoint details: `api/README.md`. Schema: `api/database/migrations/` (17 migrations). The database is **MySQL/MariaDB**
 (`redpharma_pos`, tests also run on `redpharma_pos_test`); all tests pass on MariaDB 10.11, MySQL 8.0 and SQLite.
@@ -287,8 +297,16 @@ Still on mocks: the inventory reorder suggestions screen and voiding a sale retu
 2. **Production readiness**: deployment, backups, monitoring, then cutover (needs owner approval).
 
 Small open items:
-- Customer channel: online orders **earn** no reward points yet (redeeming works); reset codes need a real mailer in
-  production (`MAIL_*`); account-removal requests are stored (`account_removal_requests`) but the POS has no screen to
+- Integrations (26 Nov): nothing has been tried against the **real** SSLCommerz, bKash, Steadfast, Pathao, Facebook or GA4
+  services (tests fake their answers from the published APIs); test each in sandbox first. Check against current docs:
+  Pathao's webhook reply header (`CourierWebhookController::PATHAO_INTEGRATION_*`) and whether Pathao still needs
+  city/zone ids. Unpaid online orders are not cancelled automatically (staff cancel them). Refunds of paid-then-cancelled
+  orders are done in the gateway panel (the order shows "refund due"). Purchase tracking fires when the order is placed,
+  also for online orders not yet paid. Products without an image are rejected by Facebook catalogues. Courier COD sits on
+  "Courier COD receivable" until a money transfer records the payout. The POS "SMS after sale" switch is stored but not
+  wired (order-update SMS is). The website "Request a medicine" form still has no API.
+- Customer channel: online orders **earn** no reward points yet (redeeming works); reset codes need SMTP set in
+  Administration › Integrations (or `MAIL_*`); account-removal requests are stored (`account_removal_requests`) but the POS has no screen to
   handle them; the website's "Request a medicine" form and prescription upload have no API (the form still only shows
   a toast); the website needs its origin added to `CORS_ALLOWED_ORIGINS` when it is served from another domain.
 - Android app (`app/`): the source still calls the legacy paths (served by the API); only checkout was touched (sends
