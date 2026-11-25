@@ -65,6 +65,13 @@ export function useOnlineOrdersApi() {
       await mockDelay(300)
       return rows()
     },
+    async one(id: number): Promise<OnlineOrder> {
+      if (!api.useMocks) return api.get(`/orders/${id}`)
+      await mockDelay(200)
+      const o = (await rows()).find(r => r.id === id)
+      if (!o) throw Object.assign(new Error('Order not found'), { status: 404 })
+      return o
+    },
     /**
      * Moves an order forward. The API allocates batch stock exactly once (on
      * confirm) and releases it on cancel; the client never changes stock.

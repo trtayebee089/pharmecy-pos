@@ -58,9 +58,8 @@ const columns: Column[] = [
   { key: 'actions', label: 'Actions', align: 'right', width: '1%' },
 ]
 
-const selectedId = ref<number | null>(null)
-const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
-const drawer = computed({ get: () => selectedId.value !== null, set: v => { if (!v) selectedId.value = null } })
+/** Orders open on their own page (/orders/[id]). */
+const openOrder = (id: number, print = false) => navigateTo({ path: `/orders/${id}`, query: print ? { print: 1 } : {} })
 function onChanged(o: OnlineOrder) {
   const i = orders.value.findIndex(x => x.id === o.id)
   if (i >= 0) orders.value[i] = { ...o }
@@ -71,7 +70,7 @@ const isClosed = (o: OnlineOrder) => o.status === 'delivered' || o.status === 'c
 async function advance(o: OnlineOrder) {
   const next = nextOrderStatus(o.status)
   if (!next) return
-  if (next === 'in_transit' && !o.riderId) { toast.info('Assign a rider first', 'Opening the order so you can pick a rider.'); selectedId.value = o.id; return }
+  if (next === 'in_transit' && !o.riderId) { toast.info('Assign a rider first', 'Opening the order so you can pick a rider.'); openOrder(o.id); return }
   try { onChanged(await api.transition(o.id, next, '', crypto.randomUUID())); toast.success(`Order ${ORDER_STATUS_LABEL[next].toLowerCase()}`, o.number) }
   catch (e: any) { toast.error('Status not changed', e?.message) }
 }
@@ -81,12 +80,12 @@ async function cancelOrder(o: OnlineOrder) {
   try { onChanged(await api.transition(o.id, 'cancelled', reason, crypto.randomUUID())); toast.success('Order cancelled', o.number) }
   catch (e: any) { toast.error('Not cancelled', e?.message) }
 }
-function printSlip(o: OnlineOrder) { selectedId.value = o.id; nextTick(() => setTimeout(() => window.print(), 500)) }
+function printSlip(o: OnlineOrder) { openOrder(o.id, true) }
 const rowItems = (o: OnlineOrder): RowAction[] => {
   const next = nextOrderStatus(o.status)
   return [
     { label: next ? `Mark ${ORDER_STATUS_LABEL[next].toLowerCase()}` : 'Advance status', icon: ArrowRight, onClick: () => advance(o), hidden: !next || isClosed(o) || !auth.can('orders.fulfil') },
-    { label: o.riderId ? 'Change rider' : 'Assign rider', icon: Bike, onClick: () => (selectedId.value = o.id), hidden: isClosed(o) },
+    { label: o.riderId ? 'Change rider' : 'Assign rider', icon: Bike, onClick: () => openOrder(o.id), hidden: isClosed(o) },
     { label: 'Print order slip', icon: Printer, onClick: () => printSlip(o) },
     { label: `Call ${o.phone}`, icon: Phone, onClick: () => { window.location.href = `tel:${o.phone}` } },
   ]
@@ -117,7 +116,7 @@ function exportCsv() {
         <div class="flex items-center gap-2">
           <component :is="row.channel === 'app' ? Smartphone : row.channel === 'phone' ? Phone : Globe" class="size-4 text-sky-500" :aria-label="row.channel" />
           <div>
-            <button class="font-mono text-[12.5px] font-semibold text-ink hover:text-brand-700 hover:underline" @click="selectedId = row.id">{{ row.number }}</button>
+            <button class="font-mono text-[12.5px] font-semibold text-ink hover:text-brand-700 hover:underline" @click="openOrder(row.id)">{{ row.number }}</button>
             <p v-if="row.legacyRef" class="text-[11px] text-slate-400">legacy {{ row.legacyRef }}</p>
             <p v-else class="text-[11px] text-slate-400 tabular">{{ row.trackingCode }}</p>
           </div>
@@ -143,7 +142,7 @@ function exportCsv() {
       <template #cell-status="{ row }"><UiBadge :tone="ORDER_STATUS_TONE[row.status as OrderStatus]" dot>{{ ORDER_STATUS_LABEL[row.status as OrderStatus] }}</UiBadge></template>
       <template #cell-actions="{ row }">
         <UiRowActions
-          :label="row.number" :view="() => (selectedId = row.id)" remove-kind="void"
+          :label="row.number" :view="() => openOrder(row.id)" remove-kind="void"
           :remove="!isClosed(row) && auth.can('orders.fulfil') ? () => cancelOrder(row) : undefined"
           :items="rowItems(row)"
         />
@@ -151,6 +150,5 @@ function exportCsv() {
     </UiDataTable>
 
     <OrdersNewOrderModal v-model="newOpen" @placed="onPlaced" />
-    <OrdersOrderDrawer v-model="drawer" :order="selected" :riders="riders" @changed="onChanged" />
   </div>
 </template>

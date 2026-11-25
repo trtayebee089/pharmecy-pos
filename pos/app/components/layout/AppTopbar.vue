@@ -34,33 +34,36 @@ const notifications = computed(() => [
       <Menu class="size-5" />
     </button>
 
-    <nav class="hidden min-w-0 items-center gap-2 text-sm sm:flex" aria-label="Breadcrumb">
+    <!-- Left: page title (breadcrumb) and search. Both may shrink; the right-hand tools never do. -->
+    <nav class="hidden max-w-[16rem] min-w-0 shrink items-center gap-2 text-sm lg:flex xl:max-w-xs" aria-label="Breadcrumb">
       <template v-for="(c, i) in crumbs" :key="c">
-        <span v-if="i" class="text-slate-300">/</span>
-        <span :class="i === crumbs.length - 1 ? 'font-semibold text-ink' : 'text-slate-500'" class="truncate">{{ c }}</span>
+        <span v-if="i" class="shrink-0 text-slate-300">/</span>
+        <span :class="i === crumbs.length - 1 ? 'font-semibold text-ink' : 'shrink-[2] text-slate-500'" class="min-w-0 truncate">{{ c }}</span>
       </template>
     </nav>
 
     <button
-      class="group ml-auto flex h-10 w-full max-w-sm items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-400 shadow-xs transition hover:border-slate-300 sm:ml-6 lg:ml-10"
+      class="group flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-400 shadow-xs transition hover:border-slate-300 sm:max-w-md lg:ml-4"
+      aria-label="Search pages, products, customers"
       @click="ui.commandOpen = true"
     >
-      <Search class="size-4 transition-colors group-hover:text-brand-600" />
-      <span class="flex-1 truncate text-left">Search pages, products, customers…</span>
-      <UiKbd class="hidden sm:inline-flex">Ctrl K</UiKbd>
+      <Search class="size-4 shrink-0 transition-colors group-hover:text-brand-600" />
+      <span class="min-w-0 flex-1 truncate text-left">Search pages, products, customers…</span>
+      <UiKbd class="hidden shrink-0 xl:inline-flex">Ctrl K</UiKbd>
     </button>
 
-    <div class="ml-auto flex items-center gap-1.5 sm:ml-0">
-      <NuxtLink v-if="auth.can('pos.sell')" to="/pos" class="hidden md:block">
-        <UiButton variant="primary" :icon="ScanBarcode" magnetic>New sale</UiButton>
+    <!-- Right: always against the right edge -->
+    <div class="ml-auto flex shrink-0 items-center gap-1.5">
+      <NuxtLink v-if="auth.can('pos.sell')" to="/pos" class="hidden md:block" aria-label="New sale">
+        <UiButton variant="primary" :icon="ScanBarcode" magnetic><span class="hidden xl:inline">New sale</span></UiButton>
       </NuxtLink>
 
       <!-- Warehouse switcher -->
       <div ref="whRef" class="relative hidden md:block">
-        <button class="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-200/50" @click="whMenu = !whMenu">
-          <Store class="size-4 text-brand-600" />
-          <span class="max-w-40 truncate">{{ auth.warehouse?.name }}</span>
-          <ChevronDown class="size-4 text-slate-400" />
+        <button class="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-600 hover:bg-slate-200/50" :title="auth.warehouse?.name" @click="whMenu = !whMenu">
+          <Store class="size-4 shrink-0 text-brand-600" />
+          <span class="hidden max-w-32 truncate lg:inline 2xl:max-w-48">{{ auth.warehouse?.name }}</span>
+          <ChevronDown class="size-4 shrink-0 text-slate-400" />
         </button>
         <UiPopover :open="whMenu" class="right-0 w-64">
           <p class="label px-3 pt-2 pb-1">Warehouse</p>

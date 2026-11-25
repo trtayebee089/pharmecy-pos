@@ -47,7 +47,7 @@ async function advance(o: OnlineOrder) {
   if (!to || busyId.value) return
   if (to === 'in_transit' && !o.riderId) {
     toast.warning('Assign a rider first', `${o.number} needs a rider before it leaves the store.`)
-    selectedId.value = o.id
+    openOrder(o.id)
     return
   }
   busyId.value = o.id
@@ -94,9 +94,8 @@ function onDrop(status: OrderStatus) {
 }
 function onDragEnd() { dragId.value = null; overCol.value = null }
 
-const selectedId = ref<number | null>(null)
-const selected = computed(() => orders.value.find(o => o.id === selectedId.value) ?? null)
-const drawer = computed({ get: () => selectedId.value !== null, set: v => { if (!v) selectedId.value = null } })
+/** Orders open on their own page (/orders/[id]). */
+const openOrder = (id: number, print = false) => navigateTo({ path: `/orders/${id}`, query: print ? { print: 1 } : {} })
 function onChanged(o: OnlineOrder) {
   const i = orders.value.findIndex(x => x.id === o.id)
   if (i >= 0) orders.value[i] = { ...o }
@@ -140,7 +139,7 @@ function onChanged(o: OnlineOrder) {
           >
             <div class="flex items-start gap-2">
               <GripVertical v-if="col.status !== 'delivered'" class="mt-0.5 size-4 shrink-0 text-slate-300" />
-              <button class="min-w-0 flex-1 text-left" @click="selectedId = o.id">
+              <button class="min-w-0 flex-1 text-left" @click="openOrder(o.id)">
                 <p class="font-mono text-[12.5px] font-bold text-ink hover:text-brand-700">{{ o.number }}</p>
                 <p class="truncate text-sm font-medium">{{ o.customer }}</p>
                 <p class="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-500"><MapPin class="size-3 shrink-0" />{{ o.zone }}</p>
@@ -167,6 +166,5 @@ function onChanged(o: OnlineOrder) {
       </section>
     </div>
 
-    <OrdersOrderDrawer v-model="drawer" :order="selected" :riders="riders" @changed="onChanged" />
   </div>
 </template>
