@@ -5,6 +5,7 @@ use App\Http\Controllers\Pos\AuthController;
 use App\Http\Controllers\Pos\BannerController;
 use App\Http\Controllers\Pos\CatalogController;
 use App\Http\Controllers\Pos\CatalogMasterController;
+use App\Http\Controllers\Pos\CourierController;
 use App\Http\Controllers\Pos\CustomerAccountController;
 use App\Http\Controllers\Pos\CustomerController;
 use App\Http\Controllers\Pos\CustomerGroupController;
@@ -174,6 +175,11 @@ Route::prefix('pos/v1')->group(function () {
             Route::post('orders', [OnlineOrderController::class, 'store'])->middleware('idempotent');
             Route::post('orders/{order}/status', [OnlineOrderController::class, 'status'])->middleware('idempotent');
             Route::post('orders/{order}/rider', [OnlineOrderController::class, 'rider'])->middleware('idempotent');
+            // Steadfast / Pathao
+            Route::get('orders/couriers', [CourierController::class, 'available']);
+            Route::get('orders/couriers/pathao/places', [CourierController::class, 'pathaoPlaces']);
+            Route::post('orders/{order}/courier', [CourierController::class, 'book'])->middleware('idempotent')->whereNumber('order');
+            Route::post('orders/{order}/courier/refresh', [CourierController::class, 'refresh'])->whereNumber('order');
         });
         Route::middleware('can:riders.manage')->group(function () {
             Route::post('delivery/riders', [OnlineOrderController::class, 'saveRider']);

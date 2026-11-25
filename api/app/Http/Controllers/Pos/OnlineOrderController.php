@@ -9,6 +9,7 @@ use App\Models\Rider;
 use App\Models\RiderCashEntry;
 use App\Models\SaleItemBatch;
 use App\Models\ShippingZone;
+use App\Services\CourierBookings;
 use App\Services\OnlineOrders;
 use App\Support\Present;
 use Illuminate\Http\JsonResponse;
@@ -242,6 +243,12 @@ class OnlineOrderController extends Controller
             'paidOnline' => (float) $o->paid_online,
             'grandTotal' => (float) $o->grand_total, 'saleId' => $o->sale_id,
             'riderId' => $o->rider_id, 'riderName' => $o->rider?->name,
+            'courier' => $o->courier ? [
+                'name' => $o->courier, 'consignmentId' => $o->courier_consignment_id, 'trackingCode' => $o->courier_tracking_code,
+                'status' => $o->courier_status, 'statusAt' => $o->courier_status_at?->toIso8601String(), 'fee' => $o->courier_fee !== null ? (float) $o->courier_fee : null,
+                'trackingUrl' => app(CourierBookings::class)->trackingUrl($o),
+            ] : null,
+            'pathaoPlace' => $o->zone?->pathao_zone_id ? ['cityId' => $o->zone->pathao_city_id, 'zoneId' => $o->zone->pathao_zone_id, 'areaId' => $o->zone->pathao_area_id] : null,
             'lines' => $o->lines->map(fn ($l) => [
                 'productName' => $l->description, 'qty' => (float) $l->qty, 'unitLabel' => $l->unit?->label ?? '',
                 'unitPrice' => (float) $l->unit_price, 'lineTotal' => (float) $l->line_total,

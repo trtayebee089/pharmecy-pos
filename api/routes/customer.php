@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\CourierWebhookController;
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\CatalogController;
 use App\Http\Controllers\Api\V1\FeedController;
@@ -116,4 +117,10 @@ Route::middleware([ForceJson::class, 'throttle:customer-api'])->group(function (
 Route::middleware('throttle:feeds')->group(function () {
     Route::get('feeds/products.xml', [FeedController::class, 'xml']);
     Route::get('feeds/products.csv', [FeedController::class, 'csv']);
+});
+
+// Parcel status from Steadfast / Pathao (each checks its own secret).
+Route::middleware('throttle:feeds')->group(function () {
+    Route::post('webhooks/steadfast', [CourierWebhookController::class, 'steadfast']);
+    Route::post('webhooks/pathao', [CourierWebhookController::class, 'pathao']);
 });

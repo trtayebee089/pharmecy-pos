@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { MapPin, Phone, Bike, Layers, ArrowRight, Ban, Globe, Smartphone, Info } from 'lucide-vue-next'
+import { MapPin, Phone, Bike, Layers, ArrowRight, Ban, Globe, Smartphone, Info, Truck, ExternalLink, RefreshCw } from 'lucide-vue-next'
 import type { OnlineOrder, OrderStatus, Rider } from '~/types/orders'
 
 const open = defineModel<boolean>({ default: false })
@@ -15,6 +15,64 @@ const riderId = ref<number | null>(null)
 const timeline = ref<HTMLElement | null>(null)
 
 watch(() => props.order?.id, () => { riderId.value = props.order?.riderId ?? null })
+
+// ---------------------------------------------------------------- courier (Steadfast / Pathao)
+const available = ref<{ steadfast: boolean; pathao: boolean }>({ steadfast: false, pathao: false })
+const courier = ref<'steadfast' | 'pathao'>('steadfast')
+const courierNote = ref('')
+const pathao = reactive<{ cityId: number | null; zoneId: number | null; areaId: number | null }>({ cityId: null, zoneId: null, areaId: null })
+const pathaoCities = ref<{ id: number; name: string }[]>([])
+const pathaoZones = ref<{ id: number; name: string }[]>([])
+const pathaoAreas = ref<{ id: number; name: string }[]>([])
+const courierLabel = (c: string) => (c === 'pathao' ? 'Pathao' : 'Steadfast')
+const courierOptions = computed(() => (['steadfast', 'pathao'] as const).filter(c => available.value[c]).map(c => ({ value: c, label: courierLabel(c) })))
+const canSend = computed(() => !!props.order && ['confirmed', 'packed'].includes(props.order.status) && props.order.paymentStatus !== 'pending' && courierOptions.value.length > 0)
+
+onMounted(async () => {
+  try { available.value = await api.couriers() } catch { /* couriers stay hidden */ }
+  if (!available.value.steadfast && available.value.pathao) courier.value = 'pathao'
+})
+watch([courier, () => props.order?.id], async () => {
+  if (courier.value !== 'pathao' || !props.order) return
+  const place = props.order.pathaoPlace
+  Object.assign(pathao, { cityId: place?.cityId ?? null, zoneId: place?.zoneId ?? null, areaId: place?.areaId ?? null })
+  try {
+    if (!pathaoCities.value.length) pathaoCities.value = await api.pathaoPlaces()
+    pathaoZones.value = pathao.cityId ? await api.pathaoPlaces({ city_id: pathao.cityId }) : []
+    pathaoAreas.value = pathao.zoneId ? await api.pathaoPlaces({ zone_id: pathao.zoneId }) : []
+  } catch (e: any) { toast.error('Pathao places not loaded', e?.message) }
+})
+async function loadZones() {
+  pathao.zoneId = pathao.areaId = null
+  pathaoAreas.value = []
+  pathaoZones.value = pathao.cityId ? await api.pathaoPlaces({ city_id: pathao.cityId }) : []
+}
+async function loadAreas() {
+  pathao.areaId = null
+  pathaoAreas.value = pathao.zoneId ? await api.pathaoPlaces({ zone_id: pathao.zoneId }) : []
+}
+async function sendToCourier() {
+  if (!props.order) return
+  busy.value = true
+  try {
+    const o = await api.sendToCourier(props.order.id, {
+      courier: courier.value, note: courierNote.value || undefined,
+      ...(courier.value === 'pathao' ? { city_id: pathao.cityId, zone_id: pathao.zoneId, area_id: pathao.areaId } : {}),
+    }, crypto.randomUUID())
+    toast.success(`Sent with ${courierLabel(courier.value)}`, `${o.number} · ${o.courier?.consignmentId ?? ''}`)
+    courierNote.value = ''
+    emit('changed', o)
+  }
+  catch (e: any) { toast.error('Not sent to the courier', e?.message) }
+  finally { busy.value = false }
+}
+async function refreshCourier() {
+  if (!props.order) return
+  busy.value = true
+  try { emit('changed', await api.refreshCourier(props.order.id)) }
+  catch (e: any) { toast.error('Status not refreshed', e?.message) }
+  finally { busy.value = false }
+}
 watch(open, async (o) => {
   if (!o) return
   await nextTick()
@@ -29,13 +87,13 @@ const activeRiders = computed(() => props.riders.filter(r => r.status === 'activ
 const nextHint: Partial<Record<OrderStatus, string>> = {
   confirmed: 'Confirming allocates stock from the earliest-expiry batches, exactly once.',
   packed: 'Packing locks the allocated batches to this order.',
-  in_transit: 'Hand-over to the rider. A rider must be assigned first.',
+  in_transit: 'Hand-over to the rider (assign one first), or use Send to courier above.',
   delivered: 'Delivery records the cash-on-delivery payment and completes the sale.',
 }
 
 async function advance() {
   if (!props.order || !next.value) return
-  if (next.value === 'in_transit' && !props.order.riderId) { toast.warning('Assign a rider first', 'In-transit orders must have a rider.'); return }
+  if (next.value === 'in_transit' && !props.order.riderId && !props.order.courier) { toast.warning('Assign a rider first', 'Or send the order with a courier.'); return }
   busy.value = true
   try {
     const o = await api.transition(props.order.id, next.value, '', crypto.randomUUID())
@@ -130,7 +188,45 @@ async function assign() {
         <p v-else-if="order.paymentStatus === 'refund_due'" class="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-[13px] text-rose-700">Paid online but cancelled: refund {{ money(order.paidOnline) }} from the {{ order.paymentMethod === 'bkash' ? 'bKash' : 'SSLCommerz' }} merchant panel.</p>
       </div>
 
-      <div v-if="!closed" data-stagger class="rounded-2xl bg-slate-50 p-4">
+      <!-- Courier: booked parcel, or "Send to courier" once confirmed -->
+      <div v-if="order.courier" data-stagger class="rounded-2xl bg-sky-50 p-4 text-sm">
+        <p class="label mb-2 flex items-center gap-1.5"><Truck class="size-3.5" />Courier</p>
+        <p class="font-semibold">{{ courierLabel(order.courier.name) }} · {{ order.courier.consignmentId }}</p>
+        <p class="mt-0.5 text-xs text-slate-600">
+          Status: <span class="font-semibold capitalize">{{ (order.courier.status || 'booked').replaceAll('_', ' ') }}</span>
+          <template v-if="order.courier.statusAt"> · {{ dateTime(order.courier.statusAt) }}</template>
+          <template v-if="order.courier.fee != null"> · charge {{ money(order.courier.fee) }}</template>
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <a v-if="order.courier.trackingUrl" :href="order.courier.trackingUrl" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-200 hover:bg-sky-100">Track parcel <ExternalLink class="size-3" /></a>
+          <UiButton v-if="!closed" size="sm" variant="ghost" :icon="RefreshCw" :loading="busy" @click="refreshCourier">Refresh status</UiButton>
+        </div>
+      </div>
+      <div v-else-if="canSend" data-stagger class="rounded-2xl bg-slate-50 p-4">
+        <p class="label mb-2 flex items-center gap-1.5"><Truck class="size-3.5" />Send to courier</p>
+        <UiSegmented v-model="courier" :options="courierOptions" />
+        <div v-if="courier === 'pathao'" class="mt-3 grid gap-2 sm:grid-cols-3">
+          <select v-model="pathao.cityId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" aria-label="Pathao city" @change="loadZones">
+            <option :value="null" disabled>City</option>
+            <option v-for="c in pathaoCities" :key="c.id" :value="c.id">{{ c.name }}</option>
+          </select>
+          <select v-model="pathao.zoneId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" :disabled="!pathao.cityId" aria-label="Pathao zone" @change="loadAreas">
+            <option :value="null" disabled>Zone</option>
+            <option v-for="z in pathaoZones" :key="z.id" :value="z.id">{{ z.name }}</option>
+          </select>
+          <select v-model="pathao.areaId" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" :disabled="!pathao.zoneId" aria-label="Pathao area">
+            <option :value="null">Area (optional)</option>
+            <option v-for="a in pathaoAreas" :key="a.id" :value="a.id">{{ a.name }}</option>
+          </select>
+        </div>
+        <input v-model="courierNote" maxlength="250" placeholder="Note for the courier (optional)" class="mt-3 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-brand-400 focus:outline-none" aria-label="Note for the courier">
+        <div class="mt-3 flex items-center justify-between gap-3">
+          <p class="text-xs text-slate-500">The courier collects {{ money(order.codAmount) }}.</p>
+          <UiButton variant="primary" :icon="Truck" :loading="busy" :disabled="courier === 'pathao' && (!pathao.cityId || !pathao.zoneId)" @click="sendToCourier">Send with {{ courierLabel(courier) }}</UiButton>
+        </div>
+      </div>
+
+      <div v-if="!closed && !order.courier" data-stagger class="rounded-2xl bg-slate-50 p-4">
         <p class="label mb-2 flex items-center gap-1.5"><Bike class="size-3.5" />Rider</p>
         <div class="flex gap-2">
           <select v-model="riderId" class="h-10 min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:border-brand-400 focus:outline-none" aria-label="Rider">

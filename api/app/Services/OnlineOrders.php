@@ -29,6 +29,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+use function Illuminate\Support\defer;
+
 /**
  * Online orders (W17), owner decisions 25 Nov 2026:
  *
@@ -217,10 +219,14 @@ class OnlineOrders
 
     // ---------------------------------------------------------------- status
 
-    public function transition(User $user, OnlineOrder $order, string $to, ?string $note): OnlineOrder
+    /** `$user` is null only when a courier webhook reports in_transit / delivered. */
+    public function transition(?User $user, OnlineOrder $order, string $to, ?string $note): OnlineOrder
     {
         return DB::transaction(function () use ($user, $order, $to, $note) {
             $order = OnlineOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            if (! $user && ! in_array($to, ['in_transit', 'delivered'], true)) {
+                throw ValidationException::withMessages(['status' => 'Staff must make this change.']);
+            }
             if (! in_array($to, self::NEXT[$order->status] ?? [], true)) {
                 throw ValidationException::withMessages(['status' => in_array($order->status, ['delivered', 'cancelled'], true)
                     ? 'This order is already closed.'
@@ -232,13 +238,19 @@ class OnlineOrders
 
             match ($to) {
                 'confirmed' => $this->confirm($user, $order),
-                'in_transit' => $this->assertRider($order),
+                'in_transit' => $order->courier ? null : $this->assertRider($order),
                 'delivered' => $this->deliver($user, $order),
                 'cancelled' => $this->cancel($user, $order, $note),
                 default => null,
             };
             $order->update(['status' => $to]);
             $this->history($order, $to, $note, $user);
+            // Customer SMS (when switched on), after the response so a slow gateway never holds the order.
+            $notifier = app(OrderNotifier::class);
+            if ($notifier->wants($to)) {
+                $id = $order->id;
+                defer(fn () => $notifier->statusChanged(OnlineOrder::findOrFail($id)));
+            }
 
             return $order->fresh();
         });
@@ -392,31 +404,43 @@ class OnlineOrders
         $order->update(['sale_id' => $sale->id]);
     }
 
-    /** Cash on delivery: paid on the sale, held by the rider until handover. */
-    private function deliver(User $user, OnlineOrder $order): void
+    /**
+     * Cash on delivery. With a rider: paid on the sale, held by the rider until
+     * handover. With a courier (Steadfast / Pathao): booked to "Courier COD
+     * receivable" until the courier pays out. `$user` is null when a courier
+     * webhook reports the delivery.
+     */
+    private function deliver(?User $user, OnlineOrder $order): void
     {
-        $this->assertRider($order);
+        if (! $order->courier) {
+            $this->assertRider($order);
+        }
         $sale = Sale::whereKey($order->sale_id)->lockForUpdate()->firstOrFail();
         $due = SaleService::paisa($sale->due_total);
         if ($due > 0) {
-            $method = PaymentMethod::where('code', 'cash')->firstOrFail();
+            $method = PaymentMethod::where('code', $order->courier ? 'courier_cod' : 'cash')->firstOrFail();
             $money = SaleService::money($due);
+            $by = $order->courier ? ucfirst($order->courier).' '.$order->courier_consignment_id : $order->rider->name;
             $payment = Payment::create([
                 'ulid' => (string) Str::ulid(), 'number' => $this->numbers->next('payment', Warehouse::findOrFail($order->warehouse_id)),
                 'direction' => 'in', 'party_type' => 'customer', 'party_id' => $order->customer_id,
-                'payment_method_id' => $method->id, 'account_id' => null, // with the rider until handover
-                'amount' => $money, 'paid_at' => now(), 'note' => 'COD '.$order->number.' via '.$order->rider->name, 'created_by' => $user->id,
+                // A rider's cash has no account until handover; a courier's is owed on its receivable account.
+                'payment_method_id' => $method->id, 'account_id' => $order->courier ? $method->account_id : null,
+                'reference' => $order->courier_consignment_id,
+                'amount' => $money, 'paid_at' => now(), 'note' => 'COD '.$order->number.' via '.$by, 'created_by' => $user?->id,
             ]);
             PaymentAllocation::create(['payment_id' => $payment->id, 'allocatable_type' => 'sale', 'allocatable_id' => $sale->id, 'amount' => $money]);
             PartyLedgerEntry::create([
                 'party_type' => 'customer', 'party_id' => $order->customer_id, 'entry_date' => now()->toDateString(), 'type' => 'payment',
-                'debit' => 0, 'credit' => $money, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number.' COD', 'created_by' => $user->id,
+                'debit' => 0, 'credit' => $money, 'source_type' => 'sale', 'source_id' => $sale->id, 'note' => $sale->number.' COD', 'created_by' => $user?->id,
             ]);
             $sale->update(['paid_total' => SaleService::money(SaleService::paisa($sale->paid_total) + $due), 'due_total' => 0, 'payment_status' => 'paid']);
-            RiderCashEntry::create([
-                'rider_id' => $order->rider_id, 'type' => 'collect', 'amount' => $money, 'online_order_id' => $order->id,
-                'note' => $order->number, 'created_by' => $user->id, 'created_at' => now(),
-            ]);
+            if (! $order->courier) {
+                RiderCashEntry::create([
+                    'rider_id' => $order->rider_id, 'type' => 'collect', 'amount' => $money, 'online_order_id' => $order->id,
+                    'note' => $order->number, 'created_by' => $user?->id, 'created_at' => now(),
+                ]);
+            }
         }
         $order->update(['delivered_at' => now()]);
     }

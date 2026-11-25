@@ -95,6 +95,21 @@ export function useOnlineOrdersApi() {
       if (api.useMocks) return { warehouseId }
       return api.put('/orders/settings', { warehouseId })
     },
+    /** Steadfast / Pathao: which are switched on in Administration › Integrations. */
+    async couriers(): Promise<{ steadfast: boolean; pathao: boolean }> {
+      if (api.useMocks) return { steadfast: false, pathao: false }
+      return api.get('/orders/couriers')
+    },
+    /** Pathao's cities, the zones of a city, or the areas of a zone. */
+    async pathaoPlaces(q: { city_id?: number; zone_id?: number } = {}): Promise<{ id: number; name: string }[]> {
+      return api.get('/orders/couriers/pathao/places', q)
+    },
+    async sendToCourier(id: number, body: { courier: 'steadfast' | 'pathao'; city_id?: number | null; zone_id?: number | null; area_id?: number | null; weight?: number | null; note?: string }, idempotencyKey: string): Promise<OnlineOrder> {
+      return api.post(`/orders/${id}/courier`, body, idempotencyKey)
+    },
+    async refreshCourier(id: number): Promise<OnlineOrder> {
+      return api.post(`/orders/${id}/courier/refresh`)
+    },
     /** Rider hands collected COD cash to the shop; it moves into Cash in hand. */
     async handover(riderId: number, amount: number, note: string, idempotencyKey: string): Promise<Rider> {
       if (api.useMocks) { await mockDelay(400); return { id: riderId } as Rider }

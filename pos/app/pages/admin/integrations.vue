@@ -171,7 +171,6 @@ async function copy(text: string) {
               <UiInput v-model="d.sms.successContains" label="Success text" hint="Response must contain this (blank = any 2xx)" />
             </div>
             <UiSwitch v-model="d.sms.sendOrderUpdates" label="SMS customers when their online order is confirmed, sent or delivered" />
-            <UiSwitch v-model="d.sms.sendAfterSale" label="SMS the bill total after a counter sale (registered customers)" />
             <UiButton variant="primary" :icon="Save" :loading="saving === 'sms'" @click="save('sms', 'SMS settings')">Save SMS settings</UiButton>
           </div>
         </UiSection>

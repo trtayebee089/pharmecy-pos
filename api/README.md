@@ -64,6 +64,46 @@ in the old body are ignored; a guest no longer gets the 5 % the old app shows (t
 total); the old password change sends no current password, so it is accepted on that path only and signs out every
 other device.
 
+## Integrations (email, SMS, tracking, payments, couriers, website)
+
+Administration › Integrations in the POS (`settings.manage`), API `GET admin/integrations`, `PUT admin/integrations/{group}`
+(`App\Services\Integrations`). One `settings` row per group (`integration.<group>`). **Secrets are encrypted with
+APP_KEY and write-only**: the API answers `<name>Set: true` instead of the value; send a value to replace it, nothing
+to keep it, or list it in `clear` to remove it. Changing APP_KEY means entering the secrets again.
+
+| Group | What it does |
+|---|---|
+| `mail` | SMTP server applied when Laravel first sends mail (`MailSettings`); off = the `.env` mailer. `POST admin/integrations/mail/test` |
+| `sms` | Any HTTP gateway (`SmsGateway`): method, URL, form / JSON / query body, parameters and headers with `{to} {message} {sender} {api_key} {api_secret} {basic_auth}`, success text. Presets: BulkSMSBD, sms.net.bd, REVE, Twilio. Every attempt in `sms_messages`. Used by due reminders and (switch) order-update SMS (`OrderNotifier`). `POST admin/integrations/sms/test` |
+| `tracking` | Public ids for the website (GTM, Meta Pixel, GA4, Google Ads + purchase label) via `GET v1/site-config`; server-side Purchase to the Facebook Conversions API and GA4 Measurement Protocol after the checkout response (`ConversionTracker`), same event id as the browser |
+| `feed` | `GET /api/feeds/products.xml` (RSS + `g:` for Facebook / Google Merchant Center) and `.csv`; per-piece price, online stock; prescription medicines only when included; optional `?token=`; cached 30 min |
+| `sslcommerz`, `bkash` | Online payment (`OnlinePayments`, `Payments\SslCommerz`, `Payments\Bkash`), sandbox switch |
+| `steadfast`, `pathao` | "Send to courier" (`CourierBookings`, `Couriers\*`), webhooks `POST /api/webhooks/{steadfast,pathao}` |
+| `storefront` | Shop name, website address (payment returns), contacts, social links, search title/description, top bar text, cash on delivery on/off |
+
+**Website banners** (`admin/banners`, multipart, `StorefrontBanners`): `hero` banners (wide, 1600 × 533, optional phone
+image 800 × 800; several rotate) and `tile` banners (800 × 500; the first three show under the hero), with link,
+optional text, schedule and order. Public in `v1/site-config` → `banners.{hero,tiles}`. Needs `php artisan storage:link`.
+
+**Online payment flow**: checkout with `payment_method` `sslcommerz` / `bkash` places the order with
+`payment_status = pending` and returns `payment.redirect_url`. SSLCommerz returns to `v1/payments/sslcommerz/{success|fail|cancel}`
+and calls `v1/payments/sslcommerz/ipn`; bKash returns to `v1/payments/bkash/callback`. A payment counts only after the
+gateway's own check (SSLCommerz validation API / bKash execute) for the exact amount; then the browser goes to the
+website's `/order-confirmation/{number}?payment=paid|failed|cancelled`. Staff cannot confirm a pending order; at confirm
+the online payment is posted to the sale (methods `sslcommerz` → account SSLCZ, `bkash` → BKASH) and the rider collects
+nothing. Customers retry with `v1/payments/start` or switch to cash with `v1/payments/cod` (by tracking code). A paid order
+that is cancelled shows `refund_due` (refund in the gateway panel).
+
+**Couriers**: `POST orders/{id}/courier` (`courier`, Pathao `city_id`/`zone_id`/`area_id`, `note`) on a confirmed or
+packed order books the parcel for the COD amount and moves the order to in transit (no rider). Pathao's places
+(`GET orders/couriers/pathao/places`) are remembered on the delivery zone. Status by webhook (Steadfast: `Authorization:
+Bearer <webhook token>`; Pathao: `X-PATHAO-Signature: <webhook secret>`, answered 202 with Pathao's integration header)
+or `POST orders/{id}/courier/refresh`; "delivered" closes the order and books the cash to "Courier COD receivable"
+(method `courier_cod`); returns and cancellations are noted for staff.
+
+**Rate limits** are named limiters (`AppServiceProvider`): `customer-api` 180/min, `customer-auth` 20, `checkout` 10,
+`order-tracking` 30, `feeds` 30, `staff-login` 20, `integration-tests` 10, each counted separately.
+
 ## Local development (Windows)
 
 Herd's PHP 8.4 is used with a cleaned php.ini kept outside the repo

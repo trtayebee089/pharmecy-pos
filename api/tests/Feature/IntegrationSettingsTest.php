@@ -2,8 +2,10 @@
 
 use App\Models\Customer;
 use App\Models\Setting;
+use App\Models\ShippingZone;
 use App\Models\SmsMessage;
 use App\Services\Integrations;
+use App\Services\OnlineOrders;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -94,4 +96,22 @@ it('sends due reminders by SMS once a gateway is set', function () {
     app(Integrations::class)->save('sms', smsSettings());
     $this->actingAs(posUser('Cashier'))->postJson("/api/pos/v1/customers/{$c->id}/due-reminders", [], ['Idempotency-Key' => 'r2'])->assertOk()->assertJsonPath('queued', true);
     expect(SmsMessage::where('purpose', 'due_reminder')->value('message'))->toContain('Tk 250.00');
+});
+
+it('texts the customer when an online order changes, only with order updates switched on', function () {
+    Http::fake(['bulksmsbd.net/*' => Http::response('{"response_code":202}')]);
+    $tablet = tabletWithStock([['L1', day(400), 50, 1.0]]);
+    $zone = ShippingZone::create(['division' => 'Dhaka', 'district' => 'Dhaka', 'thana' => 'Gulshan', 'rate' => 60, 'partner' => 'own_rider']);
+    $manager = posUser('Manager');
+    $orders = app(OnlineOrders::class);
+    $place = fn () => $orders->place($manager, ['phone' => '01712345678', 'name' => 'Rina', 'address' => 'Road 2', 'zoneId' => $zone->id,
+        'lines' => [['productId' => $tablet['product']->id, 'unitId' => $tablet['piece']->id, 'qty' => 5]]]);
+
+    app(Integrations::class)->save('sms', smsSettings()); // SMS on, order updates off
+    $orders->transition($manager, $place(), 'confirmed', null);
+    expect(SmsMessage::where('purpose', 'order_update')->count())->toBe(0);
+
+    app(Integrations::class)->save('sms', ['sendOrderUpdates' => true]);
+    $this->actingAs($manager)->postJson('/api/pos/v1/orders/'.$place()->id.'/status', ['status' => 'confirmed'], ['Idempotency-Key' => 'n1'])->assertOk();
+    expect(SmsMessage::where('purpose', 'order_update')->value('message'))->toContain('is confirmed')->toContain('Pay Tk 70.00');
 });

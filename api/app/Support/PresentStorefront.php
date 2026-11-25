@@ -3,6 +3,9 @@
 namespace App\Support;
 
 use App\Models\OnlineOrder;
+use App\Services\CourierBookings;
+use App\Services\Couriers\Pathao;
+use App\Services\Couriers\Steadfast;
 use App\Services\OnlineOrders;
 use Illuminate\Support\Carbon;
 
@@ -33,6 +36,11 @@ class PresentStorefront
             ])->values()->all(),
             'grand_total' => (float) $o->grand_total, 'cod_amount' => OnlineOrders::codAmount($o),
             'payment_method' => $o->payment_method ?? 'cod', 'payment_status' => $o->payment_status ?? 'cod', 'paid_online' => (float) $o->paid_online,
+            // Parcel link only (no phone in it): Steadfast by tracking code, Pathao by consignment.
+            'courier' => $o->courier ? [
+                'name' => CourierBookings::COURIERS[$o->courier] ?? $o->courier,
+                'tracking_url' => $o->courier === 'steadfast' ? Steadfast::trackingUrl($o->courier_tracking_code) : Pathao::trackingUrl($o->courier_consignment_id, null),
+            ] : null,
         ];
         if ($forTracking) {
             return $base;

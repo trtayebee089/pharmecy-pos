@@ -75,6 +75,10 @@ export interface OnlineOrder {
   paymentMethod?: 'cod' | 'sslcommerz' | 'bkash'
   paymentStatus?: 'cod' | 'pending' | 'paid' | 'refund_due'
   paidOnline?: number
+  /** Live API: parcel booked with Steadfast / Pathao. */
+  courier?: { name: 'steadfast' | 'pathao'; consignmentId: string; trackingCode: string | null; status: string | null; statusAt: string | null; fee: number | null; trackingUrl: string | null } | null
+  /** Pathao city / zone / area remembered for this order's delivery zone. */
+  pathaoPlace?: { cityId: number; zoneId: number; areaId: number | null } | null
   riderId: number | null
   riderName: string | null
   lines: OrderLine[]

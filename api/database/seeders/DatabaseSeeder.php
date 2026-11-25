@@ -73,6 +73,9 @@ class DatabaseSeeder extends Seeder
         // Online card / mobile banking through SSLCommerz (bKash checkout books to the bKash method above).
         $ssl = Account::firstOrCreate(['code' => 'SSLCZ'], ['name' => 'SSLCommerz merchant', 'type' => 'bank']);
         PaymentMethod::firstOrCreate(['code' => 'sslcommerz'], ['name' => 'SSLCommerz', 'account_id' => $ssl->id, 'requires_reference' => true]);
+        // Cash collected by Steadfast / Pathao, owed by the courier until it pays out.
+        $courier = Account::firstOrCreate(['code' => 'COURIER'], ['name' => 'Courier COD receivable', 'type' => 'bank']);
+        PaymentMethod::firstOrCreate(['code' => 'courier_cod'], ['name' => 'Courier COD', 'account_id' => $courier->id, 'requires_reference' => true]);
         // Reward points as a tender: no money account, the reward ledger carries it.
         PaymentMethod::updateOrCreate(['code' => 'points'], ['name' => 'Reward points', 'account_id' => null, 'requires_reference' => false]);
 

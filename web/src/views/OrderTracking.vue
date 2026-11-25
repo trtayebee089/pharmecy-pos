@@ -17,7 +17,14 @@
         <ol class="mt-4 space-y-3 border-l-2 border-primary-100 pl-4">
           <li v-for="(step, i) in order.history" :key="i"><p class="font-bold text-ink">{{ step.label }}</p><p class="text-sm text-slate-500">{{ date(step.at) }}</p></li>
         </ol>
-        <p class="mt-4 text-sm text-slate-600">Cash to pay on delivery: <strong>{{ formatPrice(order.cod_amount) }}</strong></p>
+        <p class="mt-4 text-sm text-slate-600">
+          <template v-if="order.payment_status === 'paid'">Paid online. Nothing to pay on delivery.</template>
+          <template v-else>Cash to pay on delivery: <strong>{{ formatPrice(order.cod_amount) }}</strong></template>
+        </p>
+        <p v-if="order.courier" class="mt-2 text-sm text-slate-600">
+          Delivered by {{ order.courier.name }}.
+          <a v-if="order.courier.tracking_url" :href="order.courier.tracking_url" target="_blank" rel="noopener" class="font-bold text-primary-700 underline">Track the parcel</a>
+        </p>
       </section>
     </div>
   </div>
