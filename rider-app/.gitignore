@@ -57,3 +57,6 @@ app.*.map.json
 /ios/Flutter/flutter_export_environment.sh
 /ios/Pods/
 /ios/Runner/GeneratedPluginRegistrant.*
+
+# Gradle output when building from android/
+/android/build/
