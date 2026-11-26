@@ -40,7 +40,7 @@
         <div>
           <RouterLink to="/" class="flex items-center gap-3">
             <BrandMark />
-            <span class="font-display text-xl font-extrabold tracking-tight">RedPharma</span>
+            <span class="font-display text-xl font-extrabold tracking-tight">{{ site.brand }}</span>
           </RouterLink>
           <p class="mt-5 max-w-sm text-sm leading-7 text-slate-400">
             A clean, fast, and trusted online pharmacy experience for medicines and everyday health
@@ -85,7 +85,7 @@
       <div
         class="mt-8 flex flex-col gap-4 border-t border-white/10 pt-8 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between"
       >
-        <p>© {{ year }} RedPharma. All rights reserved.</p>
+        <p>© {{ year }} {{ site.brand }}. All rights reserved.</p>
         <div class="flex flex-wrap gap-x-5 gap-y-2">
           <RouterLink to="/privacy-policy" class="hover:text-white">Privacy policy</RouterLink>
           <RouterLink to="/terms-conditions" class="hover:text-white">Terms</RouterLink>
@@ -98,8 +98,11 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../../stores/siteStore'
 import { ArrowUpRight } from 'lucide-vue-next'
 import BrandMark from '../common/BrandMark.vue'
+
+const site = useSiteStore()
 
 const year = new Date().getFullYear()
 
@@ -121,7 +124,7 @@ const columns = [
       { label: 'Help center', to: '/help-center' },
       { label: 'Contact us', to: '/contact' },
       { label: 'Delivery coverage', to: '/delivery-coverage' },
-      { label: 'About RedPharma', to: '/about' },
+      { label: 'About us', to: '/about' },
     ],
   },
   {

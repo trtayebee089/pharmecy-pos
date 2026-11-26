@@ -18,12 +18,12 @@ export default defineNuxtConfig({
       useMocks: false,
       // While mocks are on: API domains already served live (see useApi). Overridden by NUXT_PUBLIC_LIVE_DOMAINS.
       liveDomains: '',
-      appName: 'Red Pharma POS',
+      appName: 'POS',
     },
   },
   app: {
     head: {
-      title: 'Red Pharma POS',
+      title: 'POS',
       htmlAttrs: { lang: 'en' },
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },

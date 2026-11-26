@@ -141,7 +141,7 @@ class LegacyAppController extends V1Controller
         }
         $zone = $this->zone($body['customer'], $request->input('shipping_cost'));
         if (! $zone) {
-            return $this->json(['success' => false, 'message' => 'We could not match your delivery area. Please update the Red Pharma app or call us to order.'], 422);
+            return $this->json(['success' => false, 'message' => 'We could not match your delivery area. Please update the app or call us to order.'], 422);
         }
 
         $request->replace([

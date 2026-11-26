@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { pageTransition } from '~/composables/useMotion'
+
+const { brand } = useBrand()
+useHead({ title: () => `${brand.value} POS` })
 </script>
 
 <template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
 import { ArrowRight, Cross, Eye, EyeOff, Lock, ShieldCheck, User } from 'lucide-vue-next'
+const { brand } = useBrand()
 
 definePageMeta({ layout: 'bare', title: 'Sign in' })
 
@@ -66,7 +67,7 @@ onMounted(() => {
         <div class="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-brand-300 to-brand-600 shadow-[0_10px_30px_-6px_rgb(39_187_169/.7)]">
           <Cross class="size-6 text-white" :stroke-width="2.6" />
         </div>
-        <span class="font-display text-xl font-extrabold text-white">Red Pharma</span>
+        <span class="font-display text-xl font-extrabold text-white">{{ brand }}</span>
       </div>
 
       <div class="relative max-w-lg">
@@ -83,7 +84,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <p class="relative text-xs text-brand-200/50">© {{ new Date().getFullYear() }} Red Pharma · Authorised staff only</p>
+      <p class="relative text-xs text-brand-200/50">© {{ new Date().getFullYear() }} {{ brand }} · Authorised staff only</p>
     </section>
 
     <!-- Form -->

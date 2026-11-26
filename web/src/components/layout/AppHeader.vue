@@ -29,12 +29,12 @@
       <div
         class="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:h-[76px] lg:gap-6 lg:px-8"
       >
-        <RouterLink to="/" class="flex shrink-0 items-center gap-2.5" aria-label="RedPharma home">
+        <RouterLink to="/" class="flex shrink-0 items-center gap-2.5" :aria-label="`${site.brand} home`">
           <BrandMark size="sm" class="lg:hidden" />
           <BrandMark class="hidden lg:inline-grid" />
           <span class="hidden leading-none sm:block">
             <span class="block font-display text-lg font-extrabold tracking-tight text-ink">
-              Red<span class="text-primary-600">Pharma</span>
+              {{ brandHead }}<span class="text-primary-600">{{ brandTail }}</span>
             </span>
             <span class="mt-1 block text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
               Your health, our priority
@@ -115,6 +115,7 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../../stores/siteStore'
 import {
   ArrowRight,
   FileText,
@@ -124,11 +125,22 @@ import {
   Truck,
   UserRound,
 } from 'lucide-vue-next'
+import { computed } from 'vue'
 import LiveSearch from './LiveSearch.vue'
 import BrandMark from '../common/BrandMark.vue'
 import { useCartStore } from '../../stores/cartStore'
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
+
+const site = useSiteStore()
+/** "Your Brand" -> "Your " + coloured "Brand"; a one-word name is coloured whole. */
+const brandSplit = computed(() => {
+  const name = site.brand
+  const cut = name.lastIndexOf(' ')
+  return cut > 0 ? [name.slice(0, cut + 1), name.slice(cut + 1)] : ['', name]
+})
+const brandHead = computed(() => brandSplit.value[0])
+const brandTail = computed(() => brandSplit.value[1])
 
 const cart = useCartStore()
 const ui = useUiStore()

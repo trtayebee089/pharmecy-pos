@@ -16,7 +16,7 @@
           Never miss a refill.
         </h2>
         <p class="mt-4 max-w-lg text-sm leading-7 text-primary-100/90">
-          Create a RedPharma account to keep your order history, reorder past medicines in a tap and
+          Create a {{ site.brand }} account to keep your order history, reorder past medicines in a tap and
           track every delivery from one place.
         </p>
       </div>
@@ -42,5 +42,8 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../../stores/siteStore'
 import { ArrowRight, RotateCcw } from 'lucide-vue-next'
+
+const site = useSiteStore()
 </script>

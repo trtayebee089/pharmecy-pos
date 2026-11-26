@@ -37,7 +37,7 @@ class SslCommerz
             'store_id' => $c['storeId'], 'store_passwd' => $c['storePassword'],
             'total_amount' => number_format((float) $p->amount, 2, '.', ''), 'currency' => 'BDT', 'tran_id' => $p->reference,
             'success_url' => $urls['success'], 'fail_url' => $urls['fail'], 'cancel_url' => $urls['cancel'], 'ipn_url' => $urls['ipn'],
-            'cus_name' => $o->customer?->name ?: 'Customer', 'cus_email' => $o->customer?->email ?: 'customer@redpharmabd.com',
+            'cus_name' => $o->customer?->name ?: 'Customer', 'cus_email' => $o->customer?->email ?: 'customer@example.com',
             'cus_add1' => mb_substr((string) $o->address, 0, 200), 'cus_city' => $o->district ?: 'Dhaka', 'cus_country' => 'Bangladesh',
             'cus_phone' => $o->phone, 'shipping_method' => 'NO', 'num_of_item' => $o->lines->count(),
             'product_name' => mb_substr($o->lines->pluck('description')->join(', ') ?: 'Medicines', 0, 250),

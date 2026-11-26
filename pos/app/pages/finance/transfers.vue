@@ -2,6 +2,7 @@
 import { gsap } from 'gsap'
 import { ArrowRightLeft, Search, ArrowRight, AlertTriangle, Download, Printer, Undo2 } from 'lucide-vue-next'
 import type { Account, MoneyTransfer } from '~/types/finance'
+const { brand } = useBrand()
 
 definePageMeta({ title: 'Money transfers' })
 const api = useFinanceApi()
@@ -90,7 +91,7 @@ function reverse(t: MoneyTransfer) {
 function printVoucher(t: MoneyTransfer) {
   const w = window.open('', '_blank', 'width=640,height=640')
   if (!w) { toast.warning('Allow pop-ups to print the voucher'); return }
-  w.document.write(`<html><head><title>${t.number}</title><style>body{font:14px system-ui;padding:32px}td{padding:8px;border-bottom:1px solid #e2e8f0}td:first-child{color:#64748b}</style></head><body><h2>Red Pharma · Money transfer</h2><p>${t.number}${voided.value[t.id] ? ' · VOID' : ''}</p><table style="width:100%;border-collapse:collapse"><tr><td>Date</td><td>${dateTime(t.date)}</td></tr><tr><td>From</td><td>${t.fromAccount}</td></tr><tr><td>To</td><td>${t.toAccount}</td></tr><tr><td>Amount</td><td><b>${money(t.amount)}</b></td></tr><tr><td>Note</td><td>${t.note || '—'}</td></tr><tr><td>By</td><td>${t.createdBy}</td></tr></table></body></html>`)
+  w.document.write(`<html><head><title>${t.number}</title><style>body{font:14px system-ui;padding:32px}td{padding:8px;border-bottom:1px solid #e2e8f0}td:first-child{color:#64748b}</style></head><body><h2>${brand.value} · Money transfer</h2><p>${t.number}${voided.value[t.id] ? ' · VOID' : ''}</p><table style="width:100%;border-collapse:collapse"><tr><td>Date</td><td>${dateTime(t.date)}</td></tr><tr><td>From</td><td>${t.fromAccount}</td></tr><tr><td>To</td><td>${t.toAccount}</td></tr><tr><td>Amount</td><td><b>${money(t.amount)}</b></td></tr><tr><td>Note</td><td>${t.note || '—'}</td></tr><tr><td>By</td><td>${t.createdBy}</td></tr></table></body></html>`)
   w.document.close()
   w.print()
 }

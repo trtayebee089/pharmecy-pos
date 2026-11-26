@@ -38,7 +38,7 @@ class MailSettings
             'mail.mailers.smtp.password' => $c['password'],
             'mail.mailers.smtp.timeout' => 15,
             'mail.from.address' => $c['fromAddress'] ?: config('mail.from.address'),
-            'mail.from.name' => $c['fromName'] ?: config('mail.from.name'),
+            'mail.from.name' => $c['fromName'] ?: app(Integrations::class)->brand(),
         ]);
         // A mailer built before the change keeps its old transport.
         if (app()->resolved('mail.manager')) {

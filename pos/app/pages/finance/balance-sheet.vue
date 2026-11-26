@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Printer, Scale, CheckCircle2, AlertTriangle } from 'lucide-vue-next'
 import type { BalanceSheet } from '~/types/finance'
+const { brand } = useBrand()
 
 definePageMeta({ title: 'Balance sheet' })
 const api = useFinanceApi()
@@ -53,7 +54,7 @@ function printPage() { window.print() }
       <div class="card mb-5 flex flex-wrap items-center gap-4 p-5" data-reveal>
         <span class="grid size-11 place-items-center rounded-2xl" :class="balanced ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'"><component :is="balanced ? CheckCircle2 : AlertTriangle" class="size-5" /></span>
         <div class="min-w-0 flex-1">
-          <p class="font-display text-base font-bold">Red Pharma · {{ auth.warehouse?.name }}</p>
+          <p class="font-display text-base font-bold">{{ brand }} · {{ auth.warehouse?.name }}</p>
           <p class="text-sm text-slate-500">Statement of financial position as of {{ date(asOf, { day: '2-digit', month: 'long', year: 'numeric' }) }}</p>
         </div>
         <UiBadge :tone="balanced ? 'success' : 'danger'" dot>{{ balanced ? 'Assets = Liabilities + Equity' : 'Out of balance' }}</UiBadge>

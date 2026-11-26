@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Maximize2, Minimize2, Settings2, Printer, Wallet, ShoppingBag, TrendingUp, History, PauseCircle, Trash2, Play } from 'lucide-vue-next'
 import type { DashboardSummary, RegisterSession, SaleSummary } from '~/types/domain'
+const { brand } = useBrand()
 
 /**
  * Counter toolbar shared by both POS layouts (legacy: Full Screen, POS Settings,
@@ -175,7 +176,7 @@ const btn = 'flex h-9 items-center gap-2 rounded-xl px-2.5 text-[13px] font-medi
     <!-- Last receipt -->
     <UiModal v-model="receiptOpen" title="Last receipt" :description="cart.lastReceipt?.number" size="sm">
       <div v-if="cart.lastReceipt" class="rounded-xl border border-dashed border-slate-300 p-4 font-mono text-[11px] leading-snug">
-        <p class="text-center font-bold">Red Pharma</p>
+        <p class="text-center font-bold">{{ brand }}</p>
         <p class="text-center">{{ cart.lastReceipt.number }} · {{ dateTime(cart.lastReceipt.at) }}</p>
         <p class="my-1.5 border-t border-dashed border-slate-400" />
         <p v-for="(l, i) in cart.lastReceipt.lines" :key="i" class="flex justify-between gap-2"><span>{{ l.name }} ×{{ l.qty }}</span><span>{{ money(l.total, false) }}</span></p>

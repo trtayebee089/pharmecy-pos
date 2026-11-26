@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import api, { unwrap } from '../services/api'
 
+/** Shown until the shop sets its own name in the POS. */
+export const DEFAULT_BRAND = 'Your Brand'
+
 /**
  * Site-wide settings from GET /v1/site-config (Administration › Integrations and
  * Website › Banners in the POS): shop details, public tracking ids, payment
@@ -14,6 +17,10 @@ export const useSiteStore = defineStore('site', {
     payments: [{ code: 'cod', label: 'Cash on delivery' }],
     banners: { hero: [], tiles: [] },
   }),
+  getters: {
+    /** The shop's name (POS: Administration › Integrations › Website › Site name). */
+    brand: (state) => String(state.shop.siteName || '').trim() || DEFAULT_BRAND,
+  },
   actions: {
     async load() {
       if (this.loaded) return this

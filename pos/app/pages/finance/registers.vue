@@ -2,6 +2,7 @@
 import { gsap } from 'gsap'
 import { Banknote, Lock, LockOpen, Clock, ArrowDownLeft, ArrowUpRight, Smartphone, CheckCircle2, AlertTriangle, Printer } from 'lucide-vue-next'
 import type { RegisterSession } from '~/types/domain'
+const { brand } = useBrand()
 
 definePageMeta({ title: 'Cash registers' })
 const api = useRegisterApi()
@@ -23,7 +24,7 @@ function sessionRows(s: RegisterSession): [string, string][] {
 function printZReport(s: RegisterSession) {
   const w = window.open('', '_blank', 'width=420,height=640')
   if (!w) { toast.warning('Allow pop-ups to print the report'); return }
-  w.document.write(`<html><head><title>Z report ${s.id}</title><style>body{font:12px ui-monospace,monospace;width:72mm;padding:8px}.r{display:flex;justify-content:space-between;margin:3px 0}h3{text-align:center;margin:4px 0}hr{border:0;border-top:1px dashed #000}</style></head><body><h3>RED PHARMA · Z REPORT</h3><div style="text-align:center">Session #${s.id}</div><hr>${sessionRows(s).map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`).join('')}<hr><div style="text-align:center">Printed ${new Date().toLocaleString()}</div></body></html>`)
+  w.document.write(`<html><head><title>Z report ${s.id}</title><style>body{font:12px ui-monospace,monospace;width:72mm;padding:8px}.r{display:flex;justify-content:space-between;margin:3px 0}h3{text-align:center;margin:4px 0}hr{border:0;border-top:1px dashed #000}</style></head><body><h3>${brand.value.toUpperCase()} · Z REPORT</h3><div style="text-align:center">Session #${s.id}</div><hr>${sessionRows(s).map(([k, v]) => `<div class="r"><span>${k}</span><span>${v}</span></div>`).join('')}<hr><div style="text-align:center">Printed ${new Date().toLocaleString()}</div></body></html>`)
   w.document.close()
   w.print()
 }

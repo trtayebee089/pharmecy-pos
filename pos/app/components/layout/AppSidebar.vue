@@ -2,6 +2,7 @@
 import { gsap } from 'gsap'
 import { ChevronDown, ChevronsLeft, Cross } from 'lucide-vue-next'
 import { navigation, type NavGroup } from '~/config/navigation'
+const { brand } = useBrand()
 
 const ui = useUiStore()
 const auth = useAuthStore()
@@ -87,7 +88,7 @@ const ACTIVE = 'bg-white/15 text-white ring-1 ring-white/20 ring-inset shadow-sm
         <Cross class="size-5 text-white" :stroke-width="2.6" />
       </div>
       <div class="min-w-0 transition-opacity duration-200" :class="ui.collapsed && 'lg:pointer-events-none lg:opacity-0'">
-        <p class="font-display text-[15px] leading-tight font-extrabold tracking-tight text-white">Red Pharma</p>
+        <p class="font-display text-[15px] leading-tight font-extrabold tracking-tight text-white">{{ brand }}</p>
         <p class="text-[11px] font-medium text-brand-200">Pharmacy POS</p>
       </div>
     </div>

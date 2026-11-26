@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Services\Integrations;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -21,7 +22,7 @@ class TemporaryPassword extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->isNew ? 'Your Red Pharma POS account' : 'Your Red Pharma POS password was reset');
+        return new Envelope(subject: $this->isNew ? 'Your '.app(Integrations::class)->brand().' POS account' : 'Your '.app(Integrations::class)->brand().' POS password was reset');
     }
 
     public function content(): Content

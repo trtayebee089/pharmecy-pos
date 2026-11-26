@@ -27,7 +27,7 @@ class OrderNotifier
             return;
         }
         $shop = $this->integrations->public('storefront');
-        $name = $shop['siteName'] ?: 'Red Pharma';
+        $name = $this->integrations->brand();
         $track = $this->integrations->websiteUrl().'/track-order?code='.$order->tracking_code;
         $cod = OnlineOrders::codAmount($order);
         $text = match ($order->status) {

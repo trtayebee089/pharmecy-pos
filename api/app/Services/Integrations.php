@@ -17,9 +17,12 @@ use Illuminate\Support\Facades\Crypt;
  */
 class Integrations
 {
+    /** Shown until the shop sets its own name (Integrations › Website › Site name). */
+    public const DEFAULT_BRAND = 'Your Brand';
+
     public const GROUPS = [
         'mail' => [
-            'defaults' => ['enabled' => false, 'host' => '', 'port' => 587, 'encryption' => 'tls', 'username' => '', 'fromAddress' => '', 'fromName' => 'Red Pharma'],
+            'defaults' => ['enabled' => false, 'host' => '', 'port' => 587, 'encryption' => 'tls', 'username' => '', 'fromAddress' => '', 'fromName' => ''],
             'secrets' => ['password'],
         ],
         'sms' => [
@@ -39,7 +42,7 @@ class Integrations
             'secrets' => ['facebookCapiToken', 'ga4ApiSecret'],
         ],
         'feed' => [
-            'defaults' => ['enabled' => false, 'siteUrl' => '', 'brandFallback' => 'Red Pharma', 'inStockOnly' => true, 'includePrescription' => false],
+            'defaults' => ['enabled' => false, 'siteUrl' => '', 'brandFallback' => '', 'inStockOnly' => true, 'includePrescription' => false],
             'secrets' => ['token'],
         ],
         'sslcommerz' => [
@@ -63,7 +66,7 @@ class Integrations
         ],
         'storefront' => [
             'defaults' => [
-                'siteName' => 'Red Pharma', 'websiteUrl' => '', 'phone' => '', 'whatsapp' => '', 'email' => '', 'address' => '',
+                'siteName' => self::DEFAULT_BRAND, 'websiteUrl' => '', 'phone' => '', 'whatsapp' => '', 'email' => '', 'address' => '',
                 'facebookUrl' => '', 'instagramUrl' => '', 'youtubeUrl' => '', 'metaTitle' => '', 'metaDescription' => '',
                 'announcement' => '', 'codEnabled' => true,
             ],
@@ -103,6 +106,12 @@ class Integrations
         }
 
         return $raw;
+    }
+
+    /** The shop's name for emails, texts and messages. */
+    public function brand(): string
+    {
+        return trim((string) $this->raw('storefront')['siteName']) ?: self::DEFAULT_BRAND;
     }
 
     /** The shop website (payment returns, feed links): Website tab, else the feed's, else FRONTEND_URL / APP_URL. */

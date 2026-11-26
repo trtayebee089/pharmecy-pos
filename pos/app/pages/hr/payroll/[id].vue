@@ -2,6 +2,7 @@
 import { gsap } from 'gsap'
 import { ArrowLeft, CheckCircle2, Banknote, FileText, Printer, Lock } from 'lucide-vue-next'
 import type { PayrollRun, Payslip } from '~/types/hr'
+const { brand } = useBrand()
 
 definePageMeta({ title: 'Payroll run' })
 const route = useRoute()
@@ -95,7 +96,7 @@ const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 function slipHtml(s: Payslip) {
   const p = { ...s, name: esc(s.name), designation: esc(s.designation) }
   const row = (k: string, v: string) => `<tr><td>${k}</td><td style="text-align:right">${v}</td></tr>`
-  return `<section><h1>Red Pharma · Payslip</h1><p>${periodLabel.value}<br>${p.name} · ${p.designation}</p>
+  return `<section><h1>${brand.value} · Payslip</h1><p>${periodLabel.value}<br>${p.name} · ${p.designation}</p>
     <table>${row('Basic salary', money(p.basic))}${row('Additions', money(p.additions))}${row(`Absence deduction (${p.workingDays - p.presentDays} days)`, `−${money(p.deductions)}`)}${row('Advance recovery', `−${money(p.advanceRecovery)}`)}<tr class="net"><td>Net pay</td><td style="text-align:right">${money(p.net)}</td></tr></table>
     <p style="margin-top:32px;color:#64748b">Status: ${run.value?.status}${run.value?.paidAt ? ` · paid ${date(run.value.paidAt)}` : ''}</p></section>`
 }

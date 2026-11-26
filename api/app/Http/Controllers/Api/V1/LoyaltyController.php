@@ -140,7 +140,7 @@ class LoyaltyController extends V1Controller
     /** Renewal needs the plan fee in cash, so it happens at a branch. */
     public function renew(): JsonResponse
     {
-        return response()->json(['success' => false, 'message' => 'Memberships are renewed at any Red Pharma branch, where the fee is paid.'], 422);
+        return response()->json(['success' => false, 'message' => 'Memberships are renewed at any of our branches, where the fee is paid.'], 422);
     }
 
     private function plan(MembershipPlan $p): array

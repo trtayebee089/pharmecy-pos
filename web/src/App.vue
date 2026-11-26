@@ -75,7 +75,7 @@ const router = useRouter()
 
 /** Search title and description from the POS (Integrations › Website), when set. */
 function applyMeta(shop) {
-  if (shop.metaTitle) document.title = shop.metaTitle
+  document.title = shop.metaTitle || `${site.brand} | Online Pharmacy`
   if (shop.metaDescription) {
     let tag = document.querySelector('meta[name="description"]')
     if (!tag) { tag = document.createElement('meta'); tag.name = 'description'; document.head.appendChild(tag) }

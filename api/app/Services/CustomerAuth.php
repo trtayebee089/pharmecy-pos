@@ -93,8 +93,8 @@ class CustomerAuth
         CustomerPasswordReset::where('customer_id', $c->id)->whereNull('used_at')->update(['used_at' => now()]); // one live code
         CustomerPasswordReset::create(['customer_id' => $c->id, 'code_hash' => Hash::make($code), 'expires_at' => now()->addMinutes(self::CODE_MINUTES)]);
         Mail::raw(
-            "Your Red Pharma password reset code is {$code}. It is valid for ".self::CODE_MINUTES." minutes.\nIf you did not ask for it, ignore this email.",
-            fn ($m) => $m->to($c->email, $c->name)->subject('Red Pharma password reset code'),
+            'Your '.app(Integrations::class)->brand()." password reset code is {$code}. It is valid for ".self::CODE_MINUTES." minutes.\nIf you did not ask for it, ignore this email.",
+            fn ($m) => $m->to($c->email, $c->name)->subject(app(Integrations::class)->brand().' password reset code'),
         );
         Log::info('Customer password reset code sent', ['customer' => $c->id]);
     }

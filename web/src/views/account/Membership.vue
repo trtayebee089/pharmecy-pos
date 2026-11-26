@@ -9,7 +9,7 @@
       <div v-else-if="error" class="mt-6 rounded-2xl bg-red-50 p-4 text-red-700" role="alert">{{ error }}</div>
       <template v-else-if="data">
         <section class="mt-6 overflow-hidden rounded-[2rem] p-6 text-white shadow-soft" :style="{ background: `linear-gradient(135deg, ${plan.color || '#0f766e'}, #0f172a)` }" aria-label="Membership card">
-          <div class="flex flex-wrap justify-between gap-6"><div><p class="text-sm font-bold uppercase tracking-[.2em] text-white/70">RedPharma member</p><h2 class="mt-2 text-4xl font-black">{{ plan.name || 'No tier yet' }}</h2><p class="mt-2 text-white/80">{{ membership ? `Status: ${membership.status}` : `Tiers are earned automatically by your yearly purchases` }}</p></div><div v-if="membership" class="text-right"><p class="text-sm text-white/70">Member since</p><p class="font-bold">{{ date(membership.started_at) }}</p><p v-if="membership.expires_at" class="mt-2 text-sm text-white/70">Valid until {{ date(membership.expires_at) }}</p></div></div>
+          <div class="flex flex-wrap justify-between gap-6"><div><p class="text-sm font-bold uppercase tracking-[.2em] text-white/70">{{ site.brand }} member</p><h2 class="mt-2 text-4xl font-black">{{ plan.name || 'No tier yet' }}</h2><p class="mt-2 text-white/80">{{ membership ? `Status: ${membership.status}` : `Tiers are earned automatically by your yearly purchases` }}</p></div><div v-if="membership" class="text-right"><p class="text-sm text-white/70">Member since</p><p class="font-bold">{{ date(membership.started_at) }}</p><p v-if="membership.expires_at" class="mt-2 text-sm text-white/70">Valid until {{ date(membership.expires_at) }}</p></div></div>
         </section>
         <section class="mt-6 grid gap-4 sm:grid-cols-3" aria-label="Membership statistics">
           <article class="rounded-2xl bg-slate-50 p-5"><p class="text-sm text-slate-500">Current-year purchase</p><p class="mt-1 text-2xl font-black text-ink">৳{{ money(statistics.current_year_purchase) }}</p></article>
@@ -30,9 +30,12 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../../stores/siteStore'
 import { computed, onMounted, ref } from 'vue'
 import AccountShell from './partials/AccountShell.vue'
 import { membershipService } from '../../services/membershipService'
+
+const site = useSiteStore()
 const loading=ref(true),renewing=ref(false),error=ref(''),data=ref(null),history=ref([])
 const membership=computed(()=>data.value?.membership),plan=computed(()=>membership.value?.plan||{}),statistics=computed(()=>data.value?.statistics||{}),progress=computed(()=>data.value?.progress||{percentage:0}),enabledBenefits=computed(()=>Object.values(data.value?.benefits||{}).filter(x=>x.enabled))
 const money=v=>Number(v||0).toLocaleString('en-BD',{maximumFractionDigits:2}); const date=v=>v?new Intl.DateTimeFormat('en-BD',{dateStyle:'medium'}).format(new Date(v)):'—'

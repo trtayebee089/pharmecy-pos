@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ReceiptSnapshot } from '~/stores/cart'
+const { brand } = useBrand()
 
 /** 80 mm thermal receipt, rendered from a snapshot so it can be reprinted later. Visible only when printing. */
 defineProps<{ receipt: ReceiptSnapshot }>()
@@ -10,7 +11,7 @@ const auth = useAuthStore()
   <Teleport to="body">
     <div id="print-receipt" class="hidden">
       <div class="receipt">
-        <p class="center bold big">Red Pharma</p>
+        <p class="center bold big">{{ brand }}</p>
         <p class="center">{{ auth.warehouse?.name }}</p>
         <p class="center small">{{ receipt.number }} · {{ dateTime(receipt.at) }}</p>
         <p class="center small">Cashier: {{ auth.user?.name }} · Customer: {{ receipt.customer }}</p>

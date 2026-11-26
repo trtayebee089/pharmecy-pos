@@ -6,6 +6,7 @@ import {
 } from 'lucide-vue-next'
 import type { PaymentLine, Product } from '~/types/domain'
 import type { CartLine } from '~/stores/cart'
+const { brand } = useBrand()
 
 /**
  * "Classic" counter: the familiar table-based screen of the legacy POS
@@ -149,7 +150,7 @@ const actionBtn = 'flex h-12 min-w-[8.5rem] items-center justify-center gap-2 ro
       <NuxtLink to="/dashboard" class="grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-600 transition hover:border-brand-300 hover:text-brand-700" aria-label="Back to dashboard"><Home class="size-5" /></NuxtLink>
       <div class="hidden items-center gap-2 sm:flex">
         <span class="grid size-8 place-items-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-700"><Cross class="size-4 text-white" :stroke-width="2.6" /></span>
-        <span class="font-display text-[15px] font-extrabold">Red Pharma POS</span>
+        <span class="font-display text-[15px] font-extrabold">{{ brand }} POS</span>
       </div>
       <div class="ml-auto"><PosToolbar ref="toolbar" /></div>
       <div class="hidden items-center gap-2 border-l border-slate-200 pl-3 md:flex">

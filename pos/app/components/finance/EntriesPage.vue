@@ -2,6 +2,7 @@
 import { Plus, Search, Paperclip, Download, Receipt, Tags, Upload, Printer, Copy } from 'lucide-vue-next'
 import type { CrudColumn, FieldDef } from '~/types/domain'
 import type { Account, FinanceCategory, FinanceEntry } from '~/types/finance'
+const { brand } = useBrand()
 
 /** Shared expenses / income page: posted entries (void-only) + category management. */
 const props = defineProps<{ kind: 'expenses' | 'incomes'; permission: string }>()
@@ -110,7 +111,7 @@ function printVoucher(r: FinanceEntry) {
   const w = window.open('', '_blank', 'width=640,height=720')
   if (!w) { toast.warning('Allow pop-ups to print the voucher'); return }
   w.document.write(`<html><head><title>${r.number}</title><style>body{font:14px system-ui;padding:32px;color:#0f1b2d}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:20px}td{padding:8px;border-bottom:1px solid #e2e8f0}td:first-child{color:#64748b;width:40%}.sig{margin-top:64px;display:flex;justify-content:space-between}.sig span{border-top:1px solid #000;padding-top:4px;width:40%;text-align:center}</style></head><body>
-    <h1>Red Pharma · ${noun.value} voucher</h1><div>${r.number}${r.status === 'void' ? ' · VOID' : ''}</div>
+    <h1>${brand.value} · ${noun.value} voucher</h1><div>${r.number}${r.status === 'void' ? ' · VOID' : ''}</div>
     <table><tr><td>Date</td><td>${date(r.date)}</td></tr><tr><td>Category</td><td>${r.category}</td></tr><tr><td>${isExpense.value ? 'Paid from' : 'Received into'}</td><td>${r.account}</td></tr>
     <tr><td>Amount</td><td><b>${money(r.amount)}</b></td></tr><tr><td>Note</td><td>${r.note || '—'}</td></tr><tr><td>Entered by</td><td>${r.createdBy}</td></tr></table>
     <div class="sig"><span>Prepared by</span><span>Approved by</span></div></body></html>`)

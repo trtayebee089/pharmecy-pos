@@ -27,6 +27,17 @@ it('gives the website its public settings without any secret', function () {
     expect($res->getContent())->not->toContain('capi-secret')->not->toContain('ssl-secret');
 });
 
+it('uses a neutral brand until the shop names itself', function () {
+    $i = app(Integrations::class);
+    $this->getJson(V1.'/site-config')->assertOk()->assertJsonPath('data.shop.siteName', 'Your Brand');
+    expect($i->brand())->toBe('Your Brand');
+
+    $i->save('storefront', ['siteName' => '  Green Leaf Pharmacy ']);
+    expect($i->brand())->toBe('Green Leaf Pharmacy');
+    $i->save('storefront', ['siteName' => '']);
+    expect($i->brand())->toBe('Your Brand');
+});
+
 it('publishes a product feed for Facebook and Google only when switched on', function () {
     $this->get('/api/feeds/products.xml')->assertNotFound();
     app(Integrations::class)->save('feed', ['enabled' => true, 'siteUrl' => 'https://shop.example.test', 'inStockOnly' => true, 'includePrescription' => false]);

@@ -78,7 +78,7 @@ class FeedController extends Controller
                             'description' => mb_substr(trim(strip_tags((string) ($p['description'] ?? '')) ?: implode(', ', array_filter([$title, $p['generic_name'] ?? null, $p['manufacturer'] ?? null, $p['pack'] ?? null]))), 0, 5000),
                             'link' => $site.'/product/'.rawurlencode((string) $p['slug']), 'image_link' => $p['image'] ?? null,
                             'availability' => $p['stock'] > 0 ? 'in stock' : 'out of stock', 'price' => number_format((float) $p['price'], 2, '.', '').' BDT',
-                            'brand' => $p['manufacturer'] ?? null ?: $f['brandFallback'], 'condition' => 'new',
+                            'brand' => $p['manufacturer'] ?? null ?: ($f['brandFallback'] ?: app(Integrations::class)->brand()), 'condition' => 'new',
                             'product_type' => $p['category']['name'] ?? null, 'google_product_category' => 'Health & Beauty > Health Care',
                             'identifier_exists' => 'no', 'inventory' => (string) $p['stock'],
                         ];

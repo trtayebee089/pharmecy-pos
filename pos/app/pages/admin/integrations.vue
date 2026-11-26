@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Mail, MessageSquareText, Activity, Rss, CreditCard, Truck, Globe, Save, Send, Plus, Trash2, Copy } from 'lucide-vue-next'
 import { SECRET_DRAFTS, type IntegrationGroup, type IntegrationsPayload, type KeyValue } from '~/services/integrations'
+const { brand } = useBrand()
 
 definePageMeta({ title: 'Integrations' })
 const api = useIntegrationsApi()
@@ -43,6 +44,8 @@ async function save(group: IntegrationGroup, label: string) {
   try {
     const saved = await api.save(group, values as any, typed, clear)
     ;(data.value as any)[group] = saved
+    // The site name is the brand on every screen and printout.
+    if (group === 'storefront') brand.value = String((saved as any)?.siteName ?? '').trim() || DEFAULT_BRAND
     for (const k of Object.keys(sec).filter(mine)) delete sec[k]
     for (const k of Object.keys(clr).filter(mine)) delete clr[k]
     toast.success(`${label} saved`)
@@ -118,8 +121,8 @@ async function copy(text: string) {
               <AdminSecretField field="mail.password" label="Password" :set="d.mail.passwordSet" hint="For Gmail use an app password" />
             </div>
             <div class="grid gap-4 sm:grid-cols-2">
-              <UiInput v-model="d.mail.fromAddress" label="From address" placeholder="no-reply@redpharmabd.com" :error="err('fromAddress')" />
-              <UiInput v-model="d.mail.fromName" label="From name" />
+              <UiInput v-model="d.mail.fromAddress" label="From address" placeholder="no-reply@yourbrand.com" :error="err('fromAddress')" />
+              <UiInput v-model="d.mail.fromName" label="From name" placeholder="Shop name if empty" />
             </div>
             <UiButton variant="primary" :icon="Save" :loading="saving === 'mail'" @click="save('mail', 'Email settings')">Save email settings</UiButton>
           </div>
@@ -177,7 +180,7 @@ async function copy(text: string) {
         <UiSection title="Send a test" description="Uses the saved settings, even while SMS is off" :icon="Send">
           <div class="space-y-3">
             <UiInput v-model="smsTo" label="Mobile number" placeholder="01XXXXXXXXX" inputmode="tel" />
-            <UiTextarea v-model="smsText" label="Message" :rows="3" placeholder="Test SMS from Red Pharma." />
+            <UiTextarea v-model="smsText" label="Message" :rows="3" :placeholder="`Test SMS from ${brand}.`" />
             <UiButton :icon="Send" :loading="testing === 'sms'" :disabled="!smsTo" @click="testSms">Send test SMS</UiButton>
             <p v-if="testResult.sms" class="break-words rounded-xl px-3 py-2 text-[13px]" :class="testResult.sms.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-700'">{{ testResult.sms.message }}</p>
           </div>
@@ -210,8 +213,8 @@ async function copy(text: string) {
         <UiSection title="Product feed" description="For Facebook catalogue and Google Merchant Center (like CTX Feed)" :icon="Rss">
           <div class="space-y-4">
             <UiSwitch v-model="d.feed.enabled" label="Publish the product feed" />
-            <UiInput v-model="d.feed.siteUrl" label="Website address" placeholder="https://redpharmabd.com" hint="Product links in the feed point here" :error="err('siteUrl')" />
-            <UiInput v-model="d.feed.brandFallback" label="Brand when a product has no manufacturer" />
+            <UiInput v-model="d.feed.siteUrl" label="Website address" placeholder="https://yourbrand.com" hint="Product links in the feed point here" :error="err('siteUrl')" />
+            <UiInput v-model="d.feed.brandFallback" label="Brand when a product has no manufacturer" placeholder="Shop name if empty" />
             <UiSwitch v-model="d.feed.inStockOnly" label="Only products in stock" />
             <UiSwitch v-model="d.feed.includePrescription" label="Include prescription medicines" description="Facebook and Google restrict ads for prescription drugs; leave off unless you are certified" />
             <AdminSecretField field="feed.token" label="Access token (optional)" :set="d.feed.tokenSet" hint="If set, add ?token=… to the feed URL" />
@@ -304,8 +307,8 @@ async function copy(text: string) {
       <div v-else class="grid gap-5 lg:grid-cols-2">
         <UiSection title="Shop details" description="Shown in the website header, footer and messages" :icon="Globe">
           <div class="space-y-4">
-            <UiInput v-model="d.storefront.siteName" label="Shop name" :error="err('siteName')" />
-            <UiInput v-model="d.storefront.websiteUrl" label="Website address" placeholder="https://redpharmabd.com" hint="Customers return here after paying online" :error="err('websiteUrl')" />
+            <UiInput v-model="d.storefront.siteName" label="Shop name" placeholder="Your Brand" hint="Your brand on the website, POS screens, receipts, emails and SMS" :error="err('siteName')" />
+            <UiInput v-model="d.storefront.websiteUrl" label="Website address" placeholder="https://yourbrand.com" hint="Customers return here after paying online" :error="err('websiteUrl')" />
             <div class="grid gap-4 sm:grid-cols-2">
               <UiInput v-model="d.storefront.phone" label="Hotline" inputmode="tel" />
               <UiInput v-model="d.storefront.whatsapp" label="WhatsApp" inputmode="tel" />

@@ -2,6 +2,7 @@
 import { gsap } from 'gsap'
 import { Save, ScanBarcode, CreditCard, LayoutGrid, Rows3, Check, ReceiptText, Printer, Plus, Pencil, Trash2, Zap, Cable, Globe, Monitor, CheckCircle2, KeyRound } from 'lucide-vue-next'
 import type { PosConfig, PrinterProfile } from '~/services/settings'
+const { brand } = useBrand()
 
 /** Legacy "POS Setting" (setting/pos_setting) with a proper printer setup. */
 definePageMeta({ title: 'POS settings' })
@@ -90,7 +91,7 @@ async function test(p: PrinterProfile) {
   testing.value = p.id
   if (p.connection === 'browser') {
     const w = window.open('', '_blank', 'width=420,height=600')
-    w?.document.write(`<pre style="font:12px monospace;width:72mm">RED PHARMA\nTest page · ${p.name}\nPaper ${p.paper}\n${new Date().toLocaleString()}\n--------------------------------\nIf you can read this, printing works.</pre>`)
+    w?.document.write(`<pre style="font:12px monospace;width:72mm">${brand.value.toUpperCase()}\nTest page · ${p.name}\nPaper ${p.paper}\n${new Date().toLocaleString()}\n--------------------------------\nIf you can read this, printing works.</pre>`)
     w?.document.close(); w?.print()
     testing.value = null
     return

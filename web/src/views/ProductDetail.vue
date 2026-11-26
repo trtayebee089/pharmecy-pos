@@ -13,7 +13,7 @@
         </div>
       </section>
       <section class="min-w-0">
-        <p class="text-sm font-bold uppercase text-primary-700">{{ product.manufacturer || 'RedPharma product' }}</p>
+        <p class="text-sm font-bold uppercase text-primary-700">{{ product.manufacturer || site.brand }}</p>
         <h1 class="mt-2 text-3xl font-black leading-tight text-ink md:text-5xl">{{ product.name }}</h1>
         <p class="mt-3 text-slate-500">{{ product.generic_name }}</p>
         <div class="mt-5 flex flex-wrap items-center gap-3">
@@ -50,6 +50,7 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../stores/siteStore'
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Breadcrumb from '../components/common/Breadcrumb.vue'
@@ -64,6 +65,8 @@ import { useCartStore } from '../stores/cartStore'
 import { formatPrice } from '../utils/formatPrice'
 import { useRecentlyViewedStore } from '../stores/recentlyViewedStore'
 import { tracking } from '../composables/useTracking'
+
+const site = useSiteStore()
 
 const route = useRoute()
 const router = useRouter()

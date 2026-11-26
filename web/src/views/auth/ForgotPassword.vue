@@ -1,5 +1,5 @@
 <template>
-  <AuthShell title="Reset password" subtitle="Use the recovery email connected to your RedPharma mobile number.">
+  <AuthShell title="Reset password" :subtitle="`Use the recovery email connected to your ${site.brand} mobile number.`">
     <form class="grid gap-4" @submit.prevent="submit">
       <label class="text-sm font-bold text-slate-700" for="reset-phone">Mobile number</label>
       <input id="reset-phone" v-model.trim="form.mobile" inputmode="tel" autocomplete="tel" required :disabled="step === 2" class="-mt-2 w-full rounded-2xl bg-slate-50 px-4 py-3 outline-none disabled:text-slate-500 focus:ring-2 focus:ring-primary-500" />
@@ -20,11 +20,14 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../../stores/siteStore'
 import { computed, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import AuthShell from './partials/AuthShell.vue'
 import ErrorState from '../../components/common/ErrorState.vue'
 import { authService } from '../../services/authService'
+
+const site = useSiteStore()
 
 const router = useRouter(), step = ref(1), loading = ref(false), error = ref('')
 const form = reactive({ mobile: '', otp: '', password: '', password_confirmation: '' })

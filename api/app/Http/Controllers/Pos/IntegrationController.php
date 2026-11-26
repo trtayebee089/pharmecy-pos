@@ -50,8 +50,9 @@ class IntegrationController extends Controller
         }
         try {
             $mail->apply(force: true);
-            Mail::raw("This is a test email from Red Pharma.\n\nIf you can read this, the email settings work.", function ($m) use ($data) {
-                $m->to($data['to'])->subject('Red Pharma test email');
+            $brand = app(Integrations::class)->brand();
+            Mail::raw("This is a test email from {$brand}.\n\nIf you can read this, the email settings work.", function ($m) use ($data, $brand) {
+                $m->to($data['to'])->subject("{$brand} test email");
             });
         } catch (Throwable $e) {
             return response()->json(['ok' => false, 'message' => 'Sending failed: '.$this->short($e->getMessage())], 422);
@@ -63,7 +64,7 @@ class IntegrationController extends Controller
     public function testSms(Request $request, SmsGateway $sms): JsonResponse
     {
         $data = $request->validate(['to' => ['required', 'string', 'max:20'], 'message' => ['nullable', 'string', 'max:300']]);
-        $log = $sms->send($data['to'], ($data['message'] ?? null) ?: 'Test SMS from Red Pharma.', 'test', $request->user()->id, force: true);
+        $log = $sms->send($data['to'], ($data['message'] ?? null) ?: 'Test SMS from '.app(Integrations::class)->brand().'.', 'test', $request->user()->id, force: true);
 
         return response()->json(['ok' => $log->status === 'sent', 'message' => $log->status === 'sent' ? 'Gateway accepted the SMS.' : 'Sending failed: '.$log->error, 'response' => $log->response], $log->status === 'sent' ? 200 : 422);
     }

@@ -1,7 +1,7 @@
 <template>
   <section
     class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-slate-900/[0.07] ring-1 ring-slate-900/[0.07] md:grid-cols-3 xl:grid-cols-5"
-    aria-label="Why shop with RedPharma"
+    :aria-label="`Why shop with ${site.brand}`"
   >
     <div
       v-for="badge in badges"
@@ -22,7 +22,10 @@
 </template>
 
 <script setup>
+import { useSiteStore } from '../../stores/siteStore'
 import { BadgeCheck, CreditCard, RefreshCcw, ShieldCheck, Truck } from 'lucide-vue-next'
+
+const site = useSiteStore()
 
 const badges = [
   { title: 'Genuine medicines', text: 'Sourced from licensed suppliers', icon: BadgeCheck },
