@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
-import { MapPin, Phone, Bike, Layers, ArrowRight, Ban, Globe, Smartphone, Info, Truck, ExternalLink, RefreshCw, Printer, Wallet, History, PackageOpen } from 'lucide-vue-next'
+import { MapPin, MapPinned, Navigation, Route as RouteIcon, Phone, Bike, Layers, ArrowRight, Ban, Globe, Smartphone, Info, Truck, ExternalLink, RefreshCw, Printer, Wallet, History, PackageOpen } from 'lucide-vue-next'
 import type { OnlineOrder, OrderStatus, Rider } from '~/types/orders'
 
 /** The order page (/orders/[id]): everything about one online order and its next step. */
@@ -17,6 +17,12 @@ const timeline = ref<HTMLElement | null>(null)
 watch(() => [props.order.id, props.order.riderId], () => { riderId.value = props.order.riderId ?? null }, { immediate: true })
 const gatewayLabel = computed(() => (props.order.paymentMethod === 'bkash' ? 'bKash' : 'SSLCommerz'))
 const print = () => window.print()
+
+// ---------------------------------------------------------------- rider app tracking
+const customerPin = computed(() => (hasPosition(props.order.latitude, props.order.longitude) ? { lat: Number(props.order.latitude), lng: Number(props.order.longitude) } : null))
+/** Own-rider deliveries once a rider is on it (couriers track in their own panel). */
+const showTracking = computed(() => !props.order.courier && !!props.order.riderId && ['packed', 'in_transit', 'delivered'].includes(props.order.status))
+const routeOpen = ref(false)
 
 // ---------------------------------------------------------------- courier (Steadfast / Pathao)
 const available = ref<{ steadfast: boolean; pathao: boolean }>({ steadfast: false, pathao: false })
@@ -214,8 +220,39 @@ async function assign() {
           <a :href="`tel:${order.phone}`" class="mt-1 inline-flex items-center gap-1.5 text-brand-700 tabular hover:underline"><Phone class="size-3.5" />{{ order.phone }}</a>
           <p class="label mt-4 mb-2">Delivery address</p>
           <p class="flex items-start gap-1.5"><MapPin class="mt-0.5 size-3.5 shrink-0 text-slate-400" /><span>{{ order.address }}, {{ order.thana }}, {{ order.district }}, {{ order.division }}</span></p>
+          <p v-if="customerPin" class="mt-2">
+            <a :href="googleMapsLink(customerPin)" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[13px] font-semibold text-brand-700 hover:underline">
+              <MapPinned class="size-3.5" />Customer's pin on Google Maps <ExternalLink class="size-3" />
+            </a>
+            <span class="block text-[11.5px] text-slate-400 tabular">{{ customerPin.lat.toFixed(5) }}, {{ customerPin.lng.toFixed(5) }}</span>
+          </p>
+          <p v-else class="mt-2 text-xs text-slate-400">No map pin from the customer.</p>
           <p class="mt-2 text-xs text-slate-500">Tracking code <span class="font-mono font-semibold text-slate-700">{{ order.trackingCode }}</span></p>
         </section>
+
+        <!-- Own-rider delivery: pickup, arrival time, delivery time and the route -->
+        <section v-if="showTracking" class="card p-5 text-sm print:hidden">
+          <p class="label mb-2 flex items-center gap-1.5"><Navigation class="size-3.5" />Delivery tracking</p>
+          <dl class="space-y-1.5">
+            <div class="flex justify-between gap-3"><dt class="text-slate-500">Picked up</dt><dd class="font-medium">{{ order.pickedUpAt ? dateTime(order.pickedUpAt) : 'Not yet' }}</dd></div>
+            <div v-if="order.status === 'in_transit'" class="flex justify-between gap-3">
+              <dt class="text-slate-500">Arrives in</dt>
+              <dd v-if="order.eta" class="text-right">
+                <span class="font-bold text-brand-700 tabular">~{{ order.eta.minutes }} min</span>
+                <span class="block text-[11.5px] text-slate-500">
+                  {{ dateTime(order.eta.at) }}<template v-if="order.eta.distance_m != null"> · {{ (order.eta.distance_m / 1000).toFixed(1) }} km</template>
+                  · {{ order.eta.source === 'google' ? 'Google' : 'estimate' }}
+                </span>
+              </dd>
+              <dd v-else class="text-slate-400">Not known yet</dd>
+            </div>
+            <div v-if="order.deliveredAt" class="flex justify-between gap-3"><dt class="text-slate-500">Delivered</dt><dd class="font-medium">{{ dateTime(order.deliveredAt) }}</dd></div>
+            <div v-if="order.deliveryMinutes != null" class="flex justify-between gap-3"><dt class="text-slate-500">Delivery time</dt><dd class="font-bold tabular">{{ order.deliveryMinutes }} min</dd></div>
+          </dl>
+          <p v-if="order.status === 'in_transit' && !order.eta" class="mt-2 text-[12px] text-slate-500">The arrival time appears once the customer has a pin and the rider app reports a position.</p>
+          <UiButton class="mt-3 w-full" size="sm" :icon="RouteIcon" @click="routeOpen = true">Route</UiButton>
+        </section>
+        <OrdersRouteModal v-model="routeOpen" :order-id="order.id" :number="order.number" />
 
         <section class="card p-5 text-sm">
           <p class="label mb-2 flex items-center gap-1.5"><Wallet class="size-3.5" />Payment</p>

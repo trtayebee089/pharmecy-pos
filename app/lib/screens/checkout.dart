@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
@@ -17,6 +18,7 @@ import 'package:redpharmabd_app/main_screen.dart';
 import 'package:redpharmabd_app/models/checkout_response.dart';
 import 'package:redpharmabd_app/providers/auth_provider.dart';
 import 'package:redpharmabd_app/providers/cart_provider.dart';
+import 'package:redpharmabd_app/screens/location_picker.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────
 /// Checkout, rebuilt.
@@ -51,6 +53,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String address = '';
   String? division;
   String? district;
+
+  /// Optional exact delivery point from the map picker (both or neither).
+  double? pinLat;
+  double? pinLng;
   String paymentMethod = 'cash_on_delivery';
   bool isLoading = false;
 
@@ -139,6 +145,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           // Lets the server pick the exact delivery zone (older builds sent only the rate).
           "division": division,
           "district": district,
+          // Exact pin for the rider's map; optional.
+          if (pinLat != null && pinLng != null) "latitude": pinLat,
+          if (pinLat != null && pinLng != null) "longitude": pinLng,
         },
 
         "subtotal": subtotal,
@@ -380,6 +389,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               onSaved: (v) => address = v!,
               validator: (v) => v!.isEmpty ? 'Enter address' : null,
             ),
+            _pinControl(),
+            const SizedBox(height: DsSpace.x4),
             _dropdown(
               label: 'Division',
               icon: Icons.public_outlined,
@@ -405,6 +416,107 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 'Delivery to $district costs ${taka(shippingRate)}.',
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPinPicker() async {
+    final lat = pinLat;
+    final lng = pinLng;
+    final picked = await Navigator.push<LatLng>(
+      context,
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => LocationPickerScreen(
+          initial: lat != null && lng != null ? LatLng(lat, lng) : null,
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      pinLat = double.parse(picked.latitude.toStringAsFixed(7));
+      pinLng = double.parse(picked.longitude.toStringAsFixed(7));
+    });
+  }
+
+  /// Optional "pin your exact location" control. Not part of validation:
+  /// checkout works the same without a pin.
+  Widget _pinControl() {
+    final text = Theme.of(context).textTheme;
+    final pinned = pinLat != null && pinLng != null;
+
+    return DsPressable(
+      onTap: _openPinPicker,
+      depth: 0.02,
+      semanticLabel: pinned
+          ? 'Location pinned. Change'
+          : 'Pin your exact location on a map',
+      child: AnimatedContainer(
+        duration: DsMotion.quick,
+        padding: const EdgeInsets.all(DsSpace.x3),
+        decoration: BoxDecoration(
+          color: pinned ? DsColor.primarySoft : DsColor.canvas,
+          borderRadius: DsRadius.rSm,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: DsColor.surface,
+                borderRadius: DsRadius.rXs,
+              ),
+              child: Icon(
+                pinned ? Icons.where_to_vote_rounded : Icons.pin_drop_outlined,
+                color: pinned ? DsColor.primary : DsColor.brand,
+                size: 21,
+              ),
+            ),
+            const SizedBox(width: DsSpace.x3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    pinned ? 'Location pinned ✓' : 'Pin your exact location',
+                    style: text.titleSmall,
+                  ),
+                  Text(
+                    pinned
+                        ? '${pinLat!.toStringAsFixed(5)}, ${pinLng!.toStringAsFixed(5)}'
+                        : 'Optional · helps the rider find your door',
+                    style: text.bodySmall?.copyWith(fontSize: 11.5),
+                  ),
+                ],
+              ),
+            ),
+            if (pinned) ...[
+              Text(
+                'change',
+                style: text.labelLarge?.copyWith(color: DsColor.primary),
+              ),
+              IconButton(
+                tooltip: 'Remove pin',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => setState(() {
+                  pinLat = null;
+                  pinLng = null;
+                }),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: DsColor.inkSoft,
+                ),
+              ),
+            ] else
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: DsColor.inkFaint,
+              ),
           ],
         ),
       ),
@@ -545,6 +657,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               _kv('Phone', phone),
               _kv('Address', address),
               _kv('Area', [district, division].whereType<String>().join(', ')),
+              if (pinLat != null && pinLng != null)
+                _kv('Map pin', 'Location pinned ✓'),
             ],
           ),
         ),

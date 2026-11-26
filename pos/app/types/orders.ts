@@ -1,4 +1,5 @@
 // Types for held sales, sale returns, online orders and delivery (/api/pos/v1).
+import type { MapsConfig } from '~/composables/useGoogleMaps'
 
 export interface HeldSaleSummary {
   id: string
@@ -83,9 +84,59 @@ export interface OnlineOrder {
   riderName: string | null
   lines: OrderLine[]
   history: OrderHistory[]
+  /** Rider app: the customer's map pin, pickup time, minutes from pickup to delivery and the live arrival time. */
+  latitude?: number | null
+  longitude?: number | null
+  pickedUpAt?: string | null
+  deliveredAt?: string | null
+  deliveryMinutes?: number | null
+  eta?: DeliveryEta | null
 }
 
-export interface Rider { id: number; name: string; phone: string; nid: string; status: 'active' | 'on_leave' | 'inactive'; assignedOrders: number; /** COD cash collected and not yet handed over (live API). */ cashHeld?: number }
+/** A rider's last reported position; `is_live` = reported in the last few minutes. */
+export interface RiderPosition { lat: number; lng: number; heading: number | null; accuracy: number | null; updated_at: string | null; is_live: boolean }
+
+/** Arrival time of an order in transit (Google Routes or the straight-line estimate). */
+export interface DeliveryEta { at: string; seconds: number | null; minutes: number; distance_m: number | null; source: 'google' | 'estimate' | null; updated_at: string | null }
+
+export interface Rider {
+  id: number; name: string; phone: string; nid: string; status: 'active' | 'on_leave' | 'inactive'; assignedOrders: number
+  /** COD cash collected and not yet handed over (live API). */
+  cashHeld?: number
+  /** Rider app: a password is set (the password itself is never returned). */
+  appAccess?: boolean
+  lastLoginAt?: string | null
+  onDuty?: boolean
+  position?: RiderPosition | null
+  /** Deliveries and average minutes (picked up → delivered) over the last 30 days. */
+  deliveries30d?: number
+  avgDeliveryMinutes30d?: number | null
+  /** Write-only: set or replace the rider app password (min 6), or remove app access. */
+  password?: string
+  revokeAppAccess?: boolean
+}
+
+/** Delivery › Live map (GET delivery/live). */
+export interface DeliveryLive {
+  stores: { id: number; name: string; address: string | null; lat: number; lng: number }[]
+  riders: { id: number; name: string; phone: string; onDuty: boolean; position: RiderPosition | null; orders: string[] }[]
+  orders: {
+    id: number; number: string; status: OrderStatus; customer: string | null; address: string | null; lat: number | null; lng: number | null
+    riderId: number | null; riderName: string | null; pickedUpAt: string | null; eta: DeliveryEta | null
+  }[]
+  maps: MapsConfig
+}
+
+/** The path a rider took for one order (GET orders/{id}/route). */
+export interface OrderRoute {
+  number: string
+  store: { name: string; address: string | null; lat: number; lng: number } | null
+  customer: { lat: number; lng: number } | null
+  pickedUpAt: string | null
+  deliveredAt: string | null
+  deliveryMinutes: number | null
+  points: { lat: number; lng: number; at: string }[]
+}
 
 export interface NewOrderInput {
   customerId?: number | null

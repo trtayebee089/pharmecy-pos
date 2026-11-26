@@ -7,10 +7,14 @@ use App\Models\AuditLog;
 use App\Models\OnlineOrder;
 use App\Models\Rider;
 use App\Models\RiderCashEntry;
+use App\Models\RiderLocation;
 use App\Models\SaleItemBatch;
 use App\Models\ShippingZone;
+use App\Models\Warehouse;
 use App\Services\CourierBookings;
+use App\Services\Integrations;
 use App\Services\OnlineOrders;
+use App\Services\RiderTracking;
 use App\Support\Present;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -120,10 +124,20 @@ class OnlineOrderController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'phone' => ['required', 'string', 'max:20', Rule::unique('riders', 'phone')->ignore($rider?->id)],
             'nid' => ['nullable', 'string', 'max:30'], 'status' => ['nullable', 'in:active,on_leave,inactive'],
+            // Rider app sign-in: set or replace the password (never sent back); `revokeAppAccess` removes it.
+            'password' => ['nullable', 'string', 'min:6', 'max:100'], 'revokeAppAccess' => ['nullable', 'boolean'],
         ]);
         $attrs = ['name' => trim($d['name']), 'phone' => $d['phone'], 'nid' => $d['nid'] ?? null, 'status' => $d['status'] ?? 'active'];
-        $rider = $rider?->exists ? tap($rider)->update($attrs) : Rider::create($attrs);
-        AuditLog::record($request->user()->id, 'rider.saved', 'rider', $rider->id, $attrs, $request);
+        $secret = ! empty($d['revokeAppAccess']) ? ['password' => null] : (! empty($d['password']) ? ['password' => $d['password']] : []);
+        $rider = $rider?->exists ? tap($rider)->update($attrs + $secret) : Rider::create($attrs + $secret);
+        // A new password, revoked access or a rider no longer active signs the app out everywhere.
+        if ($secret || $attrs['status'] !== 'active') {
+            $rider->tokens()->delete();
+            if ($attrs['status'] !== 'active' || ! empty($d['revokeAppAccess'])) {
+                $rider->update(['on_duty' => false]);
+            }
+        }
+        AuditLog::record($request->user()->id, 'rider.saved', 'rider', $rider->id, $attrs + ['passwordChanged' => (bool) $secret], $request);
 
         return response()->json(self::riderShape($rider->fresh()), $rider->wasRecentlyCreated ? 201 : 200);
     }
@@ -243,6 +257,10 @@ class OnlineOrderController extends Controller
             'paidOnline' => (float) $o->paid_online,
             'grandTotal' => (float) $o->grand_total, 'saleId' => $o->sale_id,
             'riderId' => $o->rider_id, 'riderName' => $o->rider?->name,
+            // Rider app: the customer's pin, pickup time, delivery minutes and the live arrival time.
+            'latitude' => $o->latitude, 'longitude' => $o->longitude,
+            'pickedUpAt' => $o->picked_up_at?->toIso8601String(), 'deliveredAt' => $o->delivered_at?->toIso8601String(),
+            'deliveryMinutes' => RiderTracking::deliveryMinutes($o), 'eta' => RiderTracking::eta($o),
             'courier' => $o->courier ? [
                 'name' => $o->courier, 'consignmentId' => $o->courier_consignment_id, 'trackingCode' => $o->courier_tracking_code,
                 'status' => $o->courier_status, 'statusAt' => $o->courier_status_at?->toIso8601String(), 'fee' => $o->courier_fee !== null ? (float) $o->courier_fee : null,
@@ -262,11 +280,60 @@ class OnlineOrderController extends Controller
 
     private static function riderShape(Rider $r): array
     {
+        // Delivery time over the last 30 days: picked up → delivered.
+        $recent = OnlineOrder::where('rider_id', $r->id)->where('status', 'delivered')->whereNotNull('picked_up_at')
+            ->where('delivered_at', '>=', now()->subDays(30))->get(['picked_up_at', 'delivered_at']);
+        $minutes = $recent->map(fn ($o) => RiderTracking::deliveryMinutes($o))->filter(fn ($m) => $m !== null);
+
         return [
             'id' => $r->id, 'name' => $r->name, 'phone' => $r->phone, 'nid' => (string) $r->nid, 'status' => $r->status,
             'assignedOrders' => OnlineOrder::where('rider_id', $r->id)->whereNotIn('status', ['delivered', 'cancelled'])->count(),
             'cashHeld' => OnlineOrders::cashHeld($r->id),
+            'appAccess' => (bool) $r->password, 'lastLoginAt' => $r->last_login_at?->toIso8601String(),
+            'onDuty' => (bool) $r->on_duty, 'position' => RiderTracking::riderPosition($r),
+            'deliveries30d' => $minutes->count(), 'avgDeliveryMinutes30d' => $minutes->isEmpty() ? null : (int) round($minutes->avg()),
         ];
+    }
+
+    // ---------------------------------------------------------------- live map
+
+    /**
+     * Delivery › Live map: every branch with a map position, every active rider with their last
+     * position, and the open own-rider orders (with the customer's pin and arrival time).
+     */
+    public function live(): JsonResponse
+    {
+        $orders = OnlineOrder::with('customer', 'rider')->whereNull('courier')->whereIn('status', ['confirmed', 'packed', 'in_transit'])
+            ->orderBy('placed_at')->limit(300)->get();
+
+        return response()->json([
+            'stores' => Warehouse::where('is_active', true)->whereNotNull('latitude')->get()
+                ->map(fn ($w) => ['id' => $w->id, 'name' => $w->name, 'address' => $w->address, 'lat' => $w->latitude, 'lng' => $w->longitude])->values(),
+            'riders' => Rider::where('status', 'active')->orderBy('name')->get()->map(fn ($r) => [
+                'id' => $r->id, 'name' => $r->name, 'phone' => $r->phone, 'onDuty' => (bool) $r->on_duty, 'position' => RiderTracking::riderPosition($r),
+                'orders' => $orders->where('rider_id', $r->id)->pluck('number')->values(),
+            ])->values(),
+            'orders' => $orders->map(fn ($o) => [
+                'id' => $o->id, 'number' => $o->number, 'status' => $o->status, 'customer' => $o->customer?->name, 'address' => $o->address,
+                'lat' => $o->latitude, 'lng' => $o->longitude, 'riderId' => $o->rider_id, 'riderName' => $o->rider?->name,
+                'pickedUpAt' => $o->picked_up_at?->toIso8601String(), 'eta' => RiderTracking::eta($o),
+            ])->values(),
+            'maps' => app(Integrations::class)->public('maps'),
+        ]);
+    }
+
+    /** The route the rider took for one order (positions while it was in transit). */
+    public function route(OnlineOrder $order): JsonResponse
+    {
+        $points = RiderLocation::where('online_order_id', $order->id)->orderBy('recorded_at')->limit(5000)
+            ->get(['lat', 'lng', 'recorded_at'])->map(fn ($p) => ['lat' => $p->lat, 'lng' => $p->lng, 'at' => $p->recorded_at->toIso8601String()]);
+
+        return response()->json([
+            'number' => $order->number, 'store' => RiderTracking::store($order),
+            'customer' => $order->latitude !== null ? ['lat' => $order->latitude, 'lng' => $order->longitude] : null,
+            'pickedUpAt' => $order->picked_up_at?->toIso8601String(), 'deliveredAt' => $order->delivered_at?->toIso8601String(),
+            'deliveryMinutes' => RiderTracking::deliveryMinutes($order), 'points' => $points->values(),
+        ]);
     }
 
     private static function zoneShape(ShippingZone $z): array

@@ -8,5 +8,5 @@ class Warehouse extends Model
 {
     protected $guarded = ['id'];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = ['is_active' => 'boolean', 'latitude' => 'float', 'longitude' => 'float'];
 }

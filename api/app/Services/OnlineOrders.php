@@ -191,6 +191,8 @@ class OnlineOrders
                 'channel' => $data['channel'] ?? 'phone',
                 'customer_id' => $customer->id, 'warehouse_id' => $warehouse->id,
                 'phone' => $customer->phone ?? $data['phone'], 'address' => $data['address'],
+                // The customer's map pin (website / app checkout), used by the rider app and for the arrival time.
+                'latitude' => $data['latitude'] ?? null, 'longitude' => isset($data['latitude']) ? ($data['longitude'] ?? null) : null,
                 'zone_id' => $zone->id, 'division' => $zone->division, 'district' => $zone->district, 'thana' => $zone->thana,
                 'status' => 'pending', 'subtotal' => SaleService::money($subtotal),
                 'payment_method' => $online ? $data['paymentMethod'] : 'cod', 'payment_status' => $online ? 'pending' : 'cod',
@@ -219,13 +221,20 @@ class OnlineOrders
 
     // ---------------------------------------------------------------- status
 
-    /** `$user` is null only when a courier webhook reports in_transit / delivered. */
-    public function transition(?User $user, OnlineOrder $order, string $to, ?string $note): OnlineOrder
+    /**
+     * `$user` is null when a courier webhook reports in_transit / delivered, or when the
+     * assigned rider (`$rider`) picks up or delivers from the rider app.
+     */
+    public function transition(?User $user, OnlineOrder $order, string $to, ?string $note, ?Rider $rider = null): OnlineOrder
     {
-        return DB::transaction(function () use ($user, $order, $to, $note) {
+        $result = DB::transaction(function () use ($user, $order, $to, $note, $rider) {
             $order = OnlineOrder::whereKey($order->id)->lockForUpdate()->firstOrFail();
-            if (! $user && ! in_array($to, ['in_transit', 'delivered'], true)) {
+            // A courier webhook or the rider app may only move the parcel; a rider may also mark a confirmed order packed when collecting it.
+            if (! $user && ! in_array($to, $rider ? ['packed', 'in_transit', 'delivered'] : ['in_transit', 'delivered'], true)) {
                 throw ValidationException::withMessages(['status' => 'Staff must make this change.']);
+            }
+            if ($rider && ($order->rider_id !== $rider->id || $order->courier)) {
+                throw ValidationException::withMessages(['status' => 'This order is not assigned to you.']);
             }
             if (! in_array($to, self::NEXT[$order->status] ?? [], true)) {
                 throw ValidationException::withMessages(['status' => in_array($order->status, ['delivered', 'cancelled'], true)
@@ -243,8 +252,9 @@ class OnlineOrders
                 'cancelled' => $this->cancel($user, $order, $note),
                 default => null,
             };
-            $order->update(['status' => $to]);
-            $this->history($order, $to, $note, $user);
+            // Picked up: the delivery clock starts (delivery time = picked up → delivered).
+            $order->update(['status' => $to] + ($to === 'in_transit' ? ['picked_up_at' => now()] : []) + ($to === 'delivered' ? ['eta_at' => null, 'eta_seconds' => null] : []));
+            $this->history($order, $to, $rider ? trim('By rider '.$rider->name.($note ? ' · '.$note : '')) : $note, $user);
             // Customer SMS (when switched on), after the response so a slow gateway never holds the order.
             $notifier = app(OrderNotifier::class);
             if ($notifier->wants($to)) {
@@ -254,6 +264,12 @@ class OnlineOrders
 
             return $order->fresh();
         });
+        // First arrival time as soon as the parcel leaves (outside the transaction: it may call Google).
+        if ($to === 'in_transit' && ! $result->courier) {
+            $result = app(RiderTracking::class)->refreshEta($result, force: true)->fresh();
+        }
+
+        return $result;
     }
 
     public function assignRider(User $user, OnlineOrder $order, int $riderId): OnlineOrder

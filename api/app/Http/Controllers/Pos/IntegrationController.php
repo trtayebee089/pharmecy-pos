@@ -119,6 +119,11 @@ class IntegrationController extends Controller
                 'defaultItemType' => ['required', 'in:1,2'], 'defaultDeliveryType' => ['required', 'in:12,48'],
                 'defaultWeightKg' => ['required', 'numeric', 'min:0.1', 'max:50'], 'clientSecret' => $secret, 'password' => $secret, 'webhookSecret' => $secret,
             ],
+            'maps' => [
+                'enabled' => ['required', 'boolean'], 'browserKey' => ['required_if:enabled,true', 'nullable', 'string', 'max:200'], 'serverKey' => $secret,
+                'defaultLat' => ['required', 'numeric', 'between:-90,90'], 'defaultLng' => ['required', 'numeric', 'between:-180,180'],
+                'averageSpeedKmh' => ['required', 'numeric', 'min:5', 'max:80'],
+            ],
             'storefront' => [
                 'siteName' => ['required', 'string', 'max:80'], 'websiteUrl' => ['nullable', 'url', 'max:190'], 'phone' => ['nullable', 'string', 'max:30'], 'whatsapp' => ['nullable', 'string', 'max:30'],
                 'email' => ['nullable', 'email', 'max:120'], 'address' => ['nullable', 'string', 'max:255'],

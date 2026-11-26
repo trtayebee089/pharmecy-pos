@@ -64,6 +64,15 @@ in the old body are ignored; a guest no longer gets the 5 % the old app shows (t
 total); the old password change sends no current password, so it is accepted on that path only and signs out every
 other device.
 
+## Rider app and live tracking
+
+Routes: `routes/rider.php` (`/api/rider/v1`, Sanctum bearer, ability `rider`; `EnsureRider`). Riders sign in with
+phone + password set in Delivery › Riders, report positions while on duty, and mark orders picked up / delivered
+(same COD booking as staff). Customers send a map pin at checkout and poll `v1/orders/{number}/live` or
+`v1/tracking/{code}/live` for the rider position and arrival time (`RiderTracking`: Google Routes API with the Maps
+server key, else a distance estimate). Staff: `delivery/live`, `orders/{id}/route`, branch latitude/longitude,
+Integrations › Maps. Full contract: `../docs/rider-app-and-live-tracking.md`.
+
 ## Integrations (email, SMS, tracking, payments, couriers, website)
 
 Administration › Integrations in the POS (`settings.manage`), API `GET admin/integrations`, `PUT admin/integrations/{group}`

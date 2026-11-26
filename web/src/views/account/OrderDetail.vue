@@ -12,6 +12,7 @@
         <article class="rounded-2xl bg-slate-50 p-4"><p class="text-sm text-slate-500">Cash on delivery</p><p class="font-black text-ink">{{ formatPrice(order.cod_amount) }}</p></article>
         <article class="rounded-2xl bg-slate-50 p-4"><p class="text-sm text-slate-500">Placed</p><p class="font-black text-ink">{{ date(order.placed_at) }}</p></article>
       </section>
+      <LiveDeliveryCard v-if="order.live" class="mt-6" :live="order.live" :fetch-live="fetchLive" @status-change="load" />
       <section class="mt-6">
         <h2 class="text-xl font-black text-ink">Items</h2>
         <div class="mt-3 divide-y divide-slate-100 rounded-2xl border border-slate-100">
@@ -47,6 +48,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AccountShell from './partials/AccountShell.vue'
 import LoadingSkeleton from '../../components/common/LoadingSkeleton.vue'
 import ErrorState from '../../components/common/ErrorState.vue'
+import LiveDeliveryCard from '../../components/maps/LiveDeliveryCard.vue'
 import { orderService } from '../../services/orderService'
 import { useCartStore } from '../../stores/cartStore'
 import { formatPrice } from '../../utils/formatPrice'
@@ -59,6 +61,8 @@ const loading = ref(true)
 const error = ref('')
 const reordering = ref(false)
 const date = (v, time = false) => (v ? new Intl.DateTimeFormat('en-BD', time ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' }).format(new Date(v)) : '—')
+
+const fetchLive = () => orderService.live(route.params.id)
 
 async function load() {
   try {

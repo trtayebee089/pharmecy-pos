@@ -78,6 +78,9 @@
         <p v-else class="mt-5 rounded-2xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">This order was cancelled.</p>
       </section>
 
+      <!-- Live delivery: rider on the map and arrival time (in transit), or delivery time (delivered) -->
+      <LiveDeliveryCard v-if="order.live" class="mt-4" :live="order.live" :fetch-live="fetchLive" @status-change="track(true)" />
+
       <!-- Updates -->
       <section class="mt-4 rounded-3xl bg-white p-6 shadow-soft">
         <div class="flex items-center justify-between gap-3">
@@ -134,6 +137,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Ban, Bike, Check, CheckCircle2, ClipboardCheck, Copy, ExternalLink, MessageCircle, Package, Phone, ReceiptText, RefreshCw } from 'lucide-vue-next'
 import { orderService } from '../services/orderService'
+import LiveDeliveryCard from '../components/maps/LiveDeliveryCard.vue'
 import { useSiteStore } from '../stores/siteStore'
 import { formatPrice } from '../utils/formatPrice'
 
@@ -199,6 +203,8 @@ async function focusStep(status) {
   document.querySelector(`[data-status="${status}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   setTimeout(() => { if (highlighted.value === status) highlighted.value = null }, 2500)
 }
+
+const fetchLive = () => orderService.trackLive(order.value.tracking_code)
 
 async function copyLink() {
   const url = `${location.origin}/track-order?code=${order.value.tracking_code}`

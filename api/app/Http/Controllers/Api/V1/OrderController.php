@@ -12,6 +12,7 @@ use App\Services\ConversionTracker;
 use App\Services\Integrations;
 use App\Services\OnlineOrders;
 use App\Services\OnlinePayments;
+use App\Services\RiderTracking;
 use App\Services\Storefront;
 use App\Support\PresentStorefront;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -49,6 +50,9 @@ class OrderController extends V1Controller
             'customer.division' => ['required_without:zone_id', 'nullable', 'string', 'max:60'],
             'customer.district' => ['required_without:zone_id', 'nullable', 'string', 'max:60'],
             'customer.thana' => ['nullable', 'string', 'max:80'],
+            // Exact delivery point picked on the map (optional): Bangladesh only.
+            'customer.latitude' => ['nullable', 'required_with:customer.longitude', 'numeric', 'between:20.3,26.8'],
+            'customer.longitude' => ['nullable', 'required_with:customer.latitude', 'numeric', 'between:88.0,92.8'],
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.product_id' => ['required', 'integer'],
             'items.*.qty' => ['required', 'integer', 'min:1', 'max:10000'],
@@ -118,6 +122,8 @@ class OrderController extends V1Controller
                 'channel' => $this->channel(request()), 'customerId' => $customer?->id, 'loyalty' => (bool) $customer,
                 'phone' => $phone, 'name' => data_get($data, 'customer.name') ?: $customer?->name,
                 'address' => data_get($data, 'customer.address'), 'zoneId' => $this->zone($data)->id,
+                'latitude' => data_get($data, 'customer.latitude') !== null ? (float) data_get($data, 'customer.latitude') : null,
+                'longitude' => data_get($data, 'customer.longitude') !== null ? (float) data_get($data, 'customer.longitude') : null,
                 'lines' => $this->lines($data['items']), 'note' => $data['notes'] ?? null,
                 'redeemPoints' => (int) ($data['reward_points'] ?? 0), 'clientKey' => $clientKey, 'paymentMethod' => $this->method($data),
             ]);
@@ -151,6 +157,26 @@ class OrderController extends V1Controller
         abort_unless($o, 404, 'No order with that tracking code.');
 
         return $this->ok(PresentStorefront::order($o, forTracking: true));
+    }
+
+    /**
+     * Live delivery for the owner: store, their pin, the rider's position and the arrival time.
+     * Poll every `poll_seconds` while the parcel is on its way.
+     */
+    public function live(Request $request, string $number): JsonResponse
+    {
+        $o = $this->own($request, $number);
+
+        return $this->ok(RiderTracking::live(app(RiderTracking::class)->refreshEta($o), includeCustomerPin: true));
+    }
+
+    /** Live delivery by tracking code: rider position and arrival time, never the customer's pin. */
+    public function trackLive(string $code): JsonResponse
+    {
+        $o = OnlineOrder::where('tracking_code', strtoupper(trim($code)))->first();
+        abort_unless($o, 404, 'No order with that tracking code.');
+
+        return $this->ok(RiderTracking::live(app(RiderTracking::class)->refreshEta($o), includeCustomerPin: false));
     }
 
     /** The order's items at today's prices and stock, for refilling the cart. */

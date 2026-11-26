@@ -2,6 +2,9 @@
     package="com.zonhack.redpharmabd">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Checkout map picker centres on the customer (only while the app is open). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:label="RedPharma BD"
@@ -31,12 +34,23 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Maps SDK for Android key from MAPS_API_KEY in android/local.properties. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
     </application>
 
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
+        </intent>
+
+        <!-- "Call" the rider from the live delivery card. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
         </intent>
 
         <package android:name="com.whatsapp" />

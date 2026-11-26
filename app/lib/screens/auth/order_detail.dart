@@ -18,6 +18,7 @@ import 'package:redpharmabd_app/providers/cart_provider.dart';
 import 'package:redpharmabd_app/repositories/reorder_repository.dart';
 import 'package:redpharmabd_app/screens/auth/orders.dart'
     show orderStatusColor, orderStatusIcon;
+import 'package:redpharmabd_app/widgets/orders/live_delivery_card.dart';
 
 /// ─────────────────────────────────────────────────────────────────────────
 /// Order detail, rebuilt.
@@ -198,6 +199,7 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           children: [
                             _summary(orderDetail!),
                             const SizedBox(height: DsSpace.x4),
+                            _live(orderDetail!),
                             _items(orderDetail!),
                             if (orderDetail!['tracking'] != null) ...[
                               const SizedBox(height: DsSpace.x4),
@@ -326,6 +328,30 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Live map + arrival time while the rider is on the way, and the delivery
+  /// time once delivered. The card loads `orders/{number}/live` itself, polls
+  /// while in transit and renders nothing otherwise.
+  Widget _live(Map<String, dynamic> order) {
+    final number = order['number']?.toString();
+    final token = Provider.of<AuthProvider>(context, listen: false).token;
+    final status = order['status']?.toString().toLowerCase();
+    if (number == null ||
+        number.isEmpty ||
+        token == null ||
+        token.isEmpty ||
+        status == 'cancelled' ||
+        status == 'pending') {
+      return const SizedBox.shrink();
+    }
+    return LiveDeliveryCard(
+      key: ValueKey('live-$number'),
+      orderNumber: number,
+      token: token,
+      // Refresh the timeline when the parcel arrives while the screen is open.
+      onDelivered: _fetchOrderDetail,
     );
   }
 

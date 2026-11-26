@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureCustomer;
+use App\Http\Middleware\EnsureRider;
 use App\Http\Middleware\EnsureStaff;
 use App\Http\Middleware\Idempotent;
 use App\Http\Middleware\PasswordFresh;
@@ -21,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
         $middleware->alias([
             'idempotent' => Idempotent::class, 'password.fresh' => PasswordFresh::class,
-            'staff' => EnsureStaff::class, 'customer' => EnsureCustomer::class,
+            'staff' => EnsureStaff::class, 'customer' => EnsureCustomer::class, 'rider' => EnsureRider::class,
         ]);
         // An API has no login page: unauthenticated requests get 401 JSON.
         $middleware->redirectGuestsTo(fn () => null);

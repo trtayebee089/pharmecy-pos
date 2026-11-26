@@ -229,6 +229,8 @@ class AdminController extends Controller
             'name' => ['required', 'string', 'max:120'], 'type' => ['required', 'in:store,warehouse'],
             'address' => ['nullable', 'string', 'max:255'], 'phone' => ['nullable', 'string', 'max:30'],
             'invoiceHeader' => ['nullable', 'string', 'max:500'], 'invoiceFooter' => ['nullable', 'string', 'max:500'], 'isActive' => ['nullable', 'boolean'],
+            // Map position of the branch: the "store" marker for riders and the start of each delivery.
+            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'], 'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
         ], ['code.regex' => 'Use capital letters and digits only (it appears in document numbers).']);
         if ($warehouse?->exists && $warehouse->code !== $d['code'] && Sale::where('warehouse_id', $warehouse->id)->exists()) {
             throw ValidationException::withMessages(['code' => 'This branch already has documents; its code cannot change.']);
@@ -237,7 +239,8 @@ class AdminController extends Controller
             throw ValidationException::withMessages(['isActive' => 'At least one branch must stay active.']);
         }
         $attrs = ['code' => $d['code'], 'name' => trim($d['name']), 'type' => $d['type'], 'address' => $d['address'] ?? null, 'phone' => $d['phone'] ?? null,
-            'invoice_header' => $d['invoiceHeader'] ?? null, 'invoice_footer' => $d['invoiceFooter'] ?? null, 'is_active' => $d['isActive'] ?? true];
+            'invoice_header' => $d['invoiceHeader'] ?? null, 'invoice_footer' => $d['invoiceFooter'] ?? null, 'is_active' => $d['isActive'] ?? true,
+            'latitude' => $d['latitude'] ?? null, 'longitude' => $d['longitude'] ?? null];
         $created = ! $warehouse?->exists;
         $warehouse = DB::transaction(function () use ($warehouse, $attrs, $created) {
             $w = $created ? Warehouse::create($attrs) : tap($warehouse)->update($attrs);
@@ -451,6 +454,7 @@ class AdminController extends Controller
         return [
             'id' => $w->id, 'code' => $w->code, 'name' => $w->name, 'type' => $w->type, 'address' => (string) $w->address, 'phone' => (string) $w->phone,
             'invoiceHeader' => (string) $w->invoice_header, 'invoiceFooter' => (string) $w->invoice_footer, 'isActive' => $w->is_active,
+            'latitude' => $w->latitude, 'longitude' => $w->longitude,
         ];
     }
 }

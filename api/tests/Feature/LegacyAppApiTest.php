@@ -157,3 +157,10 @@ it('uses the delivery area when a newer app build sends it', function () {
     appCheckout($this, 5, null, ['customer' => ['division' => 'Dhaka', 'district' => 'Dhaka', 'address' => 'Somewhere in Rajshahi']])->assertOk();
     expect(OnlineOrder::firstOrFail()->district)->toBe('Dhaka');
 });
+
+it('keeps the map pin the app sends at checkout', function () {
+    appCheckout($this, 5, null, ['customer' => ['latitude' => 24.3745, 'longitude' => 88.6042]])->assertSuccessful();
+    $number = OnlineOrder::latest('id')->value('number');
+    $order = OnlineOrder::where('number', $number)->firstOrFail();
+    expect($order->latitude)->toBe(24.3745)->and($order->longitude)->toBe(88.6042);
+});

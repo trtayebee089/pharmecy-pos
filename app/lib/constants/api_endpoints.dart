@@ -38,4 +38,15 @@ class ApiEndpoints {
   static const String rewardTransactions = '$reward/transactions';
   static const String rewardRedeem = '$reward/redeem';
   static const String reorder = '$baseUrl/orders'; // append /{order_id}/reorder
+
+  // Live delivery (v1 envelope {success, message, data}); poll every data.poll_seconds.
+  static const String v1 = '$baseUrl/v1';
+
+  /// Owner view (bearer): store, the customer's pin, rider and arrival time.
+  static String orderLive(String number) =>
+      '$v1/orders/${Uri.encodeComponent(number)}/live';
+
+  /// Public view by tracking code: never includes the customer's pin.
+  static String trackingLive(String code) =>
+      '$v1/tracking/${Uri.encodeComponent(code)}/live';
 }

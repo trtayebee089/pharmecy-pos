@@ -97,6 +97,7 @@ export const navigation: NavGroup[] = [
     label: 'Delivery', icon: Bike,
     children: [
       { label: 'Fulfilment board', to: '/delivery', permission: 'orders.fulfil', ready: true, legacy: 'Online Orders › Delivery List' },
+      { label: 'Live map', to: '/delivery/live', permission: 'orders.view', ready: true },
       { label: 'Riders', to: '/delivery/riders', permission: 'riders.manage', ready: true, legacy: 'People › Riders' },
       { label: 'Shipping zones', to: '/delivery/zones', permission: 'zones.manage', ready: true, legacy: 'Settings › Shipping Zones' },
     ],

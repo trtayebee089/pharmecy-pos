@@ -28,6 +28,17 @@ export function dateTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/** "just now", "4 min ago", "2 h ago", "3 d ago"; older → the date. */
+export function timeAgo(iso: string | null | undefined, nowMs = Date.now()): string {
+  if (!iso) return '—'
+  const s = Math.max(0, Math.round((nowMs - Date.parse(iso)) / 1000))
+  if (s < 45) return 'just now'
+  if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min ago`
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`
+  if (s < 7 * 86400) return `${Math.round(s / 86400)} d ago`
+  return date(iso)
+}
+
 /** Whole days from today until the given date (negative = past). */
 export function daysUntil(iso: string): number {
   const d = new Date(iso)

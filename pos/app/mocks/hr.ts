@@ -120,9 +120,9 @@ export const advances: SalaryAdvance[] = [
 export const accountsForPayout = ['Cash (Dhanmondi drawer)', 'Dutch-Bangla Bank ••4410', 'bKash Merchant ••7788']
 
 export const warehouses: Warehouse[] = [
-  { id: 1, code: 'DHK1', name: 'Red Pharma · Dhanmondi', type: 'store', address: 'House 12, Road 7, Dhanmondi, Dhaka 1205', phone: '01711000100', invoiceHeader: 'Red Pharma · Dhanmondi\nDrug licence DC-12345', invoiceFooter: 'Medicines once sold are returnable only as per pharmacy policy.', isActive: true },
-  { id: 2, code: 'UTR1', name: 'Red Pharma · Uttara', type: 'store', address: 'Sector 7, Road 15, Uttara, Dhaka 1230', phone: '01711000200', invoiceHeader: 'Red Pharma · Uttara\nDrug licence DC-23456', invoiceFooter: 'Thank you for choosing Red Pharma.', isActive: true },
-  { id: 3, code: 'CW01', name: 'Central warehouse · Tejgaon', type: 'warehouse', address: 'Tejgaon I/A, Dhaka 1208', phone: '01711000300', invoiceHeader: '', invoiceFooter: '', isActive: true },
+  { id: 1, code: 'DHK1', name: 'Red Pharma · Dhanmondi', type: 'store', address: 'House 12, Road 7, Dhanmondi, Dhaka 1205', phone: '01711000100', invoiceHeader: 'Red Pharma · Dhanmondi\nDrug licence DC-12345', invoiceFooter: 'Medicines once sold are returnable only as per pharmacy policy.', isActive: true, latitude: 23.7465, longitude: 90.376 },
+  { id: 2, code: 'UTR1', name: 'Red Pharma · Uttara', type: 'store', address: 'Sector 7, Road 15, Uttara, Dhaka 1230', phone: '01711000200', invoiceHeader: 'Red Pharma · Uttara\nDrug licence DC-23456', invoiceFooter: 'Thank you for choosing Red Pharma.', isActive: true, latitude: 23.8728, longitude: 90.3984 },
+  { id: 3, code: 'CW01', name: 'Central warehouse · Tejgaon', type: 'warehouse', address: 'Tejgaon I/A, Dhaka 1208', phone: '01711000300', invoiceHeader: '', invoiceFooter: '', isActive: true, latitude: null, longitude: null },
 ]
 
 export const profile: AccountProfile = {

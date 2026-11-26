@@ -45,6 +45,7 @@
           <dd class="font-black">{{ formatPrice(order.cod_amount) }}</dd>
         </div>
       </dl>
+      <LiveDeliveryCard v-if="order?.live && code" class="mx-auto mt-6 max-w-md text-left" :live="order.live" :fetch-live="fetchLive" @status-change="refresh" />
       <p v-if="order?.password_setup" class="mx-auto mt-4 max-w-md text-sm text-primary-800">{{ order.password_setup }}</p>
       <div class="mt-6 flex flex-wrap justify-center gap-3">
         <RouterLink :to="order ? `/track-order?code=${order.tracking_code}` : '/track-order'" class="rounded-full bg-primary-600 px-6 py-3 font-bold text-white">Track order</RouterLink>
@@ -59,6 +60,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { CheckCircle, CircleAlert } from 'lucide-vue-next'
 import { orderService } from '../services/orderService'
+import LiveDeliveryCard from '../components/maps/LiveDeliveryCard.vue'
 import { useSiteStore } from '../stores/siteStore'
 import { tracking } from '../composables/useTracking'
 import { formatPrice } from '../utils/formatPrice'
@@ -97,6 +99,18 @@ const paymentMessage = computed(() => {
 const onlineOptions = computed(() => site.payments.filter((p) => p.code !== 'cod'))
 const codAvailable = computed(() => site.payments.some((p) => p.code === 'cod'))
 
+const fetchLive = () => orderService.trackLive(code.value)
+
+/** Latest status and payment state of the order (by its tracking code). */
+async function refresh() {
+  if (!code.value) return
+  try {
+    const fresh = await orderService.track(code.value)
+    order.value = { ...(order.value || {}), ...fresh }
+    remember({ ...fresh, payment_error: order.value.payment_error })
+  } catch { /* keep what we have */ }
+}
+
 async function payAgain(gateway) {
   busy.value = true
   actionError.value = ''
@@ -125,13 +139,7 @@ async function payOnDelivery() {
 
 onMounted(async () => {
   // Back from the gateway (or a reload): read the latest payment state.
-  if (code.value) {
-    try {
-      const fresh = await orderService.track(code.value)
-      order.value = { ...(order.value || {}), ...fresh }
-      remember({ ...fresh, payment_error: order.value.payment_error })
-    } catch { /* keep what we have */ }
-  }
+  await refresh()
   // Purchase is reported once per order, even if this page is reloaded.
   if (order.value?.items && !order.value.tracked) {
     tracking.purchase(order.value, order.value.event_id)

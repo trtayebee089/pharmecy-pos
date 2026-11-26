@@ -61,6 +61,12 @@ class Integrations
             ],
             'secrets' => ['clientSecret', 'password', 'webhookSecret'],
         ],
+        // Google Maps (rider app, customer pin, live tracking). The browser key is public (lock it to the
+        // website and apps in Google Cloud); the server key (Routes API, arrival times) never leaves the server.
+        'maps' => [
+            'defaults' => ['enabled' => false, 'browserKey' => '', 'defaultLat' => 23.8103, 'defaultLng' => 90.4125, 'averageSpeedKmh' => 18],
+            'secrets' => ['serverKey'],
+        ],
         'storefront' => [
             'defaults' => [
                 'siteName' => 'Red Pharma', 'websiteUrl' => '', 'phone' => '', 'whatsapp' => '', 'email' => '', 'address' => '',

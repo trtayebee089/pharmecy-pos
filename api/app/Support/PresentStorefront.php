@@ -7,6 +7,7 @@ use App\Services\CourierBookings;
 use App\Services\Couriers\Pathao;
 use App\Services\Couriers\Steadfast;
 use App\Services\OnlineOrders;
+use App\Services\RiderTracking;
 use Illuminate\Support\Carbon;
 
 /**
@@ -30,6 +31,9 @@ class PresentStorefront
             'status' => $o->status, 'status_label' => self::LABELS[$o->status] ?? $o->status,
             'placed_at' => $o->placed_at?->toIso8601String(), 'delivered_at' => $o->delivered_at?->toIso8601String(),
             'items_count' => $o->lines->count(),
+            'picked_up_at' => $o->picked_up_at?->toIso8601String(), 'delivery_minutes' => RiderTracking::deliveryMinutes($o),
+            // Map and arrival time (rider position only while in transit; the customer's pin only for the owner).
+            'live' => RiderTracking::live($o, includeCustomerPin: ! $forTracking),
             'history' => $o->history->map(fn ($h) => [
                 'status' => $h->status, 'label' => self::LABELS[$h->status] ?? $h->status, 'note' => $forTracking ? null : $h->note,
                 'at' => Carbon::parse($h->created_at)->toIso8601String(),
@@ -54,7 +58,7 @@ class PresentStorefront
             ])->values()->all(),
             'subtotal' => (float) $o->subtotal, 'discount_pct' => (float) $o->discount_pct, 'discount_total' => (float) $o->discount_total,
             'shipping' => (float) $o->shipping, 'points_redeemed' => (int) $o->points_redeemed, 'points_value' => $pointsValue,
-            'delivery' => ['phone' => $o->phone, 'address' => $o->address, 'division' => $o->division, 'district' => $o->district, 'thana' => $o->thana],
+            'delivery' => ['phone' => $o->phone, 'address' => $o->address, 'latitude' => $o->latitude, 'longitude' => $o->longitude, 'division' => $o->division, 'district' => $o->district, 'thana' => $o->thana],
             'rider' => $o->rider ? ['name' => $o->rider->name] : null,
             'cancel_reason' => $o->cancel_reason, 'note' => $o->note,
         ];

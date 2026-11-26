@@ -27,6 +27,7 @@
               <option value="" disabled>Choose…</option><option v-for="z in areas" :key="z.id" :value="z.id">{{ z.thana || 'Anywhere in ' + z.district }}</option>
             </select>
           </label>
+          <DeliveryPinPicker v-model="pin" class="md:col-span-2" />
           <p v-if="zonesError" class="md:col-span-2 text-sm text-red-600">{{ zonesError }}</p>
           <fieldset class="md:col-span-2 text-sm font-bold text-slate-700">
             <legend>Payment</legend>
@@ -66,6 +67,7 @@ import { useRouter } from 'vue-router'
 import Breadcrumb from '../components/common/Breadcrumb.vue'
 import ErrorState from '../components/common/ErrorState.vue'
 import CartSummary from './partials/CartSummary.vue'
+import DeliveryPinPicker from '../components/maps/DeliveryPinPicker.vue'
 import { useAuthStore } from '../stores/authStore'
 import { useCartStore } from '../stores/cartStore'
 import { useSiteStore } from '../stores/siteStore'
@@ -90,6 +92,8 @@ const form = reactive({
   name: user.name || '', phone: user.phone || user.phone_number || '', email: '', address: user.address || '',
   division: cart.zone?.division || '', district: cart.zone?.district || '', zoneId: cart.zone?.id || '', notes: '',
 })
+// Optional exact delivery point { lat, lng } from the map (needs maps switched on in the POS).
+const pin = ref(null)
 // One key per filled-in checkout: pressing "Place order" again after a network error cannot create a second order.
 let attemptKey = orderService.newKey()
 
@@ -99,10 +103,11 @@ const areas = computed(() => zones.value.filter((z) => z.division === form.divis
 const selectedZone = computed(() => zones.value.find((z) => z.id === form.zoneId) || (areas.value.length === 1 ? areas.value[0] : null))
 
 watch(selectedZone, (zone) => cart.setZone(zone))
-watch(() => [form.name, form.phone, form.address, form.zoneId, form.notes, points.value, cart.count], () => { attemptKey = orderService.newKey() })
+watch(() => [form.name, form.phone, form.address, form.zoneId, form.notes, points.value, cart.count, pin.value], () => { attemptKey = orderService.newKey() })
 
 onMounted(async () => {
   tracking.beginCheckout(cart.items)
+  site.load()
   try {
     zones.value = await orderService.zones()
     if (cart.zone && !zones.value.some((z) => z.id === cart.zone.id)) cart.setZone(null)
@@ -117,7 +122,10 @@ async function submit() {
   error.value = ''
   try {
     const result = await orderService.checkout({
-      customer: { name: form.name, phone: form.phone, email: form.email || null, address: form.address },
+      customer: {
+        name: form.name, phone: form.phone, email: form.email || null, address: form.address,
+        ...(pin.value ? { latitude: pin.value.lat, longitude: pin.value.lng } : {}),
+      },
       zone_id: selectedZone.value.id,
       payment_method: paymentMethod.value,
       notes: form.notes || null,

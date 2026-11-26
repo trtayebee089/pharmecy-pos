@@ -83,6 +83,9 @@ export interface Warehouse {
   invoiceHeader: string
   invoiceFooter: string
   isActive: boolean
+  /** Map position of the branch (the store marker for riders); both or neither. */
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export interface AccountProfile {

@@ -60,6 +60,7 @@ Route::prefix('v1')->middleware([ForceJson::class, 'throttle:customer-api'])->gr
     // Orders: checkout works signed in or as a guest; history is the owner's only.
     Route::post('checkout', [OrderController::class, 'checkout'])->middleware('throttle:checkout');
     Route::get('tracking/{code}', [OrderController::class, 'track'])->middleware('throttle:order-tracking');
+    Route::get('tracking/{code}/live', [OrderController::class, 'trackLive'])->middleware('throttle:order-tracking');
 
     // "Request a medicine" with prescription photos / PDFs
     Route::post('medicine-requests', [MedicineRequestController::class, 'store'])->middleware('throttle:medicine-requests');
@@ -73,6 +74,7 @@ Route::prefix('v1')->middleware([ForceJson::class, 'throttle:customer-api'])->gr
     Route::middleware(['auth:sanctum', 'customer'])->group(function () {
         Route::get('orders', [OrderController::class, 'index']);
         Route::get('orders/{number}', [OrderController::class, 'show']);
+        Route::get('orders/{number}/live', [OrderController::class, 'live']);
         Route::post('orders/{number}/reorder', [OrderController::class, 'reorder']);
     });
 });

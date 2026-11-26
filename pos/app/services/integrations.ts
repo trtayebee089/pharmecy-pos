@@ -26,6 +26,8 @@ export interface IntegrationGroups {
     enabled: boolean; sandbox: boolean; clientId: string; username: string; storeId: string; defaultItemType: number; defaultDeliveryType: number
     defaultWeightKg: number; clientSecretSet: boolean; passwordSet: boolean; webhookSecretSet: boolean
   }
+  /** Google Maps: public browser key (Maps JS / mobile SDKs) and the secret server key (Routes API). */
+  maps: { enabled: boolean; browserKey: string; defaultLat: number; defaultLng: number; averageSpeedKmh: number; serverKeySet: boolean }
   storefront: {
     siteName: string; websiteUrl: string; phone: string; whatsapp: string; email: string; address: string; facebookUrl: string; instagramUrl: string; youtubeUrl: string
     metaTitle: string; metaDescription: string; announcement: string; codEnabled: boolean

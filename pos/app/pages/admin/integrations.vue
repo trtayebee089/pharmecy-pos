@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { Mail, MessageSquareText, Activity, Rss, CreditCard, Truck, Globe, Save, Send, Plus, Trash2, Copy } from 'lucide-vue-next'
+import { Mail, MessageSquareText, Activity, Rss, CreditCard, Truck, Globe, Save, Send, Plus, Trash2, Copy, MapPinned, Info } from 'lucide-vue-next'
 import { SECRET_DRAFTS, type IntegrationGroup, type IntegrationsPayload, type KeyValue } from '~/services/integrations'
 
 definePageMeta({ title: 'Integrations' })
 const api = useIntegrationsApi()
 const toast = useToast()
 
-type Tab = 'mail' | 'sms' | 'tracking' | 'payments' | 'couriers' | 'website'
+type Tab = 'mail' | 'sms' | 'tracking' | 'payments' | 'couriers' | 'maps' | 'website'
 const tab = ref<Tab>('mail')
 const tabs = [
   { value: 'mail' as Tab, label: 'Email' }, { value: 'sms' as Tab, label: 'SMS' }, { value: 'tracking' as Tab, label: 'Tracking & feed' },
-  { value: 'payments' as Tab, label: 'Payments' }, { value: 'couriers' as Tab, label: 'Couriers' }, { value: 'website' as Tab, label: 'Website' },
+  { value: 'payments' as Tab, label: 'Payments' }, { value: 'couriers' as Tab, label: 'Couriers' }, { value: 'maps' as Tab, label: 'Maps' }, { value: 'website' as Tab, label: 'Website' },
 ]
 
 const data = ref<IntegrationsPayload | null>(null)
@@ -296,6 +296,37 @@ async function copy(text: string) {
             <AdminSecretField field="pathao.webhookSecret" label="Webhook secret" :set="d.pathao.webhookSecretSet" />
             <p class="flex items-center justify-between gap-2 rounded-xl bg-slate-50 p-3 text-[12.5px]"><span class="break-all"><span class="font-semibold">Webhook URL:</span> {{ d.urls.pathaoWebhook }}</span><button type="button" class="rounded-lg p-1.5 hover:bg-white" aria-label="Copy Pathao webhook URL" @click="copy(d.urls.pathaoWebhook)"><Copy class="size-4" /></button></p>
             <UiButton variant="primary" :icon="Save" :loading="saving === 'pathao'" @click="save('pathao', 'Pathao')">Save Pathao</UiButton>
+          </div>
+        </UiSection>
+      </div>
+
+      <!-- ------------------------------------------------------------ Maps -->
+      <div v-else-if="tab === 'maps'" class="grid gap-5 lg:grid-cols-[1fr_380px]">
+        <UiSection title="Google Maps" description="Rider app, the customer's pin at checkout, live tracking and arrival times" :icon="MapPinned">
+          <div class="space-y-4">
+            <UiSwitch v-model="d.maps.enabled" label="Use Google Maps" description="When off, the live map and route views are hidden and arrival times use the estimate below" />
+            <UiInput v-model="d.maps.browserKey" label="Browser key (public)" placeholder="AIza…" autocomplete="off" hint="Maps JavaScript API and the Maps SDKs for Android / iOS. Visible to visitors, so it must be restricted." :error="err('browserKey')" />
+            <AdminSecretField field="maps.serverKey" label="Server key (secret)" :set="d.maps.serverKeySet" hint="Routes API only, for arrival times; used by the server and never shown again" />
+            <div class="grid gap-4 sm:grid-cols-3">
+              <UiInput v-model.number="d.maps.defaultLat" type="number" label="Default latitude" hint="Map centre when nothing else is known" :error="err('defaultLat')" />
+              <UiInput v-model.number="d.maps.defaultLng" type="number" label="Default longitude" :error="err('defaultLng')" />
+              <UiInput v-model.number="d.maps.averageSpeedKmh" type="number" label="Average speed (km/h)" hint="For the estimate without Google" :error="err('averageSpeedKmh')" />
+            </div>
+            <UiButton variant="primary" :icon="Save" :loading="saving === 'maps'" @click="save('maps', 'Maps settings')">Save maps settings</UiButton>
+          </div>
+        </UiSection>
+        <UiSection title="Setting up the keys" :icon="Info">
+          <div class="space-y-3 text-[13px] text-slate-600">
+            <p>In Google Cloud Console, enable billing and these APIs:</p>
+            <ul class="list-disc space-y-1 pl-5">
+              <li><span class="font-semibold text-slate-700">Maps JavaScript API</span> (website and POS)</li>
+              <li><span class="font-semibold text-slate-700">Maps SDK for Android</span> and <span class="font-semibold text-slate-700">Maps SDK for iOS</span> (apps)</li>
+              <li><span class="font-semibold text-slate-700">Routes API</span> (arrival times, server key)</li>
+              <li>Geocoding API, only if the address should be filled from the pin</li>
+            </ul>
+            <p class="rounded-xl bg-amber-50 px-3 py-2 text-amber-800"><span class="font-semibold">Restrict the browser key:</span> HTTP referrers for the website and POS addresses, plus the Android package name + SHA-1 and the iOS bundle ID. An unrestricted key can be copied and billed to you.</p>
+            <p>Restrict the server key to the Routes API (and the server's IP address if it is fixed). Each arrival-time refresh is one paid call, at most once a minute per order in transit.</p>
+            <p>Without a server key, arrival times use straight-line distance × 1.35 at the average speed.</p>
           </div>
         </UiSection>
       </div>

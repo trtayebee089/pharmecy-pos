@@ -4,7 +4,8 @@
  * resolve from app/mocks/orders.ts, kept in an in-memory session store.
  */
 import type { ListQuery, Paginated } from '~/types/domain'
-import type { HeldSaleSummary, NewOrderInput, OnlineOrder, OrderStatus, Rider, SaleReturnSummary, ShippingZone } from '~/types/orders'
+import type { DeliveryLive, HeldSaleSummary, NewOrderInput, OnlineOrder, OrderRoute, OrderStatus, Rider, SaleReturnSummary, ShippingZone } from '~/types/orders'
+import type { MapsConfig } from '~/composables/useGoogleMaps'
 
 const ordersMock = () => import('~/mocks/orders')
 
@@ -129,6 +130,40 @@ export function useOnlineOrdersApi() {
       o.riderId = rider.id
       o.riderName = rider.name
       return o
+    },
+  }
+}
+
+
+/**
+ * Rider app tracking (Delivery › Live map, an order's route). Positions come from the
+ * rider app; the POS only reads them. Polling, no websocket.
+ */
+export function useDeliveryTrackingApi() {
+  const api = useApi('orders')
+  const maps = useState<MapsConfig | null>('delivery-maps-config', () => null)
+  async function live(): Promise<DeliveryLive> {
+    const d = api.useMocks ? (await mockDelay(250), (await ordersMock()).live()) : await api.get<DeliveryLive>('/delivery/live')
+    maps.value = d.maps
+    return d
+  }
+  return {
+    live,
+    async route(orderId: number): Promise<OrderRoute> {
+      if (!api.useMocks) return api.get(`/orders/${orderId}/route`)
+      await mockDelay(250)
+      const r = (await ordersMock()).route(orderId)
+      if (!r) throw new ApiError('Order not found', 404)
+      return r
+    },
+    /**
+     * Maps settings for staff with orders.view (Integrations needs settings.manage):
+     * read from the live-map payload, once per session.
+     */
+    async mapsConfig(): Promise<MapsConfig | null> {
+      if (maps.value) return maps.value
+      try { await live() } catch { return null }
+      return maps.value
     },
   }
 }

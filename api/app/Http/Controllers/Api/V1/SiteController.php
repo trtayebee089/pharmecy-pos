@@ -31,6 +31,11 @@ class SiteController extends V1Controller
                 $i->enabled('bkash') ? ['code' => 'bkash', 'label' => $i->public('bkash')['label']] : null,
             ])),
             'banners' => $banners->forSite(),
+            // Google Maps for the delivery pin at checkout and live tracking (the browser key is public by design).
+            'maps' => ($m = $i->public('maps'))['enabled'] && $m['browserKey'] ? [
+                'enabled' => true, 'browser_key' => $m['browserKey'],
+                'default_center' => ['lat' => (float) $m['defaultLat'], 'lng' => (float) $m['defaultLng']],
+            ] : ['enabled' => false, 'browser_key' => null, 'default_center' => ['lat' => (float) $m['defaultLat'], 'lng' => (float) $m['defaultLng']]],
         ]);
     }
 }

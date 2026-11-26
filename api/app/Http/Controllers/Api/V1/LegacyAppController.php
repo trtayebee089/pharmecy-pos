@@ -145,7 +145,7 @@ class LegacyAppController extends V1Controller
         }
 
         $request->replace([
-            'customer' => array_intersect_key($body['customer'], array_flip(['name', 'phone', 'email', 'address'])),
+            'customer' => array_intersect_key($body['customer'], array_flip(['name', 'phone', 'email', 'address', 'latitude', 'longitude'])), // map pin from app 1.0.4+
             'zone_id' => $zone->id, 'items' => $items, 'payment_method' => 'cod', 'notes' => $request->input('notes'),
             'reward_points' => (int) ($body['reward_points'] ?? 0),
         ]);

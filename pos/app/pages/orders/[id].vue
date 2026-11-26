@@ -21,6 +21,14 @@ async function load() {
 }
 watch(() => route.params.id, load, { immediate: true })
 
+// While the parcel is on its way, refresh quietly so the arrival time stays current.
+const visibility = useDocumentVisibility()
+const etaTimer = setInterval(async () => {
+  if (order.value?.status !== 'in_transit' || visibility.value !== 'visible') return
+  try { order.value = await api.one(order.value.id) } catch { /* keep the shown order */ }
+}, 30000)
+onBeforeUnmount(() => clearInterval(etaTimer))
+
 function onChanged(o: OnlineOrder) {
   order.value = o
   ridersRes.all().then(r => (riders.value = r)).catch(() => toast.warning('Rider list not refreshed'))

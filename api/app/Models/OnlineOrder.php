@@ -14,6 +14,7 @@ class OnlineOrder extends Model
         'subtotal' => 'decimal:2', 'shipping' => 'decimal:2', 'grand_total' => 'decimal:2', 'paid_online' => 'decimal:2',
         'discount_pct' => 'decimal:4', 'discount_total' => 'decimal:2', 'points_value' => 'decimal:2', 'points_redeemed' => 'integer',
         'placed_at' => 'datetime', 'delivered_at' => 'datetime', 'courier_status_at' => 'datetime', 'courier_fee' => 'decimal:2',
+        'picked_up_at' => 'datetime', 'eta_at' => 'datetime', 'eta_updated_at' => 'datetime', 'latitude' => 'float', 'longitude' => 'float',
     ];
 
     public function lines(): HasMany

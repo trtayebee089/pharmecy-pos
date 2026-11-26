@@ -171,6 +171,8 @@ Route::prefix('pos/v1')->group(function () {
             Route::get('delivery/riders', [OnlineOrderController::class, 'riders']);
             Route::get('delivery/riders/{rider}', [OnlineOrderController::class, 'riderShow'])->whereNumber('rider');
             Route::get('delivery/riders/{rider}/cash', [OnlineOrderController::class, 'riderCash']);
+            Route::get('delivery/live', [OnlineOrderController::class, 'live']);
+            Route::get('orders/{order}/route', [OnlineOrderController::class, 'route'])->whereNumber('order');
             Route::get('delivery/zones', [OnlineOrderController::class, 'zones']);
             Route::get('delivery/zones/{zone}', [OnlineOrderController::class, 'zoneShow'])->whereNumber('zone');
         });
@@ -379,3 +381,4 @@ Route::prefix('pos/v1')->group(function () {
 
 // Customer channel (website and app): /api/v1/* and the legacy paths installed apps still call.
 require __DIR__.'/customer.php';
+require __DIR__.'/rider.php';

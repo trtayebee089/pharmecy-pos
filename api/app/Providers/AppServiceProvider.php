@@ -43,6 +43,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('medicine-requests', fn (Request $r) => Limit::perMinute(5)->by($r->ip()));
         RateLimiter::for('order-tracking', fn (Request $r) => Limit::perMinute(30)->by($r->ip()));
         RateLimiter::for('feeds', fn (Request $r) => Limit::perMinute(30)->by($r->ip()));
+        RateLimiter::for('rider-api', fn (Request $r) => Limit::perMinute(240)->by((string) ($r->user()?->getKey() ?? $r->ip())));
+        RateLimiter::for('rider-auth', fn (Request $r) => Limit::perMinute(10)->by($r->ip()));
+        RateLimiter::for('rider-locations', fn (Request $r) => Limit::perMinute(30)->by((string) ($r->user()?->getKey() ?? $r->ip())));
         RateLimiter::for('staff-login', fn (Request $r) => Limit::perMinute(20)->by($r->ip()));
         RateLimiter::for('integration-tests', fn (Request $r) => Limit::perMinute(10)->by((string) ($r->user()?->id ?? $r->ip())));
 

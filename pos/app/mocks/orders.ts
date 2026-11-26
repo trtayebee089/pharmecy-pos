@@ -3,7 +3,8 @@
  * shipping zones. Loaded only when runtimeConfig.public.useMocks is true.
  */
 import { products, sales } from './seed'
-import type { HeldSaleSummary, OnlineOrder, OrderHistory, OrderStatus, Rider, SaleReturnSummary, ShippingZone } from '~/types/orders'
+import type { DeliveryLive, HeldSaleSummary, OnlineOrder, OrderHistory, OrderRoute, OrderStatus, Rider, SaleReturnSummary, ShippingZone } from '~/types/orders'
+import type { MapsConfig } from '~/composables/useGoogleMaps'
 
 function rng(seed: number) {
   return () => {
@@ -104,3 +105,68 @@ export const orders: OnlineOrder[] = statusPlan.map((status, i) => {
     riderId: rider?.id ?? null, riderName: rider?.name ?? null, lines, history,
   }
 })
+
+// ---------------------------------------------------------------- rider app and live tracking
+// Positions around the Dhanmondi branch; maps stay off in mocks (no browser key), so the
+// screens show their list-only fallback unless the live API is used.
+
+export const mapsConfig: MapsConfig = { enabled: false, browserKey: '', defaultLat: 23.8103, defaultLng: 90.4125, averageSpeedKmh: 18, serverKeySet: false }
+
+const store = { name: 'Red Pharma · Dhanmondi', address: 'House 12, Road 7, Dhanmondi, Dhaka 1205', lat: 23.7465, lng: 90.376 }
+const jitter = (n: number) => round2((r() - 0.5) * n * 100) / 100
+
+Object.assign(riders[0]!, { appAccess: true, lastLoginAt: ago(180), onDuty: true, position: { lat: 23.7512, lng: 90.3841, heading: 75, accuracy: 8, updated_at: ago(0.5), is_live: true }, deliveries30d: 112, avgDeliveryMinutes30d: 24 })
+Object.assign(riders[1]!, { appAccess: true, lastLoginAt: ago(320), onDuty: true, position: { lat: 23.7398, lng: 90.3712, heading: 200, accuracy: 15, updated_at: ago(9), is_live: false }, deliveries30d: 87, avgDeliveryMinutes30d: 29 })
+Object.assign(riders[2]!, { appAccess: true, lastLoginAt: ago(4000), onDuty: false, position: null, deliveries30d: 12, avgDeliveryMinutes30d: 31 })
+Object.assign(riders[3]!, { appAccess: false, lastLoginAt: null, onDuty: false, position: null, deliveries30d: 0, avgDeliveryMinutes30d: null })
+Object.assign(riders[4]!, { appAccess: false, lastLoginAt: null, onDuty: false, position: null, deliveries30d: 3, avgDeliveryMinutes30d: 35 })
+
+for (const o of orders) {
+  if (o.riderId === null || !['confirmed', 'packed', 'in_transit', 'delivered'].includes(o.status)) continue
+  o.latitude = round2((store.lat + jitter(0.04)) * 10000) / 10000
+  o.longitude = round2((store.lng + jitter(0.04)) * 10000) / 10000
+  const stepAt = (s: OrderStatus) => o.history.find(h => h.status === s)?.at ?? null
+  o.pickedUpAt = stepAt('in_transit')
+  o.deliveredAt = stepAt('delivered')
+  o.deliveryMinutes = o.pickedUpAt && o.deliveredAt ? Math.round((Date.parse(o.deliveredAt) - Date.parse(o.pickedUpAt)) / 60000) : null
+  o.eta = o.status === 'in_transit' ? { at: new Date(now + 12 * 60000).toISOString(), seconds: 720, minutes: 12, distance_m: 3120, source: 'estimate', updated_at: ago(0.5) } : null
+}
+
+export function live(): DeliveryLive {
+  const open = orders.filter(o => ['confirmed', 'packed', 'in_transit'].includes(o.status))
+  return {
+    stores: [{ id: 1, ...store }, { id: 2, name: 'Red Pharma · Uttara', address: 'Sector 7, Road 15, Uttara, Dhaka 1230', lat: 23.8728, lng: 90.3984 }],
+    riders: riders.filter(x => x.status === 'active').map(x => ({
+      id: x.id, name: x.name, phone: x.phone, onDuty: !!x.onDuty, position: x.position ?? null,
+      orders: open.filter(o => o.riderId === x.id).map(o => o.number),
+    })),
+    orders: open.map(o => ({
+      id: o.id, number: o.number, status: o.status, customer: o.customer, address: `${o.address}, ${o.zone}`,
+      lat: o.latitude ?? null, lng: o.longitude ?? null, riderId: o.riderId, riderName: o.riderName, pickedUpAt: o.pickedUpAt ?? null, eta: o.eta ?? null,
+    })),
+    maps: { ...mapsConfig },
+  }
+}
+
+/** A wandering path from the branch to the customer, one point per ~30 s. */
+export function route(id: number): OrderRoute | null {
+  const o = orders.find(x => x.id === id)
+  if (!o) return null
+  const customer = o.latitude != null && o.longitude != null ? { lat: o.latitude, lng: o.longitude } : null
+  const points: OrderRoute['points'] = []
+  if (customer && o.pickedUpAt) {
+    const end = o.deliveredAt ? Date.parse(o.deliveredAt) : Date.now()
+    const start = Date.parse(o.pickedUpAt)
+    const steps = 24
+    const reach = o.deliveredAt ? 1 : 0.6
+    for (let i = 0; i <= steps; i++) {
+      const t = (i / steps) * reach
+      points.push({
+        lat: store.lat + (customer.lat - store.lat) * t + (i && i < steps ? jitter(0.002) : 0),
+        lng: store.lng + (customer.lng - store.lng) * t + (i && i < steps ? jitter(0.002) : 0),
+        at: new Date(start + ((end - start) * i) / steps).toISOString(),
+      })
+    }
+  }
+  return { number: o.number, store, customer, pickedUpAt: o.pickedUpAt ?? null, deliveredAt: o.deliveredAt ?? null, deliveryMinutes: o.deliveryMinutes ?? null, points }
+}

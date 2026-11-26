@@ -32,6 +32,14 @@ export const orderService = {
   async track(code) {
     return unwrap(await api.get(`/v1/tracking/${encodeURIComponent(code.trim())}`))
   },
+  /** Live delivery block (rider position, ETA) for a signed-in customer's own order. */
+  async live(number) {
+    return unwrap(await api.get(`/v1/orders/${encodeURIComponent(number)}/live`))
+  },
+  /** Public live block by tracking code (no customer pin, no rider phone). */
+  async trackLive(code) {
+    return unwrap(await api.get(`/v1/tracking/${encodeURIComponent(code.trim())}/live`))
+  },
   /** Start or retry an online payment: { redirect_url }. Works for guests (tracking code). */
   async pay(trackingCode, gateway) {
     return unwrap(await api.post('/v1/payments/start', { tracking_code: trackingCode, gateway }))
