@@ -76,7 +76,9 @@ class RiderTracking
         $points = collect($points)
             ->map(fn ($p) => $p + ['recorded_at' => null])
             ->map(function ($p) {
-                $at = $p['recorded_at'] ? Carbon::parse($p['recorded_at']) : now();
+                // Phones send UTC ("…Z"); store in the app's timezone like every other timestamp
+                // (a raw insert writes the wall-clock time as given, without converting).
+                $at = $p['recorded_at'] ? Carbon::parse($p['recorded_at'])->setTimezone(config('app.timezone')) : now();
 
                 // Phone clocks drift; never in the future, never more than a day back.
                 return $p + ['at' => $at->isFuture() ? now() : ($at->lt(now()->subDay()) ? now()->subDay() : $at)];

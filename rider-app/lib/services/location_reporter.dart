@@ -38,6 +38,11 @@ class LocationReporter extends ChangeNotifier {
 
   StreamSubscription<Position>? _sub;
   bool _subIsReporting = false;
+
+  /// GPS switched on/off in system settings. A position stream that hit
+  /// "location service disabled" never recovers by itself, so it is reopened
+  /// here when GPS comes back.
+  StreamSubscription<ServiceStatus>? _serviceSub;
   Timer? _timer;
   bool _sending = false;
 
@@ -219,6 +224,7 @@ class LocationReporter extends ChangeNotifier {
       _sub = null;
     }
     if (!wantStream || _sub != null) return;
+    _watchServiceStatus();
 
     final permission = await Geolocator.checkPermission();
     if (permission != LocationPermission.whileInUse &&
@@ -235,6 +241,12 @@ class LocationReporter extends ChangeNotifier {
       onError: (Object e) {
         if (e is LocationServiceDisabledException) {
           _error = 'GPS is turned off. Turn on location to keep reporting.';
+          // The platform stream is dead now; drop it so GPS coming back (or
+          // the app resuming) opens a fresh one.
+          if (identical(_sub, sub)) {
+            _sub = null;
+            unawaited(sub.cancel());
+          }
         } else if (e is PermissionDeniedException) {
           _error = 'Location permission was removed.';
         } else {
@@ -248,6 +260,22 @@ class LocationReporter extends ChangeNotifier {
       cancelOnError: false,
     );
     _sub = sub;
+  }
+
+  void _watchServiceStatus() {
+    if (_serviceSub != null || kIsWeb) return;
+    _serviceSub = Geolocator.getServiceStatusStream().listen((status) {
+      if (status == ServiceStatus.enabled) {
+        _error = null;
+        notifyListeners();
+        if (_reporting || _watchers > 0) {
+          unawaited(_resubscribe(force: true));
+        }
+      } else {
+        _error = 'GPS is turned off. Turn on location to keep reporting.';
+        notifyListeners();
+      }
+    }, onError: (Object _) {});
   }
 
   LocationSettings _settings({required bool reporting}) {
@@ -350,6 +378,7 @@ class LocationReporter extends ChangeNotifier {
   void dispose() {
     _timer?.cancel();
     _sub?.cancel();
+    _serviceSub?.cancel();
     super.dispose();
   }
 }

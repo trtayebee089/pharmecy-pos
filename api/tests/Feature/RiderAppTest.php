@@ -178,3 +178,12 @@ it('shows the live map to staff with stores, riders and open orders', function (
         ->assertJsonPath('stores.0.lat', 23.7465)->assertJsonPath('riders.0.name', 'Rasel')->assertJsonPath('riders.0.position.is_live', true)
         ->assertJsonPath('riders.0.orders.0', $order->number)->assertJsonPath('orders.0.lat', 23.7509);
 });
+
+it('stores phone times sent in UTC at the right moment', function () {
+    $token = riderLogin($this)->json('data.token');
+    $sent = now()->subSeconds(20)->utc();
+    $this->postJson(RIDER.'/locations', ['points' => [['lat' => 23.7466, 'lng' => 90.3761, 'recorded_at' => $sent->format('Y-m-d\TH:i:s\Z')]]], bearer($token))->assertOk();
+
+    expect(abs(RiderLocation::latest('id')->first()->recorded_at->diffInSeconds($sent)))->toBeLessThan(2)
+        ->and(abs($this->rider->fresh()->last_seen_at->diffInSeconds($sent)))->toBeLessThan(2);
+});
